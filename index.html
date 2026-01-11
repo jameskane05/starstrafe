@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resent</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      canvas {
+        display: block;
+      }
+      #overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: rgba(0, 0, 0, 0.85);
+        color: #0ff;
+        font-family: "Orbitron", "Segoe UI", sans-serif;
+        z-index: 100;
+        cursor: pointer;
+      }
+      #overlay.hidden {
+        display: none;
+      }
+      #overlay h1 {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        text-shadow: 0 0 20px #0ff;
+      }
+      #overlay p {
+        font-size: 1.2rem;
+        color: #888;
+      }
+      #hud {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #0f0;
+        font-family: "Courier New", monospace;
+        font-size: 1rem;
+        z-index: 50;
+        text-shadow: 0 0 5px #0f0;
+        display: flex;
+        gap: 2rem;
+      }
+      #crosshair {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        border: 2px solid #0ff;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 50;
+        opacity: 0;
+      }
+      #crosshair.active {
+        opacity: 1;
+      }
+      #crosshair::before,
+      #crosshair::after {
+        content: "";
+        position: absolute;
+        background: #0ff;
+      }
+      #crosshair::before {
+        width: 8px;
+        height: 2px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+      #crosshair::after {
+        width: 2px;
+        height: 8px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+    </style>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="overlay">
+      <h1>RESENT</h1>
+      <p>Click to start</p>
+    </div>
+    <div id="crosshair"></div>
+    <div id="hud">
+      <div>🚀 <span id="missiles">20</span></div>
+      <div>👾 <span id="enemies">0</span></div>
+      <div>🛡️ <span id="health">100</span>%</div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
