@@ -34076,7 +34076,7 @@ void main() {
       this.camera = e, this.input = t, this.level = n, this.scene = i, this.health = r.health || 100, this.maxHealth = r.maxHealth || 100, this.missiles = r.missiles || 6, this.maxMissiles = r.maxMissiles || 6, this.hasLaserUpgrade = false, this.lastDamageTime = 0, this.shieldRegenDelay = 5, this.shieldRegenRate = 15, this.boostFuel = 100, this.maxBoostFuel = 100, this.boostDrainRate = 20, this.boostRegenRate = 100, this.boostRegenDelay = 1, this.lastBoostTime = 0, this.boostMultiplier = 2.5, this.isBoosting = false, this.acceleration = r.acceleration || 0.5, this.maxSpeed = r.maxSpeed || 1, this.velocity = new w(), this.drag = 0.99, this.collisionRadius = 1.5, this.rollVelocity = 0, this.rollAccel = 12, this.rollMaxSpeed = 5, this.rollDrag = 0.94, this.pitchVelocity = 0, this.yawVelocity = 0, this.lookAccel = 0.2, this.lookMaxSpeed = 4, this.lookDrag = 0.85, this.fireFromLeft = true, this.missileFromLeft = true, this.camera.position.set(0, 0, 0), this.camera.quaternion.identity(), this.loadCockpit(i);
     }
     loadCockpit(e) {
-      new Do().load("/cockpit.glb", (n) => {
+      new Do().load("./cockpit.glb", (n) => {
         this.cockpit = n.scene, this.cockpit.scale.setScalar(0.5), this.cockpit.position.set(0, -0, 0);
         const i = new gn(8956671, 1, 5);
         i.position.set(0, 0.2, 0), this.camera.add(i);
@@ -34121,7 +34121,7 @@ void main() {
     if (wl) return wl;
     if (!xp) return wl = (async () => {
       const s = new Do(), e = [];
-      for (let t = 0; t < VB; t++) e.push(s.loadAsync(`/ships/enemy-ship-${t}.glb`).then((n) => {
+      for (let t = 0; t < VB; t++) e.push(s.loadAsync(`./ships/enemy-ship-${t}.glb`).then((n) => {
         uA[t] = n.scene;
       }).catch((n) => {
         console.warn(`Failed to load enemy-ship-${t}.glb:`, n);
@@ -34441,7 +34441,7 @@ void main() {
   let Ml = null, Tl = null;
   async function lM() {
     return Ml || Tl || (Tl = new Promise((s) => {
-      new Do().load("/cockpit.glb", (t) => {
+      new Do().load("./cockpit.glb", (t) => {
         Ml = t.scene, s(Ml);
       }, void 0, () => {
         s(null);
@@ -35129,7 +35129,7 @@ void main() {
     level: {
       id: "level",
       type: "splat",
-      path: "/level.compressed.ply",
+      path: "./level.compressed.ply",
       description: "Level environment gaussian splat",
       position: {
         x: 0,
@@ -40352,7 +40352,7 @@ The format should be roomId:reconnectionToken`);
     async loadShip() {
       const e = new Do();
       return new Promise((t) => {
-        e.load("/cockpit.glb", (n) => {
+        e.load("./cockpit.glb", (n) => {
           this.ship = n.scene, this.ship.scale.setScalar(1.6), this.ship.position.set(this.shipBaseX, this.shipBaseY, this.shipBaseZ), this.ship.rotation.set(0, 0, 0), this.scene.add(this.ship), console.log("[StartScreen] Ship loaded successfully"), t();
         }, void 0, (n) => {
           console.error("[StartScreen] Failed to load ship:", n);
