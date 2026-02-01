@@ -200,19 +200,19 @@ export class ParticleSystem {
   constructor(scene) {
     const map = createRadialTexture(64);
 
-    this.sparks = new PointParticlePool(scene, 204, {
+    this.sparks = new PointParticlePool(scene, 500, {
       map,
       blending: THREE.AdditiveBlending,
       sizeScale: 42,
     });
-    this.fire = new PointParticlePool(scene, 100, {
+    this.fire = new PointParticlePool(scene, 300, {
       map,
       blending: THREE.AdditiveBlending,
       sizeScale: 26,
       depthTest: false,
       renderOrder: 9999,
     });
-    this.smoke = new PointParticlePool(scene, 104, {
+    this.smoke = new PointParticlePool(scene, 200, {
       map,
       blending: THREE.AdditiveBlending,
       sizeScale: 36,
@@ -243,6 +243,113 @@ export class ParticleSystem {
   }
   enableSparks(enabled) {
     this.sparks.setEnabled(enabled);
+  }
+
+  emitHitSparks(position, color = { r: 1, g: 0.6, b: 0.2 }, count = 20) {
+    for (let i = 0; i < count; i++) {
+      const speed = 8 + Math.random() * 12;
+      const vx = (Math.random() - 0.5) * 2;
+      const vy = (Math.random() - 0.5) * 2;
+      const vz = (Math.random() - 0.5) * 2;
+      const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
+      
+      this.sparks.emit({
+        x: position.x + (Math.random() - 0.5) * 0.3,
+        y: position.y + (Math.random() - 0.5) * 0.3,
+        z: position.z + (Math.random() - 0.5) * 0.3,
+        vx: (vx / len) * speed,
+        vy: (vy / len) * speed,
+        vz: (vz / len) * speed,
+        r: color.r,
+        g: color.g + Math.random() * 0.2,
+        b: color.b,
+        alpha: 1.0,
+        size: 6 + Math.random() * 8,
+        life: 0.2 + Math.random() * 0.3,
+        drag: 0.94,
+        rise: -2,
+      });
+    }
+  }
+
+  emitExplosionParticles(position, color = { r: 1, g: 0.5, b: 0.1 }, count = 60) {
+    // Fiery core particles
+    for (let i = 0; i < count; i++) {
+      const speed = 5 + Math.random() * 15;
+      const vx = (Math.random() - 0.5) * 2;
+      const vy = (Math.random() - 0.5) * 2;
+      const vz = (Math.random() - 0.5) * 2;
+      const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
+      
+      const hot = Math.random() > 0.4;
+      this.fire.emit({
+        x: position.x + (Math.random() - 0.5) * 0.5,
+        y: position.y + (Math.random() - 0.5) * 0.5,
+        z: position.z + (Math.random() - 0.5) * 0.5,
+        vx: (vx / len) * speed,
+        vy: (vy / len) * speed,
+        vz: (vz / len) * speed,
+        r: hot ? 1.0 : color.r,
+        g: hot ? 0.9 : color.g,
+        b: hot ? 0.6 : color.b,
+        alpha: 1.0,
+        size: 20 + Math.random() * 30,
+        life: 0.3 + Math.random() * 0.4,
+        drag: 0.90,
+        rise: 1,
+      });
+    }
+
+    // Sparks shooting outward
+    for (let i = 0; i < count * 1.5; i++) {
+      const speed = 12 + Math.random() * 25;
+      const vx = (Math.random() - 0.5) * 2;
+      const vy = (Math.random() - 0.5) * 2;
+      const vz = (Math.random() - 0.5) * 2;
+      const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
+      
+      this.sparks.emit({
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        vx: (vx / len) * speed,
+        vy: (vy / len) * speed,
+        vz: (vz / len) * speed,
+        r: 1.0,
+        g: 0.7 + Math.random() * 0.3,
+        b: 0.2,
+        alpha: 1.0,
+        size: 4 + Math.random() * 6,
+        life: 0.4 + Math.random() * 0.5,
+        drag: 0.96,
+        rise: -1,
+      });
+    }
+
+    // Smoke trails
+    for (let i = 0; i < count / 2; i++) {
+      const speed = 2 + Math.random() * 5;
+      const vx = (Math.random() - 0.5) * 2;
+      const vy = Math.random() * 0.5 + 0.5;
+      const vz = (Math.random() - 0.5) * 2;
+      
+      this.smoke.emit({
+        x: position.x + (Math.random() - 0.5) * 1,
+        y: position.y + (Math.random() - 0.5) * 1,
+        z: position.z + (Math.random() - 0.5) * 1,
+        vx: vx * speed,
+        vy: vy * speed,
+        vz: vz * speed,
+        r: 0.4,
+        g: 0.4,
+        b: 0.4,
+        alpha: 0.6,
+        size: 30 + Math.random() * 40,
+        life: 1.2 + Math.random() * 0.8,
+        drag: 0.95,
+        rise: 3,
+      });
+    }
   }
 
   emitMissileExhaust(worldPos, worldQuat, dir) {

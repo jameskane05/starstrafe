@@ -148,16 +148,31 @@ class NetworkManager {
       this.emit("roomJoined", { roomId: this.room.roomId, isHost });
     });
 
-    // Track known projectiles to detect new ones
+    // Track known entities to detect new ones via state changes (fallback)
     this._knownProjectiles = this._knownProjectiles || new Set();
+    this._knownPlayers = this._knownPlayers || new Set();
     
     this.room.onStateChange((state) => {
       this.emit("stateChange", state);
       
-      // Manually emit player updates since onChange may not fire reliably
+      // Manually track players since onAdd may not fire reliably
       if (state.players) {
+        const currentIds = new Set();
         state.players.forEach((player, sessionId) => {
+          currentIds.add(sessionId);
+          if (!this._knownPlayers.has(sessionId)) {
+            this._knownPlayers.add(sessionId);
+            console.log("[Network] New player detected via state change:", sessionId, player.name);
+            this.emit("playerJoin", { player, sessionId, isLocal: sessionId === this.sessionId });
+          }
           this.emit("playerUpdate", { player, sessionId, isLocal: sessionId === this.sessionId });
+        });
+        // Remove players that no longer exist
+        this._knownPlayers.forEach((sessionId) => {
+          if (!currentIds.has(sessionId)) {
+            this._knownPlayers.delete(sessionId);
+            this.emit("playerLeave", { sessionId });
+          }
         });
       }
       
@@ -214,30 +229,21 @@ class NetworkManager {
   setupCollectionListeners(state) {
     if (!state) return;
 
-    // Players collection
+    // Players collection - property assignment style for Colyseus SDK
     if (state.players) {
       state.players.onAdd = (player, sessionId) => {
-        console.log("[Network] Player added:", sessionId);
+        console.log("[Network] Player onAdd fired:", sessionId);
         this.emit("playerJoin", { player, sessionId, isLocal: sessionId === this.sessionId });
         
-        player.onChange = (changes) => {
-          console.log("[Network] Player changed:", sessionId, changes);
+        player.onChange = () => {
           this.emit("playerUpdate", { player, sessionId, isLocal: sessionId === this.sessionId });
         };
       };
 
       state.players.onRemove = (player, sessionId) => {
+        console.log("[Network] Player onRemove fired:", sessionId);
         this.emit("playerLeave", { player, sessionId });
       };
-
-      // Set up onChange and emit for existing players
-      state.players.forEach((player, sessionId) => {
-        player.onChange = (changes) => {
-          console.log("[Network] Player changed:", sessionId, changes);
-          this.emit("playerUpdate", { player, sessionId, isLocal: sessionId === this.sessionId });
-        };
-        this.emit("playerJoin", { player, sessionId, isLocal: sessionId === this.sessionId });
-      });
     }
 
     // Projectiles collection
@@ -253,6 +259,18 @@ class NetworkManager {
       };
     }
 
+    // Collectibles collection
+    if (state.collectibles) {
+      state.collectibles.onAdd = (collectible, id) => {
+        console.log("[Network] Collectible spawned:", id, collectible.type);
+        this.emit("collectibleSpawn", { collectible, id });
+      };
+
+      state.collectibles.onRemove = (collectible, id) => {
+        console.log("[Network] Collectible removed:", id);
+        this.emit("collectibleRemove", { collectible, id });
+      };
+    }
   }
 
   sendInput(inputData) {

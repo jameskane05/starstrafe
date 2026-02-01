@@ -38,7 +38,8 @@ export const SHIP_CLASSES = {
     acceleration: 0.5,
     maxSpeed: 1.0,
     health: 100,
-    missiles: 20,
+    missiles: 6,
+    maxMissiles: 6,
     projectileSpeed: 60,
     projectileDamage: 25,
     missileDamage: 75,
@@ -52,7 +53,8 @@ export const SHIP_CLASSES = {
     acceleration: 0.35,
     maxSpeed: 0.7,
     health: 150,
-    missiles: 10,
+    missiles: 8,
+    maxMissiles: 8,
     projectileSpeed: 50,
     projectileDamage: 30,
     missileDamage: 150,
@@ -66,7 +68,8 @@ export const SHIP_CLASSES = {
     acceleration: 0.7,
     maxSpeed: 1.4,
     health: 70,
-    missiles: 15,
+    missiles: 4,
+    maxMissiles: 4,
     projectileSpeed: 80,
     projectileDamage: 20,
     missileDamage: 60,
@@ -83,7 +86,8 @@ export const initialState = {
   
   // Player stats
   playerHealth: 100,
-  playerMissiles: 20,
+  playerMissiles: 6,
+  playerMaxMissiles: 6,
   playerClass: "fighter",
   
   // Game progress

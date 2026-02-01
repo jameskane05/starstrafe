@@ -1,10 +1,10 @@
 import { Room, Client, CloseCode, matchMaker } from "colyseus";
-import { GameState, Player, Projectile } from "./schema/GameState.js";
+import { GameState, Player, Projectile, Collectible } from "./schema/GameState.js";
 
 const SHIP_CLASSES = {
-  fighter: { speed: 1.0, health: 100, missiles: 20, projectileSpeed: 60, missileDamage: 75 },
-  tank: { speed: 0.7, health: 150, missiles: 10, projectileSpeed: 50, missileDamage: 150 },
-  rogue: { speed: 1.4, health: 70, missiles: 15, projectileSpeed: 80, missileDamage: 60 },
+  fighter: { speed: 1.0, health: 100, missiles: 6, maxMissiles: 6, projectileSpeed: 60, missileDamage: 75 },
+  tank: { speed: 0.7, health: 150, missiles: 8, maxMissiles: 8, projectileSpeed: 50, missileDamage: 150 },
+  rogue: { speed: 1.4, health: 70, missiles: 4, maxMissiles: 4, projectileSpeed: 80, missileDamage: 60 },
 };
 
 // Spawn points with rotation facing center (0,0,0)
@@ -22,11 +22,16 @@ const SPAWN_POINTS = [
 
 const TICK_RATE = 20;
 const RESPAWN_TIME = 5;
+const COLLECTIBLE_SPAWN_RADIUS = 25;
+const COLLECTIBLE_COLLECT_RADIUS = 3;
+const COLLECTIBLE_RESPAWN_TIME = 15;
 
 export class GameRoom extends Room<GameState> {
   maxClients = 8;
   private tickInterval: ReturnType<typeof setInterval> | null = null;
   private projectileIdCounter = 0;
+  private collectibleIdCounter = 0;
+  private collectibleRespawnTimers: Map<string, number> = new Map();
 
   async onCreate(options: any) {
     this.setState(new GameState());
@@ -263,10 +268,84 @@ export class GameRoom extends Room<GameState> {
       spawnIndex++;
     });
     
+    // Spawn initial collectibles
+    this.spawnInitialCollectibles();
+    
     // Start game tick
     this.tickInterval = setInterval(() => this.tick(), 1000 / TICK_RATE);
     
     console.log(`[GameRoom] Match started!`);
+  }
+
+  private spawnInitialCollectibles() {
+    // Clear any existing collectibles
+    this.state.collectibles.clear();
+    this.collectibleRespawnTimers.clear();
+    
+    // Spawn 2 missile pickups and 2 laser upgrades near different spawn points
+    const usedPositions: { x: number; z: number }[] = [];
+    
+    for (let i = 0; i < 2; i++) {
+      // Missile pickup
+      const missilePos = this.getRandomCollectiblePosition(usedPositions);
+      usedPositions.push(missilePos);
+      this.spawnCollectible("missile", missilePos.x, 0, missilePos.z);
+      
+      // Laser upgrade
+      const laserPos = this.getRandomCollectiblePosition(usedPositions);
+      usedPositions.push(laserPos);
+      this.spawnCollectible("laser_upgrade", laserPos.x, 0, laserPos.z);
+    }
+    
+    console.log(`[GameRoom] Spawned ${this.state.collectibles.size} collectibles`);
+  }
+
+  private getRandomCollectiblePosition(usedPositions: { x: number; z: number }[]): { x: number; z: number } {
+    const maxAttempts = 20;
+    const minDistance = 10;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const spawn = SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)];
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 5 + Math.random() * COLLECTIBLE_SPAWN_RADIUS;
+      
+      const x = spawn.x + Math.cos(angle) * dist;
+      const z = spawn.z + Math.sin(angle) * dist;
+      
+      // Check distance from used positions
+      let tooClose = false;
+      for (const pos of usedPositions) {
+        const dx = x - pos.x;
+        const dz = z - pos.z;
+        if (dx * dx + dz * dz < minDistance * minDistance) {
+          tooClose = true;
+          break;
+        }
+      }
+      
+      if (!tooClose) {
+        return { x, z };
+      }
+    }
+    
+    // Fallback: return a random position
+    return { 
+      x: (Math.random() - 0.5) * 40,
+      z: (Math.random() - 0.5) * 40
+    };
+  }
+
+  private spawnCollectible(type: string, x: number, y: number, z: number) {
+    const collectible = new Collectible();
+    collectible.id = `collect_${this.collectibleIdCounter++}`;
+    collectible.type = type;
+    collectible.x = x;
+    collectible.y = y;
+    collectible.z = z;
+    collectible.rotY = 0;
+    
+    this.state.collectibles.set(collectible.id, collectible);
+    console.log(`[GameRoom] Spawned ${type} at (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
   }
 
   private getUniqueName(baseName: string): string {
@@ -303,6 +382,8 @@ export class GameRoom extends Room<GameState> {
     player.health = classStats.health;
     player.maxHealth = classStats.health;
     player.missiles = classStats.missiles;
+    player.maxMissiles = classStats.maxMissiles;
+    player.hasLaserUpgrade = false;
     player.lastDamageTime = 0;
     player.alive = true;
     player.respawnTime = 0;
@@ -315,6 +396,9 @@ export class GameRoom extends Room<GameState> {
     
     // Update projectiles (includes swept collision detection)
     this.updateProjectiles(dt);
+    
+    // Update collectibles (rotation and collection detection)
+    this.updateCollectibles(dt);
     
     // Handle shield regeneration
     this.updateShieldRegen(dt);
@@ -414,6 +498,87 @@ export class GameRoom extends Room<GameState> {
           this.handlePlayerDeath(player, proj.ownerId);
         }
       }
+    });
+  }
+
+  private updateCollectibles(dt: number) {
+    // Update rotation for visual effect
+    this.state.collectibles.forEach((collectible) => {
+      collectible.rotY += dt * 2; // Rotate ~2 radians per second
+      if (collectible.rotY > Math.PI * 2) {
+        collectible.rotY -= Math.PI * 2;
+      }
+    });
+    
+    // Check player-collectible collisions
+    const toRemove: string[] = [];
+    
+    this.state.collectibles.forEach((collectible, id) => {
+      this.state.players.forEach((player) => {
+        if (!player.alive) return;
+        
+        const dx = player.x - collectible.x;
+        const dy = player.y - collectible.y;
+        const dz = player.z - collectible.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        
+        if (distSq < COLLECTIBLE_COLLECT_RADIUS * COLLECTIBLE_COLLECT_RADIUS) {
+          // Collect!
+          this.handleCollectiblePickup(player, collectible);
+          toRemove.push(id);
+          
+          // Schedule respawn
+          this.collectibleRespawnTimers.set(id, COLLECTIBLE_RESPAWN_TIME);
+        }
+      });
+    });
+    
+    // Remove collected collectibles
+    toRemove.forEach(id => this.state.collectibles.delete(id));
+    
+    // Handle respawn timers
+    const toRespawn: string[] = [];
+    this.collectibleRespawnTimers.forEach((time, id) => {
+      const newTime = time - dt;
+      if (newTime <= 0) {
+        toRespawn.push(id);
+      } else {
+        this.collectibleRespawnTimers.set(id, newTime);
+      }
+    });
+    
+    // Respawn collectibles
+    toRespawn.forEach(id => {
+      this.collectibleRespawnTimers.delete(id);
+      // Spawn new collectible at random position
+      const type = Math.random() > 0.5 ? "missile" : "laser_upgrade";
+      const pos = this.getRandomCollectiblePosition([]);
+      this.spawnCollectible(type, pos.x, 0, pos.z);
+    });
+  }
+
+  private handleCollectiblePickup(player: Player, collectible: Collectible) {
+    const classStats = SHIP_CLASSES[player.shipClass as keyof typeof SHIP_CLASSES];
+    
+    if (collectible.type === "missile") {
+      // Refill missiles up to max
+      const maxMissiles = classStats.maxMissiles;
+      const oldMissiles = player.missiles;
+      player.missiles = Math.min(maxMissiles, player.missiles + Math.ceil(maxMissiles / 2));
+      console.log(`[GameRoom] ${player.name} picked up missiles: ${oldMissiles} -> ${player.missiles}`);
+    } else if (collectible.type === "laser_upgrade") {
+      player.hasLaserUpgrade = true;
+      console.log(`[GameRoom] ${player.name} picked up laser upgrade`);
+    }
+    
+    // Broadcast pickup event
+    this.broadcast("collectiblePickup", {
+      playerId: player.id,
+      collectibleId: collectible.id,
+      type: collectible.type,
+      x: collectible.x,
+      y: collectible.y,
+      z: collectible.z,
     });
   }
 

@@ -23,9 +23,13 @@ export class Player extends Schema {
   // Stats
   @type("number") health: number = 100;
   @type("number") maxHealth: number = 100;
-  @type("number") missiles: number = 20;
+  @type("number") missiles: number = 6;
+  @type("number") maxMissiles: number = 6;
   @type("number") kills: number = 0;
   @type("number") deaths: number = 0;
+  
+  // Weapon upgrades
+  @type("boolean") hasLaserUpgrade: boolean = false;
   
   // Class and team
   @type("string") shipClass: string = "fighter"; // "fighter" | "tank" | "rogue"
@@ -63,6 +67,19 @@ export class Projectile extends Schema {
   @type("number") lifetime: number = 3;
 }
 
+export class Collectible extends Schema {
+  @type("string") id: string = "";
+  @type("string") type: string = "missile"; // "missile" | "laser_upgrade"
+  
+  // Position
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
+  @type("number") z: number = 0;
+  
+  // Rotation (for visual spinning)
+  @type("number") rotY: number = 0;
+}
+
 export class GameState extends Schema {
   @type("string") phase: string = "lobby"; // "lobby" | "countdown" | "playing" | "results"
   @type("string") mode: string = "ffa"; // "ffa" | "team"
@@ -77,6 +94,7 @@ export class GameState extends Schema {
   
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Projectile }) projectiles = new MapSchema<Projectile>();
+  @type({ map: Collectible }) collectibles = new MapSchema<Collectible>();
   
   // Team scores (for team mode)
   @type("number") team1Score: number = 0;

@@ -9,6 +9,7 @@ import { Missile } from "../entities/Missile.js";
 import { Explosion } from "../entities/Explosion.js";
 import { LaserImpact } from "../entities/LaserImpact.js";
 import { RemotePlayer } from "../entities/RemotePlayer.js";
+import { Collectible } from "../entities/Collectible.js";
 import { Level } from "../world/Level.js";
 import GameManager from "../managers/GameManager.js";
 import SceneManager from "../managers/SceneManager.js";
@@ -19,6 +20,7 @@ import { DynamicLightPool } from "../vfx/DynamicLightPool.js";
 import NetworkManager from "../network/NetworkManager.js";
 import MenuManager from "../ui/MenuManager.js";
 import { Prediction } from "../network/Prediction.js";
+import MusicManager from "../audio/MusicManager.js";
 
 const _fireDir = new THREE.Vector3();
 const _hitPos = new THREE.Vector3();
@@ -34,6 +36,7 @@ export class Game {
     this.gameManager = null;
     this.sceneManager = null;
     this.lightManager = null;
+    this.musicManager = null;
     this.particles = null;
     this.dynamicLights = null;
 
@@ -58,6 +61,7 @@ export class Game {
     this.isMultiplayer = false;
     this.remotePlayers = new Map();
     this.networkProjectiles = new Map();
+    this.collectibles = new Map();
     this.isEscMenuOpen = false;
     this.escMenu = null;
     this.prediction = new Prediction({
@@ -90,7 +94,16 @@ export class Game {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.5;
+    this.renderer.domElement.id = "game-canvas";
+    this.renderer.domElement.style.display = "none"; // Hidden until gameplay starts
     document.body.appendChild(this.renderer.domElement);
+    
+    // Click canvas to re-acquire pointer lock when playing
+    this.renderer.domElement.addEventListener("click", () => {
+      if (this.gameManager?.isPlaying() && !this.isEscMenuOpen && !document.pointerLockElement) {
+        this.renderer.domElement.requestPointerLock?.();
+      }
+    });
 
     this.sparkRenderer = new SparkRenderer({
       renderer: this.renderer,
@@ -122,6 +135,9 @@ export class Game {
       gameManager: this.gameManager,
     });
 
+    this.musicManager = new MusicManager();
+    this.musicManager.setGameManager(this.gameManager);
+
     this.gameManager.on("state:changed", (newState, oldState) =>
       this.onStateChanged(newState, oldState)
     );
@@ -146,7 +162,7 @@ export class Game {
     window.addEventListener("resize", () => this.onResize());
 
     // Initialize menu and network listeners
-    MenuManager.init();
+    await MenuManager.init();
     MenuManager.on("gameStart", () => this.startMultiplayerGame());
     
     this.setupNetworkListeners();
@@ -176,6 +192,8 @@ export class Game {
         this.player.health = player.health;
         this.player.maxHealth = player.maxHealth;
         this.player.missiles = player.missiles;
+        this.player.maxMissiles = player.maxMissiles;
+        this.player.hasLaserUpgrade = player.hasLaserUpgrade;
         
         // Server reconciliation for position
         const lastProcessed = player.lastProcessedInput;
@@ -201,14 +219,50 @@ export class Game {
       this.removeNetworkProjectile(id);
     });
 
+    NetworkManager.on("collectibleSpawn", ({ collectible, id }) => {
+      this.spawnCollectible(id, collectible);
+    });
+
+    NetworkManager.on("collectibleRemove", ({ id }) => {
+      this.removeCollectible(id);
+    });
+
     NetworkManager.on("hit", (data) => {
       this.handleNetworkHit(data);
     });
 
     NetworkManager.on("kill", (data) => {
       this.showKillFeed(data.killerName, data.victimName);
+      
+      // Create a big explosion at the victim's position
+      let victimPos = null;
       if (data.victimId === NetworkManager.sessionId) {
+        // Local player died
+        victimPos = this.camera.position.clone();
         this.handleLocalPlayerDeath();
+      } else {
+        // Remote player died
+        const remote = this.remotePlayers.get(data.victimId);
+        if (remote && remote.mesh) {
+          victimPos = remote.mesh.position.clone();
+        }
+      }
+      
+      // Spawn big player death explosion
+      if (victimPos) {
+        const explosion = new Explosion(
+          this.scene,
+          victimPos,
+          0xff4400,
+          this.dynamicLights,
+          { big: true }
+        );
+        this.explosions.push(explosion);
+        
+        // Add massive particle explosion
+        if (this.particles) {
+          this.particles.emitExplosionParticles(victimPos, { r: 1, g: 0.4, b: 0.1 }, 80);
+        }
       }
     });
 
@@ -223,10 +277,50 @@ export class Game {
         this.onMatchEnd();
       }
     });
+
+    NetworkManager.on("collectiblePickup", (data) => {
+      this.handleCollectiblePickup(data);
+    });
+  }
+
+  async loadLevelAndStart() {
+    // Prevent multiple calls
+    if (this.isLoadingLevel) return;
+    this.isLoadingLevel = true;
+    
+    // Set state to PLAYING
+    this.gameManager.setState({ 
+      currentState: GAME_STATES.PLAYING,
+      currentLevel: "hangar"
+    });
+    
+    // Check if level needs to be loaded
+    if (!this.sceneManager.hasObject("level")) {
+      try {
+        const sceneData = await import("../data/sceneData.js");
+        const levelData = sceneData.sceneObjects?.level || sceneData.default?.level;
+        
+        if (levelData) {
+          console.log("[Game] Loading level:", levelData.path);
+          await this.sceneManager.loadObject(levelData, (progress) => {
+            MenuManager.updateLoadingProgress(progress);
+          });
+          console.log("[Game] Level loaded successfully");
+        }
+      } catch (err) {
+        console.error("[Game] Level load failed:", err);
+      }
+    }
+    
+    this.isLoadingLevel = false;
+    MenuManager.loadingComplete();
   }
 
   startMultiplayerGame() {
     this.isMultiplayer = true;
+    
+    // Show game canvas
+    this.renderer.domElement.style.display = "block";
     
     const state = NetworkManager.getState();
     const localPlayer = NetworkManager.getLocalPlayer();
@@ -239,6 +333,8 @@ export class Game {
     this.player.health = localPlayer.health;
     this.player.maxHealth = localPlayer.maxHealth;
     this.player.missiles = localPlayer.missiles;
+    this.player.maxMissiles = localPlayer.maxMissiles || classStats.maxMissiles;
+    this.player.hasLaserUpgrade = localPlayer.hasLaserUpgrade || false;
     this.player.acceleration = classStats.acceleration;
     this.player.maxSpeed = classStats.maxSpeed;
 
@@ -286,6 +382,66 @@ export class Game {
     }
   }
 
+  spawnCollectible(id, data) {
+    if (this.collectibles.has(id)) return;
+    
+    const collectible = new Collectible(this.scene, data, this.dynamicLights);
+    this.collectibles.set(id, collectible);
+    console.log(`[Game] Spawned collectible: ${id} (${data.type})`);
+  }
+
+  removeCollectible(id) {
+    const collectible = this.collectibles.get(id);
+    if (collectible) {
+      collectible.dispose();
+      this.collectibles.delete(id);
+      console.log(`[Game] Removed collectible: ${id}`);
+    }
+  }
+
+  handleCollectiblePickup(data) {
+    const collectible = this.collectibles.get(data.collectibleId);
+    
+    if (collectible) {
+      collectible.playPickupEffect();
+      
+      // Add particle burst at pickup location
+      if (this.particles) {
+        const pos = { x: data.x, y: data.y, z: data.z };
+        const color = data.type === "missile" 
+          ? { r: 1, g: 0.4, b: 0 }
+          : { r: 0, g: 1, b: 0.3 };
+        this.particles.emitHitSparks(pos, color, 30);
+      }
+    }
+    
+    // Update local player if they picked it up
+    if (data.playerId === NetworkManager.sessionId && this.player) {
+      if (data.type === "laser_upgrade") {
+        this.player.hasLaserUpgrade = true;
+        this.showPickupMessage("LASER UPGRADE ACQUIRED");
+      } else if (data.type === "missile") {
+        this.showPickupMessage("MISSILES REFILLED");
+      }
+    }
+  }
+
+  showPickupMessage(text) {
+    const existing = document.querySelector(".pickup-message");
+    if (existing) existing.remove();
+    
+    const msg = document.createElement("div");
+    msg.className = "pickup-message";
+    msg.textContent = text;
+    document.body.appendChild(msg);
+    
+    setTimeout(() => msg.classList.add("visible"), 10);
+    setTimeout(() => {
+      msg.classList.remove("visible");
+      setTimeout(() => msg.remove(), 300);
+    }, 2000);
+  }
+
   spawnNetworkProjectile(id, data) {
     console.log("[Game] Spawning network projectile:", id, "type:", data.type, "pos:", data.x, data.y, data.z, "dir:", data.dx, data.dy, data.dz, "speed:", data.speed);
     const position = new THREE.Vector3(data.x, data.y, data.z);
@@ -316,20 +472,33 @@ export class Game {
   }
 
   handleNetworkHit(data) {
+    console.log("[Game] Network hit received:", data);
     const hitPos = new THREE.Vector3(data.x, data.y, data.z);
     const hitNormal = new THREE.Vector3(0, 1, 0);
+    
+    // Determine hit color based on who shot
+    const isOurShot = data.shooterId === NetworkManager.sessionId;
+    const hitColor = isOurShot ? 0x00ffff : 0xff8800;
     
     const impact = new LaserImpact(
       this.scene,
       hitPos,
       hitNormal,
-      data.shooterId === NetworkManager.sessionId ? 0x00ffff : 0xff8800,
+      hitColor,
       this.dynamicLights
     );
     this.impacts.push(impact);
 
+    // Add spark effects on hit
+    if (this.particles) {
+      const sparkColor = isOurShot 
+        ? { r: 0, g: 0.9, b: 1 }
+        : { r: 1, g: 0.5, b: 0.1 };
+      this.particles.emitHitSparks(hitPos, sparkColor, 25);
+    }
+
     // Remove local projectile near hit position (if we fired it)
-    if (data.shooterId === NetworkManager.sessionId) {
+    if (isOurShot) {
       // Check laser projectiles
       for (let i = this.projectiles.length - 1; i >= 0; i--) {
         const proj = this.projectiles[i];
@@ -366,6 +535,7 @@ export class Game {
       }
     } else {
       // Local player took damage
+      console.log("[Game] Local player took damage, showing vignette");
       this.player.health -= data.damage;
       this.player.lastDamageTime = this.clock.elapsedTime;
       this.showDamageIndicator(hitPos);
@@ -491,6 +661,9 @@ export class Game {
       }
     });
     this.networkProjectiles.clear();
+
+    this.collectibles.forEach((collectible) => collectible.dispose());
+    this.collectibles.clear();
   }
 
   onStateChanged(newState, oldState) {}
@@ -534,7 +707,11 @@ export class Game {
   toggleEscMenu() {
     if (this.isEscMenuOpen) {
       this.resumeGame();
+    } else if (document.pointerLockElement) {
+      // First escape: just release pointer lock
+      document.exitPointerLock();
     } else {
+      // Second escape (pointer already unlocked): show menu
       this.showEscMenu();
     }
   }
@@ -632,8 +809,16 @@ export class Game {
     }
     
     document.getElementById("crosshair").classList.add("active");
-    document.body.requestPointerLock?.()?.catch?.(() => {
-      console.warn("[Game] Pointer lock failed - click to capture");
+    
+    // Request pointer lock on the canvas
+    const canvas = this.renderer.domElement;
+    canvas.requestPointerLock?.()?.catch?.(() => {
+      // Pointer lock requires user gesture - add click listener
+      const clickToLock = () => {
+        canvas.requestPointerLock?.();
+        canvas.removeEventListener("click", clickToLock);
+      };
+      canvas.addEventListener("click", clickToLock);
     });
   }
 
@@ -649,6 +834,9 @@ export class Game {
       this.cleanupMultiplayer();
       this.isMultiplayer = false;
     }
+    
+    // Hide game canvas when returning to menu
+    this.renderer.domElement.style.display = "none";
     
     document.getElementById("crosshair").classList.remove("active");
     document.getElementById("hud").classList.remove("active");
@@ -776,7 +964,8 @@ export class Game {
       this._hudLast.kills = kills;
     }
     if (missiles !== this._hudLast.missiles) {
-      this.hud.missiles.textContent = String(missiles);
+      const maxMissiles = this.player.maxMissiles || missiles;
+      this.hud.missiles.textContent = `${missiles}/${maxMissiles}`;
       this._hudLast.missiles = missiles;
     }
     if (boostPercent !== this._hudLast.boost) {
@@ -828,6 +1017,11 @@ export class Game {
         remote.update(delta);
       });
 
+      // Update collectibles
+      this.collectibles.forEach((collectible) => {
+        collectible.update(delta);
+      });
+
       // Only update enemies in single player
       if (!this.isMultiplayer) {
         for (let i = 0; i < this.enemies.length; i++) {
@@ -840,14 +1034,17 @@ export class Game {
       }
 
       this.projectiles.forEach((proj) => proj.update(delta));
-      this.missiles.forEach((m) => m.update(delta, this.enemies));
+      
+      // Combine enemies and remote players as potential missile targets
+      const missileTargets = [...this.enemies, ...Array.from(this.remotePlayers.values())];
+      this.missiles.forEach((m) => m.update(delta, missileTargets));
 
-      // Update network projectiles
+      // Update network projectiles - they can also home on remote players
       this.networkProjectiles.forEach((data) => {
         if (data.type === "projectile") {
           data.obj.update(delta);
         } else if (data.type === "missile") {
-          data.obj.update(delta, []);
+          data.obj.update(delta, missileTargets);
         }
       });
 
@@ -882,6 +1079,7 @@ export class Game {
 
     this.particles?.update(delta);
     this.dynamicLights?.update(delta);
+    this.musicManager?.update(delta);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -1005,6 +1203,7 @@ export class Game {
       let exploded = false;
       const missilePos = missile.getPosition();
 
+      // Check against single-player enemies
       for (let j = this.enemies.length - 1; j >= 0; j--) {
         const enemy = this.enemies[j];
         const distSq = missilePos.distanceToSquared(enemy.mesh.position);
@@ -1029,6 +1228,19 @@ export class Game {
             });
           }
           break;
+        }
+      }
+
+      // Check against remote players (multiplayer) - client-side prediction
+      if (!exploded && this.isMultiplayer) {
+        for (const [sessionId, remote] of this.remotePlayers) {
+          if (remote.mesh) {
+            const distSq = missilePos.distanceToSquared(remote.mesh.position);
+            if (distSq < 4) {
+              exploded = true;
+              break;
+            }
+          }
         }
       }
 

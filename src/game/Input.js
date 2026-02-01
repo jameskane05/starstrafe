@@ -165,9 +165,8 @@ export class Input {
   }
 
   onPointerLockChange() {
-    if (!document.pointerLockElement && this.game.gameManager?.isPlaying() && !this.game.isEscMenuOpen) {
-      this.game.showEscMenu();
-    }
+    // Don't auto-show menu - let user press Escape twice intentionally
+    // This handler now just tracks state changes
   }
 
   pollGamepad() {

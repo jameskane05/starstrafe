@@ -28,9 +28,10 @@ class SceneManager {
   /**
    * Load a scene object based on its config
    * @param {Object} objectData - Object configuration from sceneData.js
+   * @param {Function} onProgress - Optional progress callback (0-1)
    * @returns {Promise<THREE.Object3D>}
    */
-  async loadObject(objectData) {
+  async loadObject(objectData, onProgress = null) {
     const { id, type } = objectData;
 
     // Already loading?
@@ -48,10 +49,10 @@ class SceneManager {
 
     switch (type) {
       case "splat":
-        loadPromise = this._loadSplat(objectData);
+        loadPromise = this._loadSplat(objectData, onProgress);
         break;
       case "gltf":
-        loadPromise = this._loadGLTF(objectData);
+        loadPromise = this._loadGLTF(objectData, onProgress);
         break;
       default:
         console.error(`[SceneManager] Unknown object type: ${type}`);
@@ -77,14 +78,16 @@ class SceneManager {
   /**
    * Load a gaussian splat
    */
-  async _loadSplat(objectData) {
+  async _loadSplat(objectData, onProgress = null) {
     const { id, path, position, rotation, scale, quaternion } = objectData;
 
+    console.log(`[SceneManager] Loading splat: ${path}`);
+    
     const splatMesh = new SplatMesh({
       url: path,
       editable: false,
       onProgress: (progress) => {
-        // console.log(`[SceneManager] ${id} loading: ${(progress * 100).toFixed(0)}%`);
+        if (onProgress) onProgress(progress);
       },
     });
 
@@ -108,7 +111,18 @@ class SceneManager {
     }
 
     this.scene.add(splatMesh);
-    await splatMesh.initialized;
+    
+    // Wait for initialization with timeout
+    const timeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error(`Splat load timeout: ${path}`)), 60000)
+    );
+    
+    try {
+      await Promise.race([splatMesh.initialized, timeout]);
+    } catch (err) {
+      console.error(`[SceneManager] Splat load error:`, err);
+      // Still return the mesh even if timeout - it might load eventually
+    }
 
     return splatMesh;
   }

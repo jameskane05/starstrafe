@@ -28,9 +28,10 @@ export const sceneObjects = {
     rotation: { x: 0, y: 0, z: 0 },
     scale: 20,
     priority: 100,
-    preload: true,
+    preload: false,  // Don't preload - load when game starts
     criteria: {
       currentLevel: "hangar",
+      currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
     },
   },
 

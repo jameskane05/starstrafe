@@ -19,7 +19,9 @@ export class Player {
 
     this.health = options.health || 100;
     this.maxHealth = options.maxHealth || 100;
-    this.missiles = options.missiles || 20;
+    this.missiles = options.missiles || 6;
+    this.maxMissiles = options.maxMissiles || 6;
+    this.hasLaserUpgrade = false;
     
     this.lastDamageTime = 0;
     this.shieldRegenDelay = 5;

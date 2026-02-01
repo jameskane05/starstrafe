@@ -2,6 +2,8 @@ import * as THREE from 'three';
 
 const DEBRIS_COUNT = 16;
 const EXPLOSION_DURATION = 1.2;
+const BIG_DEBRIS_COUNT = 32;
+const BIG_EXPLOSION_DURATION = 2.0;
 
 const sharedGeometries = {
   tetra: new THREE.TetrahedronGeometry(1),
@@ -12,18 +14,19 @@ const sharedGeometries = {
 };
 
 export class Explosion {
-  constructor(scene, position, color = 0xff6600, lightPool = null) {
+  constructor(scene, position, color = 0xff6600, lightPool = null, options = {}) {
     this.scene = scene;
     this.elapsed = 0;
-    this.duration = EXPLOSION_DURATION;
+    this.isBig = options.big || false;
+    this.duration = this.isBig ? BIG_EXPLOSION_DURATION : EXPLOSION_DURATION;
     this.disposed = false;
 
     if (lightPool) {
       lightPool.flash(position, color, {
-        intensity: 22,
-        distance: 26,
-        ttl: 0.12,
-        fade: 0.22,
+        intensity: this.isBig ? 50 : 22,
+        distance: this.isBig ? 50 : 26,
+        ttl: this.isBig ? 0.2 : 0.12,
+        fade: this.isBig ? 0.4 : 0.22,
       });
     }
     
@@ -44,9 +47,12 @@ export class Explosion {
       0xffffff,
     ];
     const geoTypes = [sharedGeometries.tetra, sharedGeometries.octa, sharedGeometries.box];
+    const debrisCount = this.isBig ? BIG_DEBRIS_COUNT : DEBRIS_COUNT;
+    const sizeMultiplier = this.isBig ? 2.5 : 1;
+    const speedMultiplier = this.isBig ? 2.0 : 1;
 
-    for (let i = 0; i < DEBRIS_COUNT; i++) {
-      const size = 0.1 + Math.random() * 0.25;
+    for (let i = 0; i < debrisCount; i++) {
+      const size = (0.1 + Math.random() * 0.25) * sizeMultiplier;
       const geo = geoTypes[Math.floor(Math.random() * 3)];
 
       const color = colors[Math.floor(Math.random() * colors.length)];
@@ -63,7 +69,7 @@ export class Explosion {
         (Math.random() - 0.5) * 2,
         (Math.random() - 0.5) * 2,
         (Math.random() - 0.5) * 2
-      ).normalize().multiplyScalar(5 + Math.random() * 8);
+      ).normalize().multiplyScalar((5 + Math.random() * 8) * speedMultiplier);
 
       const rotationSpeed = new THREE.Vector3(
         (Math.random() - 0.5) * 10,
@@ -89,16 +95,21 @@ export class Explosion {
       opacity: 1,
     });
     this.flash = new THREE.Mesh(sharedGeometries.flash, flashMat);
+    if (this.isBig) {
+      this.flash.scale.setScalar(3);
+    }
     this.group.add(this.flash);
 
     const glowMat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.25,
+      opacity: this.isBig ? 0.4 : 0.25,
     });
     this.glow = new THREE.Mesh(sharedGeometries.glow, glowMat);
+    if (this.isBig) {
+      this.glow.scale.setScalar(3);
+    }
     this.group.add(this.glow);
-    
   }
 
   update(delta) {
@@ -127,12 +138,16 @@ export class Explosion {
     }
 
     const flashT = Math.min(t * 5, 1);
-    this.flash.scale.setScalar(1 + flashT * 2);
+    const baseFlashScale = this.isBig ? 3 : 1;
+    const flashExpand = this.isBig ? 6 : 2;
+    this.flash.scale.setScalar(baseFlashScale + flashT * flashExpand);
     this.flash.material.opacity = 1 - flashT;
 
     const glowT = Math.min(t * 3, 1);
-    this.glow.scale.setScalar(1 + glowT * 2);
-    this.glow.material.opacity = 0.25 * (1 - glowT);
+    const baseGlowScale = this.isBig ? 3 : 1;
+    const glowExpand = this.isBig ? 8 : 2;
+    this.glow.scale.setScalar(baseGlowScale + glowT * glowExpand);
+    this.glow.material.opacity = (this.isBig ? 0.4 : 0.25) * (1 - glowT);
     
     return true;
   }

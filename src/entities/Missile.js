@@ -95,12 +95,19 @@ export class Missile {
     }
   }
 
-  findTarget(enemies) {
+  findTarget(targets) {
     let closest = null;
     let closestDist = this.homingRange;
 
-    for (const enemy of enemies) {
-      _tempVec.subVectors(enemy.mesh.position, this.group.position);
+    for (const target of targets) {
+      // Handle both Enemy objects (mesh.position) and RemotePlayer objects (mesh.position)
+      const targetPos = target.mesh?.position;
+      if (!targetPos) continue;
+      
+      // Skip dead targets
+      if (target.alive === false || target.health <= 0) continue;
+
+      _tempVec.subVectors(targetPos, this.group.position);
       const dist = _tempVec.length();
 
       if (dist > this.homingRange) continue;
@@ -109,7 +116,7 @@ export class Missile {
       const dot = this.direction.dot(_tempVec);
 
       if (dot >= this.homingConeAngle && dist < closestDist) {
-        closest = enemy;
+        closest = target;
         closestDist = dist;
       }
     }

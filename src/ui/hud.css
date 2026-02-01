@@ -9,7 +9,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000;
+  background: transparent;
 }
 
 canvas {
@@ -137,4 +137,113 @@ canvas {
 #respawn-overlay .timer {
   font-size: 1.5rem;
   color: #888;
+}
+
+#damage-vignette {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.damage-indicator {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 0.08s ease-out;
+}
+
+.damage-indicator.active {
+  opacity: 1;
+}
+
+.damage-indicator.fading {
+  opacity: 0;
+  transition: opacity 0.35s ease-out;
+}
+
+.damage-indicator-top {
+  background: radial-gradient(ellipse 120% 50% at 50% -10%, 
+    rgba(255, 30, 30, 0.7) 0%, 
+    rgba(180, 0, 0, 0.4) 30%, 
+    transparent 70%);
+}
+
+.damage-indicator-bottom {
+  background: radial-gradient(ellipse 120% 50% at 50% 110%, 
+    rgba(255, 30, 30, 0.7) 0%, 
+    rgba(180, 0, 0, 0.4) 30%, 
+    transparent 70%);
+}
+
+.damage-indicator-left {
+  background: radial-gradient(ellipse 50% 120% at -10% 50%, 
+    rgba(255, 30, 30, 0.7) 0%, 
+    rgba(180, 0, 0, 0.4) 30%, 
+    transparent 70%);
+}
+
+.damage-indicator-right {
+  background: radial-gradient(ellipse 50% 120% at 110% 50%, 
+    rgba(255, 30, 30, 0.7) 0%, 
+    rgba(180, 0, 0, 0.4) 30%, 
+    transparent 70%);
+}
+
+.damage-indicator-center {
+  background: radial-gradient(ellipse 100% 100% at 50% 50%, 
+    transparent 40%,
+    rgba(180, 0, 0, 0.3) 70%,
+    rgba(255, 30, 30, 0.5) 100%);
+}
+
+#boost-hud {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 4px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 50;
+}
+
+#boost-hud.active {
+  opacity: 1;
+}
+
+#boost-hud .boost-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0ff, #0af);
+  transition: width 0.1s;
+  box-shadow: 0 0 10px #0ff;
+}
+
+.pickup-message {
+  position: fixed;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: "Orbitron", sans-serif;
+  font-size: 1.5rem;
+  color: #00ff88;
+  text-shadow: 0 0 20px #00ff88, 0 0 40px #00ff88;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+  pointer-events: none;
+}
+
+.pickup-message.visible {
+  opacity: 1;
+  transform: translateX(-50%) scale(1.1);
 }

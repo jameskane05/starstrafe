@@ -67,7 +67,22 @@ class KeyBindingsManager {
   constructor() {
     this.bindings = this.load();
     this.presets = this.loadPresets();
-    this.activePreset = 'default';
+    this.activePreset = this.loadActivePreset();
+    this.hasUnsavedChanges = false;
+  }
+
+  loadActivePreset() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY + '_active');
+      if (stored) return stored;
+    } catch (e) {}
+    return 'default';
+  }
+
+  saveActivePreset() {
+    try {
+      localStorage.setItem(STORAGE_KEY + '_active', this.activePreset);
+    } catch (e) {}
   }
 
   load() {
@@ -119,7 +134,16 @@ class KeyBindingsManager {
 
   setBinding(action, keys) {
     this.bindings[action] = Array.isArray(keys) ? keys : [keys];
+    this.markAsCustom();
     this.save();
+  }
+
+  markAsCustom() {
+    if (this.activePreset !== 'custom') {
+      this.activePreset = 'custom';
+      this.hasUnsavedChanges = true;
+      this.saveActivePreset();
+    }
   }
 
   addKey(action, key) {
@@ -155,13 +179,17 @@ class KeyBindingsManager {
   resetToDefault() {
     this.bindings = this.deepCopy(DEFAULT_BINDINGS);
     this.activePreset = 'default';
+    this.hasUnsavedChanges = false;
     this.save();
+    this.saveActivePreset();
   }
 
   savePreset(name) {
     this.presets[name] = this.deepCopy(this.bindings);
     this.activePreset = name;
+    this.hasUnsavedChanges = false;
     this.savePresets();
+    this.saveActivePreset();
   }
 
   loadPreset(name) {
@@ -169,10 +197,15 @@ class KeyBindingsManager {
       this.resetToDefault();
       return true;
     }
+    if (name === 'custom') {
+      return false;
+    }
     if (this.presets[name]) {
       this.bindings = this.deepCopy(this.presets[name]);
       this.activePreset = name;
+      this.hasUnsavedChanges = false;
       this.save();
+      this.saveActivePreset();
       return true;
     }
     return false;
@@ -189,7 +222,15 @@ class KeyBindingsManager {
   }
 
   getPresetNames() {
-    return ['default', ...Object.keys(this.presets)];
+    const names = ['default', ...Object.keys(this.presets)];
+    if (this.activePreset === 'custom' && !names.includes('custom')) {
+      names.push('custom');
+    }
+    return names;
+  }
+
+  isCustom() {
+    return this.activePreset === 'custom';
   }
 
   getAllBindings() {
