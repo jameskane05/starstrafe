@@ -8,13 +8,17 @@ import { Projectile } from "../entities/Projectile.js";
 import { Missile } from "../entities/Missile.js";
 import { Explosion } from "../entities/Explosion.js";
 import { LaserImpact } from "../entities/LaserImpact.js";
+import { RemotePlayer } from "../entities/RemotePlayer.js";
 import { Level } from "../world/Level.js";
 import GameManager from "../managers/GameManager.js";
 import SceneManager from "../managers/SceneManager.js";
 import LightManager from "../managers/LightManager.js";
-import { GAME_STATES } from "../data/gameData.js";
+import { GAME_STATES, SHIP_CLASSES } from "../data/gameData.js";
 import { ParticleSystem } from "../vfx/ParticleSystem.js";
 import { DynamicLightPool } from "../vfx/DynamicLightPool.js";
+import NetworkManager from "../network/NetworkManager.js";
+import MenuManager from "../ui/MenuManager.js";
+import { Prediction } from "../network/Prediction.js";
 
 const _fireDir = new THREE.Vector3();
 const _hitPos = new THREE.Vector3();
@@ -27,7 +31,6 @@ export class Game {
     this.renderer = null;
     this.sparkRenderer = null;
 
-    // Managers
     this.gameManager = null;
     this.sceneManager = null;
     this.lightManager = null;
@@ -48,8 +51,21 @@ export class Game {
     this.boundFireEnemy = (pos, dir) => this.fireEnemyWeapon(pos, dir);
 
     this.hud = null;
-    this._hudLast = { health: null, enemies: null, missiles: null };
+    this._hudLast = { health: null, kills: null, missiles: null, boost: null };
     this._hudAccum = 0;
+
+    // Multiplayer state
+    this.isMultiplayer = false;
+    this.remotePlayers = new Map();
+    this.networkProjectiles = new Map();
+    this.isEscMenuOpen = false;
+    this.escMenu = null;
+    this.prediction = new Prediction({
+      enabled: true,
+      reconciliationThreshold: 0.5,
+      smoothCorrection: true,
+    });
+    this.lastInputSeq = 0;
   }
 
   async init() {
@@ -76,13 +92,11 @@ export class Game {
     this.renderer.toneMappingExposure = 1.5;
     document.body.appendChild(this.renderer.domElement);
 
-    // Initialize SparkRenderer for gaussian splats
     this.sparkRenderer = new SparkRenderer({
       renderer: this.renderer,
       maxStdDev: Math.sqrt(8),
       minAlpha: 0.00033,
     });
-    // Render splats first (background) so Three.js content (GLTF, particles, lasers) draws on top
     this.sparkRenderer.renderOrder = -100;
     this.scene.add(this.sparkRenderer);
 
@@ -90,7 +104,6 @@ export class Game {
     window.particles = this.particles;
     this.dynamicLights = new DynamicLightPool(this.scene, { size: 12 });
 
-    // Initialize managers
     this.sceneManager = new SceneManager(this.scene, {
       renderer: this.renderer,
       sparkRenderer: this.sparkRenderer,
@@ -104,13 +117,11 @@ export class Game {
       renderer: this.renderer,
     });
 
-    // Initialize light manager (includes splat lights)
     this.lightManager = new LightManager(this.scene, {
       sceneManager: this.sceneManager,
       gameManager: this.gameManager,
     });
 
-    // Subscribe to game state changes
     this.gameManager.on("state:changed", (newState, oldState) =>
       this.onStateChanged(newState, oldState)
     );
@@ -118,59 +129,391 @@ export class Game {
     this.gameManager.on("game:over", () => this.onGameOver());
     this.gameManager.on("game:victory", () => this.onVictory());
 
-    // Set state to MENU after loading
-    this.gameManager.setState({ currentState: GAME_STATES.MENU });
-
     this.input = new Input(this);
 
     this.hud = {
       health: document.getElementById("health"),
-      enemies: document.getElementById("enemies"),
+      kills: document.getElementById("kills"),
       missiles: document.getElementById("missiles"),
+      boost: document.getElementById("boost"),
     };
 
-    // Generate level for spawn points (visuals and physics disabled - splat is the environment)
     this.level = new Level(this.scene);
     this.level.generate({ skipVisuals: true, skipPhysics: true });
 
-    this.player = new Player(this.camera, this.input, this.level, this.scene);
-
-    // Spawn enemies
     await loadShipModels();
-    this.spawnEnemies();
 
     window.addEventListener("resize", () => this.onResize());
 
-    const overlay = document.getElementById("overlay");
-    overlay.addEventListener("click", () => this.start());
+    // Initialize menu and network listeners
+    MenuManager.init();
+    MenuManager.on("gameStart", () => this.startMultiplayerGame());
+    
+    this.setupNetworkListeners();
+
+    this.gameManager.setState({ currentState: GAME_STATES.MENU });
 
     this.animate();
   }
 
-  onStateChanged(newState, oldState) {
-    // React to state changes - don't call setState here to avoid recursion
+  setupNetworkListeners() {
+    NetworkManager.on("playerJoin", ({ player, sessionId, isLocal }) => {
+      if (!isLocal && this.isMultiplayer) {
+        this.addRemotePlayer(sessionId, player);
+      }
+    });
+
+    NetworkManager.on("playerLeave", ({ sessionId }) => {
+      this.removeRemotePlayer(sessionId);
+    });
+
+    NetworkManager.on("playerUpdate", ({ player, sessionId, isLocal }) => {
+      if (!isLocal && this.remotePlayers.has(sessionId)) {
+        const remote = this.remotePlayers.get(sessionId);
+        remote.updateFromServer(player);
+      } else if (isLocal && this.player) {
+        // Sync health/missiles from server (source of truth)
+        this.player.health = player.health;
+        this.player.maxHealth = player.maxHealth;
+        this.player.missiles = player.missiles;
+        
+        // Server reconciliation for position
+        const lastProcessed = player.lastProcessedInput;
+        if (lastProcessed > 0) {
+          this.prediction.applyServerState(
+            { x: player.x, y: player.y, z: player.z },
+            { x: player.qx, y: player.qy, z: player.qz, w: player.qw },
+            lastProcessed
+          );
+          NetworkManager.clearProcessedInputs(lastProcessed);
+        }
+      }
+    });
+
+    NetworkManager.on("projectileSpawn", ({ projectile, id }) => {
+      console.log("[Game] Projectile spawn event:", id, "owner:", projectile.ownerId, "isLocal:", projectile.ownerId === NetworkManager.sessionId);
+      if (projectile.ownerId !== NetworkManager.sessionId) {
+        this.spawnNetworkProjectile(id, projectile);
+      }
+    });
+
+    NetworkManager.on("projectileRemove", ({ id }) => {
+      this.removeNetworkProjectile(id);
+    });
+
+    NetworkManager.on("hit", (data) => {
+      this.handleNetworkHit(data);
+    });
+
+    NetworkManager.on("kill", (data) => {
+      this.showKillFeed(data.killerName, data.victimName);
+      if (data.victimId === NetworkManager.sessionId) {
+        this.handleLocalPlayerDeath();
+      }
+    });
+
+    NetworkManager.on("respawn", (data) => {
+      if (data.playerId === NetworkManager.sessionId) {
+        this.handleLocalPlayerRespawn();
+      }
+    });
+
+    NetworkManager.on("stateChange", (state) => {
+      if (state.phase === "results") {
+        this.onMatchEnd();
+      }
+    });
   }
 
-  onGameStarted() {
-    document.body.requestPointerLock();
-    document.getElementById("overlay").classList.add("hidden");
+  startMultiplayerGame() {
+    this.isMultiplayer = true;
+    
+    const state = NetworkManager.getState();
+    const localPlayer = NetworkManager.getLocalPlayer();
+    
+    if (!localPlayer) return;
+
+    const classStats = SHIP_CLASSES[localPlayer.shipClass] || SHIP_CLASSES.fighter;
+    
+    this.player = new Player(this.camera, this.input, this.level, this.scene);
+    this.player.health = localPlayer.health;
+    this.player.maxHealth = localPlayer.maxHealth;
+    this.player.missiles = localPlayer.missiles;
+    this.player.acceleration = classStats.acceleration;
+    this.player.maxSpeed = classStats.maxSpeed;
+
+    this.camera.position.set(localPlayer.x, localPlayer.y, localPlayer.z);
+    this.camera.quaternion.set(localPlayer.qx, localPlayer.qy, localPlayer.qz, localPlayer.qw);
+
+    // Create remote players for others already in the room
+    NetworkManager.getPlayers().forEach(([sessionId, playerData]) => {
+      if (sessionId !== NetworkManager.sessionId) {
+        this.addRemotePlayer(sessionId, playerData);
+      }
+    });
+
+    document.body.requestPointerLock?.()?.catch?.(() => {
+      console.warn("[Game] Pointer lock failed - click to capture");
+    });
     document.getElementById("crosshair").classList.add("active");
+    document.getElementById("hud").classList.add("active");
+    MenuManager.hide();
+
+    this.gameManager.setState({
+      currentState: GAME_STATES.PLAYING,
+      isRunning: true,
+      isMultiplayer: true,
+    });
+  }
+
+  addRemotePlayer(sessionId, playerData) {
+    if (this.remotePlayers.has(sessionId)) return;
+
+    const state = NetworkManager.getState();
+    const remote = new RemotePlayer(
+      this.scene,
+      playerData,
+      state?.mode === "team"
+    );
+    this.remotePlayers.set(sessionId, remote);
+  }
+
+  removeRemotePlayer(sessionId) {
+    const remote = this.remotePlayers.get(sessionId);
+    if (remote) {
+      remote.dispose();
+      this.remotePlayers.delete(sessionId);
+    }
+  }
+
+  spawnNetworkProjectile(id, data) {
+    console.log("[Game] Spawning network projectile:", id, "type:", data.type, "pos:", data.x, data.y, data.z, "dir:", data.dx, data.dy, data.dz, "speed:", data.speed);
+    const position = new THREE.Vector3(data.x, data.y, data.z);
+    const direction = new THREE.Vector3(data.dx, data.dy, data.dz);
+
+    if (data.type === "missile") {
+      const missile = new Missile(this.scene, position, direction, {
+        particles: this.particles,
+      });
+      this.networkProjectiles.set(id, { type: "missile", obj: missile });
+    } else {
+      // Other player projectiles should be visible as player (cyan) projectiles, not enemy (orange)
+      const projectile = new Projectile(this.scene, position, direction, true, data.speed);
+      this.networkProjectiles.set(id, { type: "projectile", obj: projectile });
+    }
+  }
+
+  removeNetworkProjectile(id) {
+    const data = this.networkProjectiles.get(id);
+    if (data) {
+      if (data.type === "missile") {
+        data.obj.dispose(this.scene);
+      } else {
+        data.obj.dispose(this.scene);
+      }
+      this.networkProjectiles.delete(id);
+    }
+  }
+
+  handleNetworkHit(data) {
+    const hitPos = new THREE.Vector3(data.x, data.y, data.z);
+    const hitNormal = new THREE.Vector3(0, 1, 0);
+    
+    const impact = new LaserImpact(
+      this.scene,
+      hitPos,
+      hitNormal,
+      data.shooterId === NetworkManager.sessionId ? 0x00ffff : 0xff8800,
+      this.dynamicLights
+    );
+    this.impacts.push(impact);
+
+    // Remove local projectile near hit position (if we fired it)
+    if (data.shooterId === NetworkManager.sessionId) {
+      // Check laser projectiles
+      for (let i = this.projectiles.length - 1; i >= 0; i--) {
+        const proj = this.projectiles[i];
+        if (proj.isPlayerOwned && proj.mesh.position.distanceToSquared(hitPos) < 25) {
+          proj.dispose(this.scene);
+          this.projectiles.splice(i, 1);
+          break;
+        }
+      }
+      
+      // Check missiles
+      for (let i = this.missiles.length - 1; i >= 0; i--) {
+        const missile = this.missiles[i];
+        if (missile.getPosition().distanceToSquared(hitPos) < 36) {
+          const explosion = new Explosion(
+            this.scene,
+            missile.getPosition(),
+            0xff4400,
+            this.dynamicLights
+          );
+          this.explosions.push(explosion);
+          missile.dispose(this.scene);
+          this.missiles.splice(i, 1);
+          break;
+        }
+      }
+    }
+
+    // Update remote player health visual
+    if (data.targetId !== NetworkManager.sessionId) {
+      const remote = this.remotePlayers.get(data.targetId);
+      if (remote) {
+        remote.takeDamage(data.damage);
+      }
+    } else {
+      // Local player took damage
+      this.player.health -= data.damage;
+      this.player.lastDamageTime = this.clock.elapsedTime;
+      this.showDamageIndicator(hitPos);
+    }
+  }
+
+  showDamageIndicator(hitWorldPos) {
+    const camPos = this.camera.position.clone();
+    const camDir = new THREE.Vector3();
+    this.camera.getWorldDirection(camDir);
+    
+    const toHit = hitWorldPos.clone().sub(camPos).normalize();
+    
+    // Get camera's right and up vectors
+    const camRight = new THREE.Vector3();
+    const camUp = new THREE.Vector3();
+    camRight.crossVectors(camDir, this.camera.up).normalize();
+    camUp.crossVectors(camRight, camDir).normalize();
+    
+    // Project hit direction onto camera plane
+    const dotRight = toHit.dot(camRight);
+    const dotUp = toHit.dot(camUp);
+    const dotForward = toHit.dot(camDir);
+    
+    // Determine which indicators to show based on hit direction
+    const indicators = [];
+    const threshold = 0.3;
+    
+    if (dotForward < 0.5) {
+      // Hit came from side/behind
+      if (dotRight > threshold) indicators.push('right');
+      if (dotRight < -threshold) indicators.push('left');
+      if (dotUp > threshold) indicators.push('top');
+      if (dotUp < -threshold) indicators.push('bottom');
+    }
+    
+    // Always show center vignette for any hit
+    indicators.push('center');
+    
+    // Activate the indicators
+    indicators.forEach(dir => {
+      const el = document.querySelector(`.damage-indicator-${dir}`);
+      if (el) {
+        el.classList.remove('fading');
+        el.classList.add('active');
+        
+        setTimeout(() => {
+          el.classList.remove('active');
+          el.classList.add('fading');
+        }, 80);
+        
+        setTimeout(() => {
+          el.classList.remove('fading');
+        }, 450);
+      }
+    });
+  }
+
+  handleLocalPlayerDeath() {
+    const overlay = document.getElementById("respawn-overlay");
+    overlay.classList.add("active");
+    
+    let timeLeft = 5;
+    const timerEl = document.getElementById("respawn-time");
+    timerEl.textContent = timeLeft;
+    
+    const interval = setInterval(() => {
+      timeLeft--;
+      timerEl.textContent = timeLeft;
+      if (timeLeft <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+  }
+
+  handleLocalPlayerRespawn() {
+    const overlay = document.getElementById("respawn-overlay");
+    overlay.classList.remove("active");
+
+    const localPlayer = NetworkManager.getLocalPlayer();
+    if (localPlayer && this.player) {
+      this.player.health = localPlayer.health;
+      this.player.maxHealth = localPlayer.maxHealth;
+      this.player.missiles = localPlayer.missiles;
+      this.player.lastDamageTime = 0;
+      this.camera.position.set(localPlayer.x, localPlayer.y, localPlayer.z);
+      this.camera.quaternion.set(localPlayer.qx, localPlayer.qy, localPlayer.qz, localPlayer.qw);
+      
+      // Force HUD update
+      this._hudLast.health = null;
+      this._hudLast.missiles = null;
+    }
+  }
+
+  showKillFeed(killer, victim) {
+    const feed = document.getElementById("kill-feed");
+    const entry = document.createElement("div");
+    entry.className = "kill-entry";
+    entry.innerHTML = `<span class="killer">${killer}</span> → <span class="victim">${victim}</span>`;
+    feed.appendChild(entry);
+    
+    setTimeout(() => entry.remove(), 5000);
+  }
+
+  onMatchEnd() {
+    document.exitPointerLock();
+    document.getElementById("crosshair").classList.remove("active");
+    document.getElementById("hud").classList.remove("active");
+    MenuManager.show();
+
+    this.cleanupMultiplayer();
+  }
+
+  cleanupMultiplayer() {
+    this.remotePlayers.forEach((remote) => remote.dispose());
+    this.remotePlayers.clear();
+    
+    this.networkProjectiles.forEach((data) => {
+      if (data.type === "missile") {
+        data.obj.dispose(this.scene);
+      } else {
+        data.obj.dispose(this.scene);
+      }
+    });
+    this.networkProjectiles.clear();
+  }
+
+  onStateChanged(newState, oldState) {}
+
+  onGameStarted() {
+    if (!this.isMultiplayer) {
+      document.body.requestPointerLock?.()?.catch?.(() => {});
+      document.getElementById("crosshair").classList.add("active");
+      document.getElementById("hud").classList.add("active");
+    }
   }
 
   onGameOver() {
     document.exitPointerLock();
-    document.getElementById("overlay").classList.remove("hidden");
     document.getElementById("crosshair").classList.remove("active");
-    document.querySelector("#overlay h1").textContent = "DESTROYED";
-    document.querySelector("#overlay p").textContent = "Click to restart";
+    document.getElementById("hud").classList.remove("active");
+    MenuManager.show();
   }
 
   onVictory() {
     document.exitPointerLock();
-    document.getElementById("overlay").classList.remove("hidden");
     document.getElementById("crosshair").classList.remove("active");
-    document.querySelector("#overlay h1").textContent = "VICTORY";
-    document.querySelector("#overlay p").textContent = "All enemies eliminated";
+    document.getElementById("hud").classList.remove("active");
   }
 
   spawnEnemies() {
@@ -188,18 +531,159 @@ export class Game {
     this.gameManager.startGame();
   }
 
+  toggleEscMenu() {
+    if (this.isEscMenuOpen) {
+      this.resumeGame();
+    } else {
+      this.showEscMenu();
+    }
+  }
+
+  showEscMenu() {
+    if (this.isEscMenuOpen) return;
+    this.isEscMenuOpen = true;
+    document.exitPointerLock();
+    document.getElementById("crosshair").classList.remove("active");
+    
+    if (!this.escMenu) {
+      this.escMenu = document.createElement("div");
+      this.escMenu.id = "esc-menu";
+      document.body.appendChild(this.escMenu);
+    }
+    
+    this.escMenu.innerHTML = `
+      <div class="esc-overlay"></div>
+      <div class="esc-content">
+        <h2>MENU</h2>
+        <div class="esc-buttons">
+          <button id="esc-resume" class="esc-btn">RESUME</button>
+          <button id="esc-options" class="esc-btn">OPTIONS</button>
+          <button id="esc-leave" class="esc-btn esc-btn-danger">LEAVE MATCH</button>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById("esc-resume").addEventListener("click", () => this.resumeGame());
+    document.getElementById("esc-options").addEventListener("click", () => this.showOptionsMenu());
+    document.getElementById("esc-leave").addEventListener("click", () => this.leaveMatch());
+    
+    this.escMenu.style.display = "flex";
+  }
+
+  showOptionsMenu() {
+    if (this.escMenu) {
+      this.escMenu.style.display = "none";
+    }
+    this.inOptions = true;
+    MenuManager.showOptionsFromGame(() => {
+      this.inOptions = false;
+      if (this.isEscMenuOpen && this.escMenu) {
+        this.escMenu.style.display = "flex";
+      }
+    });
+  }
+
+  showLeaderboard() {
+    if (!this.leaderboardEl) {
+      this.leaderboardEl = document.createElement("div");
+      this.leaderboardEl.id = "tab-leaderboard";
+      document.body.appendChild(this.leaderboardEl);
+    }
+    
+    const players = NetworkManager.getPlayers()
+      .map(([id, p]) => ({ id, name: p.name, kills: p.kills, deaths: p.deaths }))
+      .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+    
+    this.leaderboardEl.innerHTML = `
+      <div class="leaderboard">
+        <h2>LEADERBOARD</h2>
+        <div class="leaderboard-header">
+          <span class="lb-rank">#</span>
+          <span class="lb-name">PILOT</span>
+          <span class="lb-kills">K</span>
+          <span class="lb-deaths">D</span>
+        </div>
+        ${players.map((p, i) => `
+          <div class="leaderboard-row ${p.id === NetworkManager.sessionId ? 'local' : ''}">
+            <span class="lb-rank">${i + 1}</span>
+            <span class="lb-name">${p.name}</span>
+            <span class="lb-kills">${p.kills}</span>
+            <span class="lb-deaths">${p.deaths}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    
+    this.leaderboardEl.classList.add("active");
+  }
+
+  hideLeaderboard() {
+    if (this.leaderboardEl) {
+      this.leaderboardEl.classList.remove("active");
+    }
+  }
+
+  resumeGame() {
+    if (!this.isEscMenuOpen) return;
+    this.isEscMenuOpen = false;
+    
+    if (this.escMenu) {
+      this.escMenu.style.display = "none";
+    }
+    
+    document.getElementById("crosshair").classList.add("active");
+    document.body.requestPointerLock?.()?.catch?.(() => {
+      console.warn("[Game] Pointer lock failed - click to capture");
+    });
+  }
+
+  leaveMatch() {
+    this.isEscMenuOpen = false;
+    
+    if (this.escMenu) {
+      this.escMenu.style.display = "none";
+    }
+    
+    if (this.isMultiplayer) {
+      NetworkManager.leaveRoom();
+      this.cleanupMultiplayer();
+      this.isMultiplayer = false;
+    }
+    
+    document.getElementById("crosshair").classList.remove("active");
+    document.getElementById("hud").classList.remove("active");
+    this.player = null;
+    MenuManager.show();
+    this.gameManager.setState({
+      currentState: GAME_STATES.MENU,
+      isRunning: false,
+      isMultiplayer: false,
+    });
+  }
+
   stop() {
-    if (this.player.health <= 0) {
+    if (this.player && this.player.health <= 0) {
       this.gameManager.gameOver();
     } else {
-      // Paused/escaped
       document.exitPointerLock();
-      document.getElementById("overlay").classList.remove("hidden");
       document.getElementById("crosshair").classList.remove("active");
+      document.getElementById("hud").classList.remove("active");
       this.gameManager.setState({
         currentState: GAME_STATES.PAUSED,
         isRunning: false,
       });
+    }
+  }
+
+  handleGamepadFire() {
+    if (!this.input.isGamepadMode()) return;
+    
+    const gp = this.input.gamepad;
+    if (gp.fire) {
+      this.firePlayerWeapon();
+    }
+    if (gp.missile) {
+      this.firePlayerMissile();
     }
   }
 
@@ -208,6 +692,13 @@ export class Game {
 
     _fireDir.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
     const spawnPos = this.player.getWeaponSpawnPoint();
+
+    if (this.isMultiplayer) {
+      // Send fire event to server
+      NetworkManager.sendFire("laser", spawnPos, _fireDir);
+    }
+
+    // Local prediction - show projectile immediately
     const projectile = new Projectile(this.scene, spawnPos, _fireDir, true);
     this.projectiles.push(projectile);
 
@@ -231,6 +722,11 @@ export class Game {
 
     _fireDir.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
     const spawnPos = this.player.getMissileSpawnPoint();
+
+    if (this.isMultiplayer) {
+      NetworkManager.sendFire("missile", spawnPos, _fireDir);
+    }
+
     const missile = new Missile(this.scene, spawnPos, _fireDir, {
       particles: this.particles,
     });
@@ -255,28 +751,59 @@ export class Game {
   }
 
   updateHUD(delta) {
-    if (!this.hud) return;
+    if (!this.hud || !this.player) return;
 
     this._hudAccum += delta;
     if (this._hudAccum < 0.1) return;
     this._hudAccum = 0;
 
-    const health = Math.max(0, Math.round(this.player.health));
-    const enemies = this.enemies.length;
+    const healthPercent = Math.max(0, Math.round((this.player.health / this.player.maxHealth) * 100));
     const missiles = this.player.missiles;
-
-    if (health !== this._hudLast.health) {
-      this.hud.health.textContent = String(health);
-      this._hudLast.health = health;
+    const boostPercent = Math.max(0, Math.round((this.player.boostFuel / this.player.maxBoostFuel) * 100));
+    
+    let kills = 0;
+    if (this.isMultiplayer) {
+      const localPlayer = NetworkManager.getLocalPlayer();
+      kills = localPlayer?.kills || 0;
     }
-    if (enemies !== this._hudLast.enemies) {
-      this.hud.enemies.textContent = String(enemies);
-      this._hudLast.enemies = enemies;
+
+    if (healthPercent !== this._hudLast.health) {
+      this.hud.health.textContent = String(healthPercent);
+      this._hudLast.health = healthPercent;
+    }
+    if (kills !== this._hudLast.kills) {
+      this.hud.kills.textContent = String(kills);
+      this._hudLast.kills = kills;
     }
     if (missiles !== this._hudLast.missiles) {
       this.hud.missiles.textContent = String(missiles);
       this._hudLast.missiles = missiles;
     }
+    if (boostPercent !== this._hudLast.boost) {
+      this.hud.boost.textContent = String(boostPercent);
+      this._hudLast.boost = boostPercent;
+    }
+  }
+
+  sendInputToServer(delta) {
+    if (!this.isMultiplayer || !this.player) return;
+
+    const state = NetworkManager.getState();
+    if (!state || state.phase !== "playing") return;
+
+    this.lastInputSeq = NetworkManager.sendInput({
+      x: this.camera.position.x,
+      y: this.camera.position.y,
+      z: this.camera.position.z,
+      qx: this.camera.quaternion.x,
+      qy: this.camera.quaternion.y,
+      qz: this.camera.quaternion.z,
+      qw: this.camera.quaternion.w,
+      vx: this.player.velocity.x,
+      vy: this.player.velocity.y,
+      vz: this.player.velocity.z,
+      dt: delta,
+    });
   }
 
   animate() {
@@ -284,20 +811,45 @@ export class Game {
 
     const delta = this.clock.getDelta();
     const isPlaying = this.gameManager.isPlaying();
+    
+    // Poll gamepad every frame
+    this.input.pollGamepad();
 
     if (isPlaying) {
-      this.player.update(delta);
+      // Handle gamepad fire inputs
+      this.handleGamepadFire();
+      
+      if (this.player) {
+        this.player.update(delta, this.clock.elapsedTime);
+      }
 
-      for (let i = 0; i < this.enemies.length; i++) {
-        this.enemies[i].update(
-          delta,
-          this.camera.position,
-          this.boundFireEnemy
-        );
+      // Update remote players
+      this.remotePlayers.forEach((remote) => {
+        remote.update(delta);
+      });
+
+      // Only update enemies in single player
+      if (!this.isMultiplayer) {
+        for (let i = 0; i < this.enemies.length; i++) {
+          this.enemies[i].update(
+            delta,
+            this.camera.position,
+            this.boundFireEnemy
+          );
+        }
       }
 
       this.projectiles.forEach((proj) => proj.update(delta));
       this.missiles.forEach((m) => m.update(delta, this.enemies));
+
+      // Update network projectiles
+      this.networkProjectiles.forEach((data) => {
+        if (data.type === "projectile") {
+          data.obj.update(delta);
+        } else if (data.type === "missile") {
+          data.obj.update(delta, []);
+        }
+      });
 
       for (let i = this.explosions.length - 1; i >= 0; i--) {
         if (!this.explosions[i].update(delta)) {
@@ -311,10 +863,19 @@ export class Game {
         }
       }
 
+      // Always check collisions (handles lifetime expiry and wall hits)
+      // In multiplayer, damage is handled by server
       this.checkCollisions();
+      
       this.updateHUD(delta);
+      this.sendInputToServer(delta);
 
-      if (this.player.health <= 0) {
+      // Apply prediction correction
+      if (this.isMultiplayer && this.player) {
+        this.prediction.applySmoothCorrection(this.camera.position, delta);
+      }
+
+      if (this.player && this.player.health <= 0 && !this.isMultiplayer) {
         this.stop();
       }
     }
@@ -341,52 +902,57 @@ export class Game {
       const projPos = proj.mesh.position;
       const projColor = proj.isPlayerOwned ? 0x00ffff : 0xff8800;
 
-      if (proj.isPlayerOwned) {
-        for (let j = this.enemies.length - 1; j >= 0; j--) {
-          const enemy = this.enemies[j];
-          const distSq = projPos.distanceToSquared(enemy.mesh.position);
+      // In single-player, check entity collisions (multiplayer uses server for this)
+      if (!this.isMultiplayer) {
+        if (proj.isPlayerOwned) {
+          for (let j = this.enemies.length - 1; j >= 0; j--) {
+            const enemy = this.enemies[j];
+            const distSq = projPos.distanceToSquared(enemy.mesh.position);
 
-          if (distSq < 2.25) {
-            enemy.takeDamage(25);
+            if (distSq < 2.25) {
+              enemy.takeDamage(25);
 
-            _hitNormal.subVectors(projPos, enemy.mesh.position).normalize();
-            const impact = new LaserImpact(
-              this.scene,
-              projPos,
-              _hitNormal,
-              projColor,
-              this.dynamicLights
-            );
-            this.impacts.push(impact);
-
-            hitSomething = true;
-
-            if (enemy.health <= 0) {
-              const explosion = new Explosion(
+              _hitNormal.subVectors(projPos, enemy.mesh.position).normalize();
+              const impact = new LaserImpact(
                 this.scene,
-                enemy.mesh.position,
-                enemy.glowColor,
+                projPos,
+                _hitNormal,
+                projColor,
                 this.dynamicLights
               );
-              this.explosions.push(explosion);
-              enemy.dispose(this.scene);
-              this.enemies.splice(j, 1);
-              this.gameManager.setState({
-                enemiesRemaining: this.enemies.length,
-                enemiesKilled: this.gameManager.getState().enemiesKilled + 1,
-              });
+              this.impacts.push(impact);
+
+              hitSomething = true;
+
+              if (enemy.health <= 0) {
+                const explosion = new Explosion(
+                  this.scene,
+                  enemy.mesh.position,
+                  enemy.glowColor,
+                  this.dynamicLights
+                );
+                this.explosions.push(explosion);
+                enemy.dispose(this.scene);
+                this.enemies.splice(j, 1);
+                this.gameManager.setState({
+                  enemiesRemaining: this.enemies.length,
+                  enemiesKilled: this.gameManager.getState().enemiesKilled + 1,
+                });
+              }
+              break;
             }
-            break;
           }
-        }
-      } else {
-        const distSq = projPos.distanceToSquared(playerPos);
-        if (distSq < playerRadiusSq) {
-          this.player.health -= 10;
-          hitSomething = true;
+        } else {
+          const distSq = projPos.distanceToSquared(playerPos);
+          if (distSq < playerRadiusSq) {
+            this.player.health -= 10;
+            this.player.lastDamageTime = this.clock.elapsedTime;
+            hitSomething = true;
+          }
         }
       }
 
+      // Always check wall collisions
       if (!hitSomething && proj.prevPosition) {
         const wallHit = castSphere(
           proj.prevPosition.x,

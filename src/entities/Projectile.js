@@ -28,10 +28,15 @@ const _forward = new THREE.Vector3(0, 0, 1);
 const _tempVec = new THREE.Vector3();
 
 export class Projectile {
-  constructor(scene, position, direction, isPlayerOwned) {
+  constructor(scene, position, direction, isPlayerOwned, speed = null) {
     this.scene = scene;
-    this.direction = direction.clone().normalize();
-    this.speed = isPlayerOwned ? 60 : 15;
+    this.direction = direction.clone();
+    if (this.direction.lengthSq() > 0.0001) {
+      this.direction.normalize();
+    } else {
+      this.direction.set(0, 0, -1);
+    }
+    this.speed = speed !== null ? speed : (isPlayerOwned ? 60 : 15);
     this.isPlayerOwned = isPlayerOwned;
     this.lifetime = 3;
     this.disposed = false;
@@ -45,6 +50,7 @@ export class Projectile {
     this.mesh.quaternion.setFromUnitVectors(_forward, this.direction);
     
     scene.add(this.mesh);
+    console.log("[Projectile] Created at", position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1), "dir:", this.direction.x.toFixed(2), this.direction.y.toFixed(2), this.direction.z.toFixed(2), "speed:", this.speed);
   }
 
   update(delta) {

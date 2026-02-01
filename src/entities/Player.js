@@ -11,17 +11,31 @@ const _yawQuat = new THREE.Quaternion();
 const _rollQuat = new THREE.Quaternion();
 
 export class Player {
-  constructor(camera, input, level, scene) {
+  constructor(camera, input, level, scene, options = {}) {
     this.camera = camera;
     this.input = input;
     this.level = level;
     this.scene = scene;
 
-    this.health = 100;
-    this.missiles = 20;
+    this.health = options.health || 100;
+    this.maxHealth = options.maxHealth || 100;
+    this.missiles = options.missiles || 20;
+    
+    this.lastDamageTime = 0;
+    this.shieldRegenDelay = 5;
+    this.shieldRegenRate = 15;
 
-    this.acceleration = 0.5;
-    this.maxSpeed = 1;
+    this.boostFuel = 100;
+    this.maxBoostFuel = 100;
+    this.boostDrainRate = 20; // depletes in 5 seconds (100 / 20 = 5)
+    this.boostRegenRate = 100; // refills in 1 second
+    this.boostRegenDelay = 1;
+    this.lastBoostTime = 0;
+    this.boostMultiplier = 2.5;
+    this.isBoosting = false;
+
+    this.acceleration = options.acceleration || 0.5;
+    this.maxSpeed = options.maxSpeed || 1;
 
     this.velocity = new THREE.Vector3();
     this.drag = 0.99;
@@ -125,8 +139,13 @@ export class Player {
       .add(forward.multiplyScalar(0.4));
   }
 
-  update(delta) {
+  update(delta, elapsedTime = 0) {
+    // Shield regeneration is handled server-side in multiplayer
+    // Client just displays the health value received from server
+    
     const keys = this.input.keys;
+    const gp = this.input.gamepad;
+    const useGamepad = this.input.isGamepadMode();
     const mouse = this.input.consumeMouse();
 
     // Rotation - reuse temp vectors
@@ -134,9 +153,24 @@ export class Player {
     _up.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
     _forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
 
-    // Mouse look with acceleration/easing
-    this.pitchVelocity += -mouse.y * this.lookAccel;
-    this.yawVelocity += -mouse.x * this.lookAccel;
+    // Look input
+    if (useGamepad) {
+      // Gamepad look (right stick)
+      const gpLookSpeed = 4.0;
+      this.pitchVelocity += -gp.lookY * gpLookSpeed * delta;
+      this.yawVelocity += -gp.lookX * gpLookSpeed * delta;
+    } else {
+      // Mouse look with acceleration/easing
+      this.pitchVelocity += -mouse.y * this.lookAccel;
+      this.yawVelocity += -mouse.x * this.lookAccel;
+
+      // Keyboard look (arrow keys)
+      const keyLookSpeed = 3.0;
+      if (keys.lookUp) this.pitchVelocity += keyLookSpeed * delta;
+      if (keys.lookDown) this.pitchVelocity -= keyLookSpeed * delta;
+      if (keys.lookLeft) this.yawVelocity += keyLookSpeed * delta;
+      if (keys.lookRight) this.yawVelocity -= keyLookSpeed * delta;
+    }
 
     if (Math.abs(this.pitchVelocity) > this.lookMaxSpeed) {
       this.pitchVelocity = Math.sign(this.pitchVelocity) * this.lookMaxSpeed;
@@ -151,10 +185,15 @@ export class Player {
     _pitchQuat.setFromAxisAngle(_right, this.pitchVelocity * delta);
     _yawQuat.setFromAxisAngle(_up, this.yawVelocity * delta);
 
-    // Roll with acceleration (Q/E reversed)
+    // Roll with acceleration
     let rollInput = 0;
-    if (keys.rollLeft) rollInput -= this.rollAccel * delta;
-    if (keys.rollRight) rollInput += this.rollAccel * delta;
+    if (useGamepad) {
+      if (gp.rollLeft) rollInput -= this.rollAccel * delta;
+      if (gp.rollRight) rollInput += this.rollAccel * delta;
+    } else {
+      if (keys.rollLeft) rollInput -= this.rollAccel * delta;
+      if (keys.rollRight) rollInput += this.rollAccel * delta;
+    }
 
     this.rollVelocity += rollInput;
     if (Math.abs(this.rollVelocity) > this.rollMaxSpeed) {
@@ -171,15 +210,45 @@ export class Player {
 
     // Movement
     _accel.set(0, 0, 0);
-    if (keys.forward) _accel.add(_forward);
-    if (keys.backward) _accel.sub(_forward);
-    if (keys.right) _accel.add(_right);
-    if (keys.left) _accel.sub(_right);
-    if (keys.up) _accel.add(_up);
-    if (keys.down) _accel.sub(_up);
+    
+    if (useGamepad) {
+      // Gamepad movement (left stick + d-pad for vertical)
+      if (gp.moveY < -0.1) _accel.add(_forward.clone().multiplyScalar(-gp.moveY));
+      if (gp.moveY > 0.1) _accel.sub(_forward.clone().multiplyScalar(gp.moveY));
+      if (gp.moveX > 0.1) _accel.add(_right.clone().multiplyScalar(gp.moveX));
+      if (gp.moveX < -0.1) _accel.sub(_right.clone().multiplyScalar(-gp.moveX));
+      if (gp.strafeUp) _accel.add(_up);
+      if (gp.strafeDown) _accel.sub(_up);
+    } else {
+      // Keyboard movement
+      if (keys.forward) _accel.add(_forward);
+      if (keys.backward) _accel.sub(_forward);
+      if (keys.right) _accel.add(_right);
+      if (keys.left) _accel.sub(_right);
+      if (keys.strafeUp) _accel.add(_up);
+      if (keys.strafeDown) _accel.sub(_up);
+    }
+
+    // Boost logic
+    const wantsBoost = useGamepad ? gp.boost : keys.boost;
+    if (wantsBoost && this.boostFuel > 0 && _accel.lengthSq() > 0) {
+      this.isBoosting = true;
+      this.boostFuel = Math.max(0, this.boostFuel - this.boostDrainRate * delta);
+      this.lastBoostTime = elapsedTime;
+    } else {
+      this.isBoosting = false;
+      // Regenerate boost fuel after delay
+      if (elapsedTime - this.lastBoostTime >= this.boostRegenDelay) {
+        this.boostFuel = Math.min(this.maxBoostFuel, this.boostFuel + this.boostRegenRate * delta);
+      }
+    }
 
     if (_accel.lengthSq() > 0) {
-      _accel.normalize().multiplyScalar(this.acceleration * delta);
+      let accelMod = this.acceleration;
+      if (this.isBoosting) {
+        accelMod *= this.boostMultiplier;
+      }
+      _accel.normalize().multiplyScalar(accelMod * delta);
       this.velocity.add(_accel);
     }
 

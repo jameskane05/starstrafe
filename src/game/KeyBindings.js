@@ -1,0 +1,200 @@
+const STORAGE_KEY = 'starstrafe_keybindings';
+const PRESETS_KEY = 'starstrafe_keybinding_presets';
+
+export const DEFAULT_BINDINGS = {
+  forward: ['KeyW'],
+  backward: ['KeyS'],
+  left: ['KeyA'],
+  right: ['KeyD'],
+  rollLeft: ['KeyQ'],
+  rollRight: ['KeyE'],
+  strafeUp: ['KeyZ'],
+  strafeDown: ['KeyC'],
+  boost: ['ShiftLeft', 'ShiftRight'],
+  lookUp: ['ArrowUp'],
+  lookDown: ['ArrowDown'],
+  lookLeft: ['ArrowLeft'],
+  lookRight: ['ArrowRight'],
+  leaderboard: ['Tab'],
+  pause: ['Escape'],
+};
+
+export const ACTION_LABELS = {
+  forward: 'Move Forward',
+  backward: 'Move Backward',
+  left: 'Strafe Left',
+  right: 'Strafe Right',
+  rollLeft: 'Roll Left',
+  rollRight: 'Roll Right',
+  strafeUp: 'Strafe Up',
+  strafeDown: 'Strafe Down',
+  boost: 'Boost',
+  lookUp: 'Look Up',
+  lookDown: 'Look Down',
+  lookLeft: 'Look Left',
+  lookRight: 'Look Right',
+  leaderboard: 'Show Leaderboard',
+  pause: 'Escape Menu',
+};
+
+export const KEY_DISPLAY_NAMES = {
+  Space: 'SPACE',
+  ShiftLeft: 'L-SHIFT',
+  ShiftRight: 'R-SHIFT',
+  ControlLeft: 'L-CTRL',
+  ControlRight: 'R-CTRL',
+  AltLeft: 'L-ALT',
+  AltRight: 'R-ALT',
+  Tab: 'TAB',
+  Escape: 'ESC',
+  Enter: 'ENTER',
+  Backspace: 'BACKSPACE',
+  ArrowUp: '↑',
+  ArrowDown: '↓',
+  ArrowLeft: '←',
+  ArrowRight: '→',
+};
+
+export function getKeyDisplayName(code) {
+  if (KEY_DISPLAY_NAMES[code]) return KEY_DISPLAY_NAMES[code];
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return 'NUM ' + code.slice(6);
+  return code;
+}
+
+class KeyBindingsManager {
+  constructor() {
+    this.bindings = this.load();
+    this.presets = this.loadPresets();
+    this.activePreset = 'default';
+  }
+
+  load() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return { ...this.deepCopy(DEFAULT_BINDINGS), ...parsed };
+      }
+    } catch (e) {
+      console.warn('[KeyBindings] Failed to load:', e);
+    }
+    return this.deepCopy(DEFAULT_BINDINGS);
+  }
+
+  save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.bindings));
+    } catch (e) {
+      console.warn('[KeyBindings] Failed to save:', e);
+    }
+  }
+
+  loadPresets() {
+    try {
+      const stored = localStorage.getItem(PRESETS_KEY);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('[KeyBindings] Failed to load presets:', e);
+    }
+    return {};
+  }
+
+  savePresets() {
+    try {
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(this.presets));
+    } catch (e) {
+      console.warn('[KeyBindings] Failed to save presets:', e);
+    }
+  }
+
+  deepCopy(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  getBinding(action) {
+    return this.bindings[action] || [];
+  }
+
+  setBinding(action, keys) {
+    this.bindings[action] = Array.isArray(keys) ? keys : [keys];
+    this.save();
+  }
+
+  addKey(action, key) {
+    if (!this.bindings[action]) this.bindings[action] = [];
+    if (!this.bindings[action].includes(key)) {
+      this.bindings[action].push(key);
+      this.save();
+    }
+  }
+
+  removeKey(action, key) {
+    if (!this.bindings[action]) return;
+    this.bindings[action] = this.bindings[action].filter(k => k !== key);
+    this.save();
+  }
+
+  clearBinding(action) {
+    this.bindings[action] = [];
+    this.save();
+  }
+
+  isKeyBound(action, code) {
+    return this.bindings[action]?.includes(code) || false;
+  }
+
+  getActionForKey(code) {
+    for (const [action, keys] of Object.entries(this.bindings)) {
+      if (keys.includes(code)) return action;
+    }
+    return null;
+  }
+
+  resetToDefault() {
+    this.bindings = this.deepCopy(DEFAULT_BINDINGS);
+    this.activePreset = 'default';
+    this.save();
+  }
+
+  savePreset(name) {
+    this.presets[name] = this.deepCopy(this.bindings);
+    this.activePreset = name;
+    this.savePresets();
+  }
+
+  loadPreset(name) {
+    if (name === 'default') {
+      this.resetToDefault();
+      return true;
+    }
+    if (this.presets[name]) {
+      this.bindings = this.deepCopy(this.presets[name]);
+      this.activePreset = name;
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  deletePreset(name) {
+    if (name === 'default') return false;
+    delete this.presets[name];
+    this.savePresets();
+    if (this.activePreset === name) {
+      this.activePreset = 'default';
+    }
+    return true;
+  }
+
+  getPresetNames() {
+    return ['default', ...Object.keys(this.presets)];
+  }
+
+  getAllBindings() {
+    return this.deepCopy(this.bindings);
+  }
+}
+
+export const KeyBindings = new KeyBindingsManager();

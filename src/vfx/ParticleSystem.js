@@ -198,9 +198,6 @@ const _exhaust = new THREE.Vector3();
 
 export class ParticleSystem {
   constructor(scene) {
-    console.log(
-      "[ParticleSystem] CONSTRUCTING - if you don't see this on save, HMR isn't rebuilding instance"
-    );
     const map = createRadialTexture(64);
 
     this.sparks = new PointParticlePool(scene, 204, {
@@ -215,10 +212,6 @@ export class ParticleSystem {
       depthTest: false,
       renderOrder: 9999,
     });
-    console.log(
-      "[ParticleSystem] fire sizeScale uniform:",
-      this.fire.material.uniforms.uSizeScale.value
-    );
     this.smoke = new PointParticlePool(scene, 104, {
       map,
       blending: THREE.AdditiveBlending,
@@ -253,10 +246,6 @@ export class ParticleSystem {
   }
 
   emitMissileExhaust(worldPos, worldQuat, dir) {
-    console.log(
-      "[ParticleSystem] emitMissileExhaust called, fire active:",
-      this.fire.active.length
-    );
     // Missile local +Z is forward, so exhaust should be at -Z (behind the missile),
     // otherwise it spawns in front and can bloom over the whole view.
     _exhaust.set(0, 0, -0.35).applyQuaternion(worldQuat).add(worldPos);
