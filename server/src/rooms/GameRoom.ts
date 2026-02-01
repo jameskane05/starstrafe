@@ -1,4 +1,4 @@
-import { Room, Client, CloseCode, matchMaker } from "colyseus";
+import { Room, Client, matchMaker } from "colyseus";
 import { GameState, Player, Projectile, Collectible } from "./schema/GameState.js";
 
 const SHIP_CLASSES = {
@@ -91,8 +91,8 @@ export class GameRoom extends Room<GameState> {
     
     // Assign team in team mode
     if (this.state.mode === "team") {
-      const team1Count = Array.from(this.state.players.values()).filter(p => p.team === 1).length;
-      const team2Count = Array.from(this.state.players.values()).filter(p => p.team === 2).length;
+      const team1Count = Array.from(this.state.players.values()).filter((p: Player) => p.team === 1).length;
+      const team2Count = Array.from(this.state.players.values()).filter((p: Player) => p.team === 2).length;
       player.team = team1Count <= team2Count ? 1 : 2;
     }
     
@@ -113,7 +113,7 @@ export class GameRoom extends Room<GameState> {
     }
   }
 
-  onLeave(client: Client, consented: boolean) {
+  onLeave(client: Client, consented?: number) {
     const player = this.state.players.get(client.sessionId);
     if (player) {
       console.log(`[GameRoom] ${player.name} left`);
@@ -236,7 +236,7 @@ export class GameRoom extends Room<GameState> {
     if (this.state.players.size < 1) return; // Allow 1 for testing, should be 2+
     
     // Check all players ready
-    const allReady = Array.from(this.state.players.values()).every(p => p.ready);
+    const allReady = Array.from(this.state.players.values()).every((p: Player) => p.ready);
     if (!allReady && this.state.players.size > 1) return;
     
     this.startCountdown();
@@ -263,7 +263,7 @@ export class GameRoom extends Room<GameState> {
     
     // Spawn all players
     let spawnIndex = 0;
-    this.state.players.forEach((player) => {
+    this.state.players.forEach((player: Player) => {
       this.spawnPlayer(player, spawnIndex);
       spawnIndex++;
     });
@@ -350,7 +350,7 @@ export class GameRoom extends Room<GameState> {
 
   private getUniqueName(baseName: string): string {
     const existingNames = new Set<string>();
-    this.state.players.forEach((p) => existingNames.add(p.name));
+    this.state.players.forEach((p: Player) => existingNames.add(p.name));
     
     if (!existingNames.has(baseName)) {
       return baseName;
@@ -413,7 +413,7 @@ export class GameRoom extends Room<GameState> {
   private updateProjectiles(dt: number) {
     const toRemove: string[] = [];
     
-    this.state.projectiles.forEach((proj, id) => {
+    this.state.projectiles.forEach((proj: Projectile, id: string) => {
       // Store previous position for swept collision
       const prevX = proj.x;
       const prevY = proj.y;
@@ -441,7 +441,7 @@ export class GameRoom extends Room<GameState> {
     
     const hitRadius = 2.5;
     
-    this.state.players.forEach((player) => {
+    this.state.players.forEach((player: Player) => {
       if (!player.alive) return;
       if (player.id === proj.ownerId) return;
       if (toRemove.includes(projId)) return;
@@ -503,7 +503,7 @@ export class GameRoom extends Room<GameState> {
 
   private updateCollectibles(dt: number) {
     // Update rotation for visual effect
-    this.state.collectibles.forEach((collectible) => {
+    this.state.collectibles.forEach((collectible: Collectible) => {
       collectible.rotY += dt * 2; // Rotate ~2 radians per second
       if (collectible.rotY > Math.PI * 2) {
         collectible.rotY -= Math.PI * 2;
@@ -513,8 +513,8 @@ export class GameRoom extends Room<GameState> {
     // Check player-collectible collisions
     const toRemove: string[] = [];
     
-    this.state.collectibles.forEach((collectible, id) => {
-      this.state.players.forEach((player) => {
+    this.state.collectibles.forEach((collectible: Collectible, id: string) => {
+      this.state.players.forEach((player: Player) => {
         if (!player.alive) return;
         
         const dx = player.x - collectible.x;
@@ -587,7 +587,7 @@ export class GameRoom extends Room<GameState> {
     const REGEN_RATE = 15; // HP per second
     const now = Date.now();
     
-    this.state.players.forEach((player) => {
+    this.state.players.forEach((player: Player) => {
       if (!player.alive) return;
       if (player.health >= player.maxHealth) return;
       if (now - player.lastDamageTime < REGEN_DELAY) return;
@@ -625,7 +625,7 @@ export class GameRoom extends Room<GameState> {
   }
 
   private handleRespawns(dt: number) {
-    this.state.players.forEach((player) => {
+    this.state.players.forEach((player: Player) => {
       if (!player.alive && player.respawnTime > 0) {
         player.respawnTime -= dt;
         
@@ -648,7 +648,7 @@ export class GameRoom extends Room<GameState> {
     
     // Kill limit
     if (this.state.mode === "ffa") {
-      const topKills = Math.max(...Array.from(this.state.players.values()).map(p => p.kills));
+      const topKills = Math.max(...Array.from(this.state.players.values()).map((p: Player) => p.kills));
       if (topKills >= this.state.killLimit) {
         this.endMatch();
         return;
@@ -673,7 +673,7 @@ export class GameRoom extends Room<GameState> {
     // Determine winner
     let winner = "";
     if (this.state.mode === "ffa") {
-      const sorted = Array.from(this.state.players.values()).sort((a, b) => b.kills - a.kills);
+      const sorted = Array.from(this.state.players.values()).sort((a: Player, b: Player) => b.kills - a.kills);
       winner = sorted[0]?.name || "No one";
     } else {
       winner = this.state.team1Score > this.state.team2Score ? "Red Team" : 
@@ -691,7 +691,7 @@ export class GameRoom extends Room<GameState> {
     // Return to lobby after delay
     setTimeout(() => {
       this.state.phase = "lobby";
-      this.state.players.forEach(p => {
+      this.state.players.forEach((p: Player) => {
         p.ready = false;
         p.kills = 0;
         p.deaths = 0;
