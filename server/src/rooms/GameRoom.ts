@@ -26,7 +26,9 @@ const COLLECTIBLE_SPAWN_RADIUS = 25;
 const COLLECTIBLE_COLLECT_RADIUS = 3;
 const COLLECTIBLE_RESPAWN_TIME = 15;
 
-export class GameRoom extends Room<GameState> {
+export class GameRoom extends Room {
+  // State is typed via setState()
+  declare state: GameState;
   maxClients = 8;
   private tickInterval: ReturnType<typeof setInterval> | null = null;
   private projectileIdCounter = 0;
@@ -91,8 +93,9 @@ export class GameRoom extends Room<GameState> {
     
     // Assign team in team mode
     if (this.state.mode === "team") {
-      const team1Count = Array.from(this.state.players.values()).filter((p: Player) => p.team === 1).length;
-      const team2Count = Array.from(this.state.players.values()).filter((p: Player) => p.team === 2).length;
+      const players = [...this.state.players.values()] as Player[];
+      const team1Count = players.filter(p => p.team === 1).length;
+      const team2Count = players.filter(p => p.team === 2).length;
       player.team = team1Count <= team2Count ? 1 : 2;
     }
     
@@ -236,7 +239,8 @@ export class GameRoom extends Room<GameState> {
     if (this.state.players.size < 1) return; // Allow 1 for testing, should be 2+
     
     // Check all players ready
-    const allReady = Array.from(this.state.players.values()).every((p: Player) => p.ready);
+    const players = [...this.state.players.values()] as Player[];
+    const allReady = players.every(p => p.ready);
     if (!allReady && this.state.players.size > 1) return;
     
     this.startCountdown();
@@ -648,7 +652,8 @@ export class GameRoom extends Room<GameState> {
     
     // Kill limit
     if (this.state.mode === "ffa") {
-      const topKills = Math.max(...Array.from(this.state.players.values()).map((p: Player) => p.kills));
+      const players = [...this.state.players.values()] as Player[];
+      const topKills = Math.max(...players.map(p => p.kills));
       if (topKills >= this.state.killLimit) {
         this.endMatch();
         return;
@@ -673,7 +678,8 @@ export class GameRoom extends Room<GameState> {
     // Determine winner
     let winner = "";
     if (this.state.mode === "ffa") {
-      const sorted = Array.from(this.state.players.values()).sort((a: Player, b: Player) => b.kills - a.kills);
+      const players = [...this.state.players.values()] as Player[];
+      const sorted = players.sort((a, b) => b.kills - a.kills);
       winner = sorted[0]?.name || "No one";
     } else {
       winner = this.state.team1Score > this.state.team2Score ? "Red Team" : 
