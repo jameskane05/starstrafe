@@ -101,6 +101,7 @@ class NetworkManager {
         mode: options.mode || "ffa",
         isPublic: true,
         name: options.playerName || "Player",
+        autoStart: options.autoStart || false,
       });
       
       this.sessionId = this.room.sessionId;

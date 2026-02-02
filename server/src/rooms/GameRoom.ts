@@ -131,6 +131,18 @@ export class GameRoom extends Room {
       console.log(`[GameRoom] ${player.name} joined mid-game and spawned`);
     } else {
       console.log(`[GameRoom] ${player.name} joined (${client.sessionId})`);
+      
+      // Auto-start if requested and this is the only player (just created room)
+      if (options.autoStart && this.state.players.size === 1 && this.state.phase === "lobby") {
+        player.ready = true;
+        console.log(`[GameRoom] Auto-starting for ${player.name}`);
+        // Delay slightly to let client set up
+        setTimeout(() => {
+          if (this.state.phase === "lobby" && this.state.players.size >= 1) {
+            this.startCountdown();
+          }
+        }, 500);
+      }
     }
   }
 

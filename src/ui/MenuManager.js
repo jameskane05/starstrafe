@@ -1431,7 +1431,18 @@ class MenuManager {
   async quickMatch() {
     this.showLoading("Finding match...");
     await NetworkManager.connect();
-    await NetworkManager.joinOrCreate({ playerName: this.playerName });
+    
+    // Check if there are existing public rooms to join
+    const rooms = await NetworkManager.getAvailableRooms();
+    const publicRooms = rooms.filter(r => r.metadata?.isPublic && r.clients < (r.metadata?.maxPlayers || 8));
+    
+    if (publicRooms.length > 0) {
+      // Join existing room - will go to lobby
+      await NetworkManager.joinRoom(publicRooms[0].roomId, { playerName: this.playerName });
+    } else {
+      // No rooms available - create and auto-start
+      await NetworkManager.joinOrCreate({ playerName: this.playerName, autoStart: true });
+    }
   }
 
   async refreshRoomList() {
