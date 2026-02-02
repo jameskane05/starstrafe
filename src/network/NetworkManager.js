@@ -260,6 +260,11 @@ class NetworkManager {
       state.projectiles.onAdd = (projectile, id) => {
         console.log("[Network] Projectile spawned:", id, projectile.type, "owner:", projectile.ownerId);
         this.emit("projectileSpawn", { projectile, id });
+        
+        // Listen for position/direction updates (for homing missiles)
+        projectile.onChange = () => {
+          this.emit("projectileUpdate", { projectile, id });
+        };
       };
 
       state.projectiles.onRemove = (projectile, id) => {

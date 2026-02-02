@@ -239,6 +239,10 @@ export class Game {
       this.removeNetworkProjectile(id);
     });
 
+    NetworkManager.on("projectileUpdate", ({ projectile, id }) => {
+      this.updateNetworkProjectile(id, projectile);
+    });
+
     NetworkManager.on("collectibleSpawn", ({ collectible, id }) => {
       this.spawnCollectible(id, collectible);
     });
@@ -516,6 +520,23 @@ export class Game {
         data.obj.dispose(this.scene);
       }
       this.networkProjectiles.delete(id);
+    }
+  }
+
+  updateNetworkProjectile(id, projectile) {
+    const data = this.networkProjectiles.get(id);
+    if (!data) return;
+    
+    // Update position and direction from server (for homing missiles)
+    if (data.type === "missile") {
+      data.obj.group.position.set(projectile.x, projectile.y, projectile.z);
+      data.obj.direction.set(projectile.dx, projectile.dy, projectile.dz).normalize();
+      // Update visual rotation to match direction
+      const forward = new THREE.Vector3(0, 0, 1);
+      data.obj.group.quaternion.setFromUnitVectors(forward, data.obj.direction);
+    } else {
+      data.obj.mesh.position.set(projectile.x, projectile.y, projectile.z);
+      data.obj.direction.set(projectile.dx, projectile.dy, projectile.dz).normalize();
     }
   }
 
@@ -1105,12 +1126,27 @@ export class Game {
         });
       }
 
-      // Update network projectiles - they can also home on remote players
+      // Update network projectiles
+      // Missiles are server-authoritative (position synced via projectileUpdate)
+      // Only update visuals like particle effects, not position/direction
       this.networkProjectiles.forEach((data) => {
         if (data.type === "projectile") {
           data.obj.update(delta);
         } else if (data.type === "missile") {
-          data.obj.update(delta, missileTargets);
+          // Only update particle effects, position comes from server
+          data.obj.lifetime -= delta;
+          if (data.obj.particles) {
+            data.obj.spawnTimer += delta;
+            while (data.obj.spawnTimer >= data.obj.spawnRate) {
+              data.obj.spawnTimer -= data.obj.spawnRate;
+              data.obj.particles.emitMissileExhaust(
+                data.obj.group.position,
+                data.obj.group.quaternion,
+                data.obj.direction
+              );
+            }
+          }
+          data.obj.trail.material.opacity = 0.6 + Math.random() * 0.25;
         }
       });
 
