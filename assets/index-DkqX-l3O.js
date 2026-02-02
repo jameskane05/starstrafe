@@ -15095,7 +15095,7 @@ Program Info Log: ` + k + `
         const gt = wi[Z];
         Se = gt.vertexShader, je = gt.fragmentShader;
       } else Se = I.vertexShader, je = I.fragmentShader, h.update(I), Je = h.getVertexShaderID(I), K = h.getFragmentShaderID(I);
-      const $ = s.getRenderTarget(), me = s.state.buffers.depth.getReversed(), ke = B.isInstancedMesh === true, Ce = B.isBatchedMesh === true, qe = !!I.map, bt = !!I.matcap, $e = !!N, ct = !!I.aoMap, lt = !!I.lightMap, Ve = !!I.bumpMap, wt = !!I.normalMap, P = !!I.displacementMap, dt = !!I.emissiveMap, ze = !!I.metalnessMap, It = !!I.roughnessMap, Be = I.anisotropy > 0, T = I.clearcoat > 0, C = I.dispersion > 0, U = I.iridescence > 0, ee = I.sheen > 0, ie = I.transmission > 0, X = Be && !!I.anisotropyMap, Me = T && !!I.clearcoatMap, ce = T && !!I.clearcoatNormalMap, Te = T && !!I.clearcoatRoughnessMap, He = U && !!I.iridescenceMap, ae = U && !!I.iridescenceThicknessMap, de = ee && !!I.sheenColorMap, we = ee && !!I.sheenRoughnessMap, Qe = !!I.specularMap, Ae = !!I.specularColorMap, et = !!I.specularIntensityMap, F = ie && !!I.transmissionMap, Ee = ie && !!I.thicknessMap, oe = !!I.gradientMap, ve = !!I.alphaMap, re = I.alphaTest > 0, ne = !!I.alphaHash, he = !!I.extensions;
+      const $ = s.getRenderTarget(), me = s.state.buffers.depth.getReversed(), ke = B.isInstancedMesh === true, Ce = B.isBatchedMesh === true, qe = !!I.map, bt = !!I.matcap, $e = !!N, ct = !!I.aoMap, lt = !!I.lightMap, Ve = !!I.bumpMap, wt = !!I.normalMap, P = !!I.displacementMap, dt = !!I.emissiveMap, ze = !!I.metalnessMap, It = !!I.roughnessMap, Be = I.anisotropy > 0, T = I.clearcoat > 0, C = I.dispersion > 0, U = I.iridescence > 0, ee = I.sheen > 0, ie = I.transmission > 0, X = Be && !!I.anisotropyMap, Me = T && !!I.clearcoatMap, ce = T && !!I.clearcoatNormalMap, Te = T && !!I.clearcoatRoughnessMap, He = U && !!I.iridescenceMap, ae = U && !!I.iridescenceThicknessMap, de = ee && !!I.sheenColorMap, we = ee && !!I.sheenRoughnessMap, Qe = !!I.specularMap, Ae = !!I.specularColorMap, et = !!I.specularIntensityMap, F = ie && !!I.transmissionMap, Ie = ie && !!I.thicknessMap, oe = !!I.gradientMap, ve = !!I.alphaMap, re = I.alphaTest > 0, ne = !!I.alphaHash, he = !!I.extensions;
       let Ye = Qi;
       I.toneMapped && ($ === null || $.isXRRenderTarget === true) && (Ye = s.toneMapping);
       const Rt = {
@@ -15150,7 +15150,7 @@ Program Info Log: ` + k + `
         specularIntensityMap: et,
         transmission: ie,
         transmissionMap: F,
-        thicknessMap: Ee,
+        thicknessMap: Ie,
         gradientMap: oe,
         opaque: I.transparent === false && I.blending === $r && I.alphaToCoverage === false,
         alphaMap: ve,
@@ -15178,7 +15178,7 @@ Program Info Log: ` + k + `
         specularColorMapUv: Ae && m(I.specularColorMap.channel),
         specularIntensityMapUv: et && m(I.specularIntensityMap.channel),
         transmissionMapUv: F && m(I.transmissionMap.channel),
-        thicknessMapUv: Ee && m(I.thicknessMap.channel),
+        thicknessMapUv: Ie && m(I.thicknessMap.channel),
         alphaMapUv: ve && m(I.alphaMap.channel),
         vertexTangents: !!k.attributes.tangent && (wt || Be),
         vertexColors: I.vertexColors,
@@ -15845,7 +15845,7 @@ void main() {
   function lS(s, e) {
     function t() {
       let F = false;
-      const Ee = new rt();
+      const Ie = new rt();
       let oe = null;
       const ve = new rt(0, 0, 0, 0);
       return {
@@ -15856,7 +15856,7 @@ void main() {
           F = re;
         },
         setClear: function(re, ne, he, Ye, Rt) {
-          Rt === true && (re *= Ye, ne *= Ye, he *= Ye), Ee.set(re, ne, he, Ye), ve.equals(Ee) === false && (s.clearColor(re, ne, he, Ye), ve.copy(Ee));
+          Rt === true && (re *= Ye, ne *= Ye, he *= Ye), Ie.set(re, ne, he, Ye), ve.equals(Ie) === false && (s.clearColor(re, ne, he, Ye), ve.copy(Ie));
         },
         reset: function() {
           F = false, oe = null, ve.set(-1, 0, 0, 0);
@@ -15864,18 +15864,18 @@ void main() {
       };
     }
     function n() {
-      let F = false, Ee = false, oe = null, ve = null, re = null;
+      let F = false, Ie = false, oe = null, ve = null, re = null;
       return {
         setReversed: function(ne) {
-          if (Ee !== ne) {
+          if (Ie !== ne) {
             const he = e.get("EXT_clip_control");
-            ne ? he.clipControlEXT(he.LOWER_LEFT_EXT, he.ZERO_TO_ONE_EXT) : he.clipControlEXT(he.LOWER_LEFT_EXT, he.NEGATIVE_ONE_TO_ONE_EXT), Ee = ne;
+            ne ? he.clipControlEXT(he.LOWER_LEFT_EXT, he.ZERO_TO_ONE_EXT) : he.clipControlEXT(he.LOWER_LEFT_EXT, he.NEGATIVE_ONE_TO_ONE_EXT), Ie = ne;
             const Ye = re;
             re = null, this.setClear(Ye);
           }
         },
         getReversed: function() {
-          return Ee;
+          return Ie;
         },
         setTest: function(ne) {
           ne ? $(s.DEPTH_TEST) : me(s.DEPTH_TEST);
@@ -15884,7 +15884,7 @@ void main() {
           oe !== ne && !F && (s.depthMask(ne), oe = ne);
         },
         setFunc: function(ne) {
-          if (Ee && (ne = oS[ne]), ve !== ne) {
+          if (Ie && (ne = oS[ne]), ve !== ne) {
             switch (ne) {
               case su:
                 s.depthFunc(s.NEVER);
@@ -15920,21 +15920,21 @@ void main() {
           F = ne;
         },
         setClear: function(ne) {
-          re !== ne && (Ee && (ne = 1 - ne), s.clearDepth(ne), re = ne);
+          re !== ne && (Ie && (ne = 1 - ne), s.clearDepth(ne), re = ne);
         },
         reset: function() {
-          F = false, oe = null, ve = null, re = null, Ee = false;
+          F = false, oe = null, ve = null, re = null, Ie = false;
         }
       };
     }
     function i() {
-      let F = false, Ee = null, oe = null, ve = null, re = null, ne = null, he = null, Ye = null, Rt = null;
+      let F = false, Ie = null, oe = null, ve = null, re = null, ne = null, he = null, Ye = null, Rt = null;
       return {
         setTest: function(gt) {
           F || (gt ? $(s.STENCIL_TEST) : me(s.STENCIL_TEST));
         },
         setMask: function(gt) {
-          Ee !== gt && !F && (s.stencilMask(gt), Ee = gt);
+          Ie !== gt && !F && (s.stencilMask(gt), Ie = gt);
         },
         setFunc: function(gt, Ii, Vi) {
           (oe !== gt || ve !== Ii || re !== Vi) && (s.stencilFunc(gt, Ii, Vi), oe = gt, ve = Ii, re = Vi);
@@ -15949,7 +15949,7 @@ void main() {
           Rt !== gt && (s.clearStencil(gt), Rt = gt);
         },
         reset: function() {
-          F = false, Ee = null, oe = null, ve = null, re = null, ne = null, he = null, Ye = null, Rt = null;
+          F = false, Ie = null, oe = null, ve = null, re = null, ne = null, he = null, Ye = null, Rt = null;
         }
       };
     }
@@ -15961,10 +15961,10 @@ void main() {
     V.indexOf("WebGL") !== -1 ? (N = parseFloat(/^WebGL (\d)/.exec(V)[1]), R = N >= 1) : V.indexOf("OpenGL ES") !== -1 && (N = parseFloat(/^OpenGL ES (\d)/.exec(V)[1]), R = N >= 2);
     let Z = null, j = {};
     const te = s.getParameter(s.SCISSOR_BOX), ue = s.getParameter(s.VIEWPORT), Se = new rt().fromArray(te), je = new rt().fromArray(ue);
-    function Je(F, Ee, oe, ve) {
+    function Je(F, Ie, oe, ve) {
       const re = new Uint8Array(4), ne = s.createTexture();
       s.bindTexture(F, ne), s.texParameteri(F, s.TEXTURE_MIN_FILTER, s.NEAREST), s.texParameteri(F, s.TEXTURE_MAG_FILTER, s.NEAREST);
-      for (let he = 0; he < oe; he++) F === s.TEXTURE_3D || F === s.TEXTURE_2D_ARRAY ? s.texImage3D(Ee, 0, s.RGBA, 1, 1, ve, 0, s.RGBA, s.UNSIGNED_BYTE, re) : s.texImage2D(Ee + he, 0, s.RGBA, 1, 1, 0, s.RGBA, s.UNSIGNED_BYTE, re);
+      for (let he = 0; he < oe; he++) F === s.TEXTURE_3D || F === s.TEXTURE_2D_ARRAY ? s.texImage3D(Ie, 0, s.RGBA, 1, 1, ve, 0, s.RGBA, s.UNSIGNED_BYTE, re) : s.texImage2D(Ie + he, 0, s.RGBA, 1, 1, 0, s.RGBA, s.UNSIGNED_BYTE, re);
       return ne;
     }
     const K = {};
@@ -15975,13 +15975,13 @@ void main() {
     function me(F) {
       A[F] !== false && (s.disable(F), A[F] = false);
     }
-    function ke(F, Ee) {
-      return l[F] !== Ee ? (s.bindFramebuffer(F, Ee), l[F] = Ee, F === s.DRAW_FRAMEBUFFER && (l[s.FRAMEBUFFER] = Ee), F === s.FRAMEBUFFER && (l[s.DRAW_FRAMEBUFFER] = Ee), true) : false;
+    function ke(F, Ie) {
+      return l[F] !== Ie ? (s.bindFramebuffer(F, Ie), l[F] = Ie, F === s.DRAW_FRAMEBUFFER && (l[s.FRAMEBUFFER] = Ie), F === s.FRAMEBUFFER && (l[s.DRAW_FRAMEBUFFER] = Ie), true) : false;
     }
-    function Ce(F, Ee) {
+    function Ce(F, Ie) {
       let oe = d, ve = false;
       if (F) {
-        oe = u.get(Ee), oe === void 0 && (oe = [], u.set(Ee, oe));
+        oe = u.get(Ie), oe === void 0 && (oe = [], u.set(Ie, oe));
         const re = F.textures;
         if (oe.length !== re.length || oe[0] !== s.COLOR_ATTACHMENT0) {
           for (let ne = 0, he = re.length; ne < he; ne++) oe[ne] = s.COLOR_ATTACHMENT0 + ne;
@@ -16016,7 +16016,7 @@ void main() {
       [ty]: s.CONSTANT_ALPHA,
       [ny]: s.ONE_MINUS_CONSTANT_ALPHA
     };
-    function ct(F, Ee, oe, ve, re, ne, he, Ye, Rt, gt) {
+    function ct(F, Ie, oe, ve, re, ne, he, Ye, Rt, gt) {
       if (F === as) {
         m === true && (me(s.BLEND), m = false);
         return;
@@ -16061,12 +16061,12 @@ void main() {
         }
         return;
       }
-      re = re || Ee, ne = ne || oe, he = he || ve, (Ee !== f || re !== E) && (s.blendEquationSeparate(bt[Ee], bt[re]), f = Ee, E = re), (oe !== y || ve !== x || ne !== v || he !== b) && (s.blendFuncSeparate($e[oe], $e[ve], $e[ne], $e[he]), y = oe, x = ve, v = ne, b = he), (Ye.equals(M) === false || Rt !== Q) && (s.blendColor(Ye.r, Ye.g, Ye.b, Rt), M.copy(Ye), Q = Rt), g = F, I = false;
+      re = re || Ie, ne = ne || oe, he = he || ve, (Ie !== f || re !== E) && (s.blendEquationSeparate(bt[Ie], bt[re]), f = Ie, E = re), (oe !== y || ve !== x || ne !== v || he !== b) && (s.blendFuncSeparate($e[oe], $e[ve], $e[ne], $e[he]), y = oe, x = ve, v = ne, b = he), (Ye.equals(M) === false || Rt !== Q) && (s.blendColor(Ye.r, Ye.g, Ye.b, Rt), M.copy(Ye), Q = Rt), g = F, I = false;
     }
-    function lt(F, Ee) {
+    function lt(F, Ie) {
       F.side === kn ? me(s.CULL_FACE) : $(s.CULL_FACE);
       let oe = F.side === Sn;
-      Ee && (oe = !oe), Ve(oe), F.blending === $r && F.transparent === false ? ct(as) : ct(F.blending, F.blendEquation, F.blendSrc, F.blendDst, F.blendEquationAlpha, F.blendSrcAlpha, F.blendDstAlpha, F.blendColor, F.blendAlpha, F.premultipliedAlpha), a.setFunc(F.depthFunc), a.setTest(F.depthTest), a.setMask(F.depthWrite), r.setMask(F.colorWrite);
+      Ie && (oe = !oe), Ve(oe), F.blending === $r && F.transparent === false ? ct(as) : ct(F.blending, F.blendEquation, F.blendSrc, F.blendDst, F.blendEquationAlpha, F.blendSrcAlpha, F.blendDstAlpha, F.blendColor, F.blendAlpha, F.premultipliedAlpha), a.setFunc(F.depthFunc), a.setTest(F.depthTest), a.setMask(F.depthWrite), r.setMask(F.colorWrite);
       const ve = F.stencilWrite;
       o.setTest(ve), ve && (o.setMask(F.stencilWriteMask), o.setFunc(F.stencilFunc, F.stencilRef, F.stencilFuncMask), o.setOp(F.stencilFail, F.stencilZFail, F.stencilZPass)), dt(F.polygonOffset, F.polygonOffsetFactor, F.polygonOffsetUnits), F.alphaToCoverage === true ? $(s.SAMPLE_ALPHA_TO_COVERAGE) : me(s.SAMPLE_ALPHA_TO_COVERAGE);
     }
@@ -16079,8 +16079,8 @@ void main() {
     function P(F) {
       F !== G && (R && s.lineWidth(F), G = F);
     }
-    function dt(F, Ee, oe) {
-      F ? ($(s.POLYGON_OFFSET_FILL), (B !== Ee || L !== oe) && (s.polygonOffset(Ee, oe), B = Ee, L = oe)) : me(s.POLYGON_OFFSET_FILL);
+    function dt(F, Ie, oe) {
+      F ? ($(s.POLYGON_OFFSET_FILL), (B !== Ie || L !== oe) && (s.polygonOffset(Ie, oe), B = Ie, L = oe)) : me(s.POLYGON_OFFSET_FILL);
     }
     function ze(F) {
       F ? $(s.SCISSOR_TEST) : me(s.SCISSOR_TEST);
@@ -16088,13 +16088,13 @@ void main() {
     function It(F) {
       F === void 0 && (F = s.TEXTURE0 + k - 1), Z !== F && (s.activeTexture(F), Z = F);
     }
-    function Be(F, Ee, oe) {
+    function Be(F, Ie, oe) {
       oe === void 0 && (Z === null ? oe = s.TEXTURE0 + k - 1 : oe = Z);
       let ve = j[oe];
       ve === void 0 && (ve = {
         type: void 0,
         texture: void 0
-      }, j[oe] = ve), (ve.type !== F || ve.texture !== Ee) && (Z !== oe && (s.activeTexture(oe), Z = oe), s.bindTexture(F, Ee || K[F]), ve.type = F, ve.texture = Ee);
+      }, j[oe] = ve), (ve.type !== F || ve.texture !== Ie) && (Z !== oe && (s.activeTexture(oe), Z = oe), s.bindTexture(F, Ie || K[F]), ve.type = F, ve.texture = Ie);
     }
     function T() {
       const F = j[Z];
@@ -16176,15 +16176,15 @@ void main() {
     function we(F) {
       je.equals(F) === false && (s.viewport(F.x, F.y, F.z, F.w), je.copy(F));
     }
-    function Qe(F, Ee) {
-      let oe = c.get(Ee);
-      oe === void 0 && (oe = /* @__PURE__ */ new WeakMap(), c.set(Ee, oe));
+    function Qe(F, Ie) {
+      let oe = c.get(Ie);
+      oe === void 0 && (oe = /* @__PURE__ */ new WeakMap(), c.set(Ie, oe));
       let ve = oe.get(F);
-      ve === void 0 && (ve = s.getUniformBlockIndex(Ee, F.name), oe.set(F, ve));
+      ve === void 0 && (ve = s.getUniformBlockIndex(Ie, F.name), oe.set(F, ve));
     }
-    function Ae(F, Ee) {
-      const ve = c.get(Ee).get(F);
-      h.get(Ee) !== ve && (s.uniformBlockBinding(Ee, ve, F.__bindingPointIndex), h.set(Ee, ve));
+    function Ae(F, Ie) {
+      const ve = c.get(Ie).get(F);
+      h.get(Ie) !== ve && (s.uniformBlockBinding(Ie, ve, F.__bindingPointIndex), h.set(Ie, ve));
     }
     function et() {
       s.disable(s.BLEND), s.disable(s.CULL_FACE), s.disable(s.DEPTH_TEST), s.disable(s.POLYGON_OFFSET_FILL), s.disable(s.SCISSOR_TEST), s.disable(s.STENCIL_TEST), s.disable(s.SAMPLE_ALPHA_TO_COVERAGE), s.blendEquation(s.FUNC_ADD), s.blendFunc(s.ONE, s.ZERO), s.blendFuncSeparate(s.ONE, s.ZERO, s.ONE, s.ZERO), s.blendColor(0, 0, 0, 0), s.colorMask(true, true, true, true), s.clearColor(0, 0, 0, 0), s.depthMask(true), s.depthFunc(s.LESS), a.setReversed(false), s.clearDepth(1), s.stencilMask(4294967295), s.stencilFunc(s.ALWAYS, 0, 4294967295), s.stencilOp(s.KEEP, s.KEEP, s.KEEP), s.clearStencil(0), s.cullFace(s.BACK), s.frontFace(s.CCW), s.polygonOffset(0, 0), s.activeTexture(s.TEXTURE0), s.bindFramebuffer(s.FRAMEBUFFER, null), s.bindFramebuffer(s.DRAW_FRAMEBUFFER, null), s.bindFramebuffer(s.READ_FRAMEBUFFER, null), s.useProgram(null), s.lineWidth(1), s.scissor(0, 0, s.canvas.width, s.canvas.height), s.viewport(0, 0, s.canvas.width, s.canvas.height), A = {}, Z = null, j = {}, l = {}, u = /* @__PURE__ */ new WeakMap(), d = [], p = null, m = false, g = null, f = null, y = null, x = null, E = null, v = null, b = null, M = new De(0, 0, 0), Q = 0, I = false, _ = null, D = null, G = null, B = null, L = null, Se.set(0, 0, s.canvas.width, s.canvas.height), je.set(0, 0, s.canvas.width, s.canvas.height), r.reset(), a.reset(), o.reset();
@@ -16435,8 +16435,8 @@ void main() {
         const ce = s.getParameter(s.UNPACK_ROW_LENGTH), Te = s.getParameter(s.UNPACK_SKIP_PIXELS), He = s.getParameter(s.UNPACK_SKIP_ROWS);
         s.pixelStorei(s.UNPACK_ROW_LENGTH, C.width);
         for (let ae = 0, de = X.length; ae < de; ae++) {
-          const we = X[ae], Qe = Math.floor(we.start / 4), Ae = Math.ceil(we.count / 4), et = Qe % C.width, F = Math.floor(Qe / C.width), Ee = Ae, oe = 1;
-          s.pixelStorei(s.UNPACK_SKIP_PIXELS, et), s.pixelStorei(s.UNPACK_SKIP_ROWS, F), t.texSubImage2D(s.TEXTURE_2D, 0, et, F, Ee, oe, U, ee, C.data);
+          const we = X[ae], Qe = Math.floor(we.start / 4), Ae = Math.ceil(we.count / 4), et = Qe % C.width, F = Math.floor(Qe / C.width), Ie = Ae, oe = 1;
+          s.pixelStorei(s.UNPACK_SKIP_PIXELS, et), s.pixelStorei(s.UNPACK_SKIP_ROWS, F), t.texSubImage2D(s.TEXTURE_2D, 0, et, F, Ie, oe, U, ee, C.data);
         }
         T.clearUpdateRanges(), s.pixelStorei(s.UNPACK_ROW_LENGTH, ce), s.pixelStorei(s.UNPACK_SKIP_PIXELS, Te), s.pixelStorei(s.UNPACK_SKIP_ROWS, He);
       }
@@ -16457,15 +16457,15 @@ void main() {
         let Qe = x(C.internalFormat, de, we, C.colorSpace, C.isVideoTexture);
         ue(ee, C);
         let Ae;
-        const et = C.mipmaps, F = C.isVideoTexture !== true, Ee = Me.__version === void 0 || ie === true, oe = X.dataReady, ve = v(C, ae);
-        if (C.isDepthTexture) Qe = E(C.format === tr, C.type), Ee && (F ? t.texStorage2D(s.TEXTURE_2D, 1, Qe, ae.width, ae.height) : t.texImage2D(s.TEXTURE_2D, 0, Qe, ae.width, ae.height, 0, de, we, null));
+        const et = C.mipmaps, F = C.isVideoTexture !== true, Ie = Me.__version === void 0 || ie === true, oe = X.dataReady, ve = v(C, ae);
+        if (C.isDepthTexture) Qe = E(C.format === tr, C.type), Ie && (F ? t.texStorage2D(s.TEXTURE_2D, 1, Qe, ae.width, ae.height) : t.texImage2D(s.TEXTURE_2D, 0, Qe, ae.width, ae.height, 0, de, we, null));
         else if (C.isDataTexture) if (et.length > 0) {
-          F && Ee && t.texStorage2D(s.TEXTURE_2D, ve, Qe, et[0].width, et[0].height);
+          F && Ie && t.texStorage2D(s.TEXTURE_2D, ve, Qe, et[0].width, et[0].height);
           for (let re = 0, ne = et.length; re < ne; re++) Ae = et[re], F ? oe && t.texSubImage2D(s.TEXTURE_2D, re, 0, 0, Ae.width, Ae.height, de, we, Ae.data) : t.texImage2D(s.TEXTURE_2D, re, Qe, Ae.width, Ae.height, 0, de, we, Ae.data);
           C.generateMipmaps = false;
-        } else F ? (Ee && t.texStorage2D(s.TEXTURE_2D, ve, Qe, ae.width, ae.height), oe && Je(C, ae, de, we)) : t.texImage2D(s.TEXTURE_2D, 0, Qe, ae.width, ae.height, 0, de, we, ae.data);
+        } else F ? (Ie && t.texStorage2D(s.TEXTURE_2D, ve, Qe, ae.width, ae.height), oe && Je(C, ae, de, we)) : t.texImage2D(s.TEXTURE_2D, 0, Qe, ae.width, ae.height, 0, de, we, ae.data);
         else if (C.isCompressedTexture) if (C.isCompressedArrayTexture) {
-          F && Ee && t.texStorage3D(s.TEXTURE_2D_ARRAY, ve, Qe, et[0].width, et[0].height, ae.depth);
+          F && Ie && t.texStorage3D(s.TEXTURE_2D_ARRAY, ve, Qe, et[0].width, et[0].height, ae.depth);
           for (let re = 0, ne = et.length; re < ne; re++) if (Ae = et[re], C.format !== dn) if (de !== null) if (F) {
             if (oe) if (C.layerUpdates.size > 0) {
               const he = vf(Ae.width, Ae.height, C.format, C.type);
@@ -16479,11 +16479,11 @@ void main() {
           else Ne("WebGLRenderer: Attempt to load unsupported compressed texture format in .uploadTexture()");
           else F ? oe && t.texSubImage3D(s.TEXTURE_2D_ARRAY, re, 0, 0, 0, Ae.width, Ae.height, ae.depth, de, we, Ae.data) : t.texImage3D(s.TEXTURE_2D_ARRAY, re, Qe, Ae.width, Ae.height, ae.depth, 0, de, we, Ae.data);
         } else {
-          F && Ee && t.texStorage2D(s.TEXTURE_2D, ve, Qe, et[0].width, et[0].height);
+          F && Ie && t.texStorage2D(s.TEXTURE_2D, ve, Qe, et[0].width, et[0].height);
           for (let re = 0, ne = et.length; re < ne; re++) Ae = et[re], C.format !== dn ? de !== null ? F ? oe && t.compressedTexSubImage2D(s.TEXTURE_2D, re, 0, 0, Ae.width, Ae.height, de, Ae.data) : t.compressedTexImage2D(s.TEXTURE_2D, re, Qe, Ae.width, Ae.height, 0, Ae.data) : Ne("WebGLRenderer: Attempt to load unsupported compressed texture format in .uploadTexture()") : F ? oe && t.texSubImage2D(s.TEXTURE_2D, re, 0, 0, Ae.width, Ae.height, de, we, Ae.data) : t.texImage2D(s.TEXTURE_2D, re, Qe, Ae.width, Ae.height, 0, de, we, Ae.data);
         }
         else if (C.isDataArrayTexture) if (F) {
-          if (Ee && t.texStorage3D(s.TEXTURE_2D_ARRAY, ve, Qe, ae.width, ae.height, ae.depth), oe) if (C.layerUpdates.size > 0) {
+          if (Ie && t.texStorage3D(s.TEXTURE_2D_ARRAY, ve, Qe, ae.width, ae.height, ae.depth), oe) if (C.layerUpdates.size > 0) {
             const re = vf(ae.width, ae.height, C.format, C.type);
             for (const ne of C.layerUpdates) {
               const he = ae.data.subarray(ne * re / ae.data.BYTES_PER_ELEMENT, (ne + 1) * re / ae.data.BYTES_PER_ELEMENT);
@@ -16492,22 +16492,22 @@ void main() {
             C.clearLayerUpdates();
           } else t.texSubImage3D(s.TEXTURE_2D_ARRAY, 0, 0, 0, 0, ae.width, ae.height, ae.depth, de, we, ae.data);
         } else t.texImage3D(s.TEXTURE_2D_ARRAY, 0, Qe, ae.width, ae.height, ae.depth, 0, de, we, ae.data);
-        else if (C.isData3DTexture) F ? (Ee && t.texStorage3D(s.TEXTURE_3D, ve, Qe, ae.width, ae.height, ae.depth), oe && t.texSubImage3D(s.TEXTURE_3D, 0, 0, 0, 0, ae.width, ae.height, ae.depth, de, we, ae.data)) : t.texImage3D(s.TEXTURE_3D, 0, Qe, ae.width, ae.height, ae.depth, 0, de, we, ae.data);
+        else if (C.isData3DTexture) F ? (Ie && t.texStorage3D(s.TEXTURE_3D, ve, Qe, ae.width, ae.height, ae.depth), oe && t.texSubImage3D(s.TEXTURE_3D, 0, 0, 0, 0, ae.width, ae.height, ae.depth, de, we, ae.data)) : t.texImage3D(s.TEXTURE_3D, 0, Qe, ae.width, ae.height, ae.depth, 0, de, we, ae.data);
         else if (C.isFramebufferTexture) {
-          if (Ee) if (F) t.texStorage2D(s.TEXTURE_2D, ve, Qe, ae.width, ae.height);
+          if (Ie) if (F) t.texStorage2D(s.TEXTURE_2D, ve, Qe, ae.width, ae.height);
           else {
             let re = ae.width, ne = ae.height;
             for (let he = 0; he < ve; he++) t.texImage2D(s.TEXTURE_2D, he, Qe, re, ne, 0, de, we, null), re >>= 1, ne >>= 1;
           }
         } else if (et.length > 0) {
-          if (F && Ee) {
+          if (F && Ie) {
             const re = Be(et[0]);
             t.texStorage2D(s.TEXTURE_2D, ve, Qe, re.width, re.height);
           }
           for (let re = 0, ne = et.length; re < ne; re++) Ae = et[re], F ? oe && t.texSubImage2D(s.TEXTURE_2D, re, 0, 0, de, we, Ae) : t.texImage2D(s.TEXTURE_2D, re, Qe, de, we, Ae);
           C.generateMipmaps = false;
         } else if (F) {
-          if (Ee) {
+          if (Ie) {
             const re = Be(ae);
             t.texStorage2D(s.TEXTURE_2D, ve, Qe, re.width, re.height);
           }
@@ -16528,12 +16528,12 @@ void main() {
         s.pixelStorei(s.UNPACK_FLIP_Y_WEBGL, C.flipY), s.pixelStorei(s.UNPACK_PREMULTIPLY_ALPHA_WEBGL, C.premultiplyAlpha), s.pixelStorei(s.UNPACK_ALIGNMENT, C.unpackAlignment), s.pixelStorei(s.UNPACK_COLORSPACE_CONVERSION_WEBGL, Te);
         const He = C.isCompressedTexture || C.image[0].isCompressedTexture, ae = C.image[0] && C.image[0].isDataTexture, de = [];
         for (let ne = 0; ne < 6; ne++) !He && !ae ? de[ne] = m(C.image[ne], true, i.maxCubemapSize) : de[ne] = ae ? C.image[ne].image : C.image[ne], de[ne] = It(C, de[ne]);
-        const we = de[0], Qe = r.convert(C.format, C.colorSpace), Ae = r.convert(C.type), et = x(C.internalFormat, Qe, Ae, C.colorSpace), F = C.isVideoTexture !== true, Ee = X.__version === void 0 || ee === true, oe = ie.dataReady;
+        const we = de[0], Qe = r.convert(C.format, C.colorSpace), Ae = r.convert(C.type), et = x(C.internalFormat, Qe, Ae, C.colorSpace), F = C.isVideoTexture !== true, Ie = X.__version === void 0 || ee === true, oe = ie.dataReady;
         let ve = v(C, we);
         ue(s.TEXTURE_CUBE_MAP, C);
         let re;
         if (He) {
-          F && Ee && t.texStorage2D(s.TEXTURE_CUBE_MAP, ve, et, we.width, we.height);
+          F && Ie && t.texStorage2D(s.TEXTURE_CUBE_MAP, ve, et, we.width, we.height);
           for (let ne = 0; ne < 6; ne++) {
             re = de[ne].mipmaps;
             for (let he = 0; he < re.length; he++) {
@@ -16542,7 +16542,7 @@ void main() {
             }
           }
         } else {
-          if (re = C.mipmaps, F && Ee) {
+          if (re = C.mipmaps, F && Ie) {
             re.length > 0 && ve++;
             const ne = Be(de[0]);
             t.texStorage2D(s.TEXTURE_CUBE_MAP, ve, et, ne.width, ne.height);
@@ -17885,9 +17885,9 @@ void main() {
       } catch (S) {
         throw Oe("WebGLRenderer: " + S.message), S;
       }
-      let ze, It, Be, T, C, U, ee, ie, X, Me, ce, Te, He, ae, de, we, Qe, Ae, et, F, Ee, oe, ve, re;
+      let ze, It, Be, T, C, U, ee, ie, X, Me, ce, Te, He, ae, de, we, Qe, Ae, et, F, Ie, oe, ve, re;
       function ne() {
-        ze = new xv(P), ze.init(), oe = new hS(P, ze), It = new hv(P, ze, e, oe), Be = new lS(P, ze), It.reversedDepthBuffer && u && Be.buffers.depth.setReversed(true), T = new Cv(P), C = new W_(), U = new cS(P, ze, Be, C, It, oe, T), ee = new Av(I), ie = new yv(I), X = new bE(P), ve = new lv(P, X), Me = new Ev(P, X, T, ve), ce = new _v(P, Me, X, T), et = new vv(P, It, U), we = new uv(C), Te = new Y_(I, ee, ie, ze, It, ve, we), He = new gS(I, C), ae = new X_(), de = new tS(ze), Ae = new ov(I, ee, ie, Be, ce, p, h), Qe = new aS(I, ce, It), re = new mS(P, T, It, Be), F = new cv(P, ze, T), Ee = new Iv(P, ze, T), T.programs = Te.programs, I.capabilities = It, I.extensions = ze, I.properties = C, I.renderLists = ae, I.shadowMap = Qe, I.state = Be, I.info = T;
+        ze = new xv(P), ze.init(), oe = new hS(P, ze), It = new hv(P, ze, e, oe), Be = new lS(P, ze), It.reversedDepthBuffer && u && Be.buffers.depth.setReversed(true), T = new Cv(P), C = new W_(), U = new cS(P, ze, Be, C, It, oe, T), ee = new Av(I), ie = new yv(I), X = new bE(P), ve = new lv(P, X), Me = new Ev(P, X, T, ve), ce = new _v(P, Me, X, T), et = new vv(P, It, U), we = new uv(C), Te = new Y_(I, ee, ie, ze, It, ve, we), He = new gS(I, C), ae = new X_(), de = new tS(ze), Ae = new ov(I, ee, ie, Be, ce, p, h), Qe = new aS(I, ce, It), re = new mS(P, T, It, Be), F = new cv(P, ze, T), Ie = new Iv(P, ze, T), T.programs = Te.programs, I.capabilities = It, I.extensions = ze, I.properties = C, I.renderLists = ae, I.shadowMap = Qe, I.state = Be, I.info = T;
       }
       ne(), m !== un && (Q = new bv(m, t.width, t.height, i, r));
       const he = new fS(I, P);
@@ -18018,7 +18018,7 @@ void main() {
         if (zt < 0 || zt === 1 / 0) return;
         ve.setup(q, W, ye, J, be);
         let Ht, Bt = F;
-        if (be !== null && (Ht = X.get(be), Bt = Ee, Bt.setIndex(Ht)), q.isMesh) W.wireframe === true ? (Be.setLineWidth(W.wireframeLinewidth * wt()), Bt.setMode(P.LINES)) : Bt.setMode(P.TRIANGLES);
+        if (be !== null && (Ht = X.get(be), Bt = Ie, Bt.setIndex(Ht)), q.isMesh) W.wireframe === true ? (Be.setLineWidth(W.wireframeLinewidth * wt()), Bt.setMode(P.LINES)) : Bt.setMode(P.TRIANGLES);
         else if (q.isLine) {
           let Fe = W.linewidth;
           Fe === void 0 && (Fe = 1), Be.setLineWidth(Fe * wt()), q.isLineSegments ? Bt.setMode(P.LINES) : q.isLineLoop ? Bt.setMode(P.LINE_LOOP) : Bt.setMode(P.LINE_STRIP);
@@ -35843,10 +35843,10 @@ void main() {
     }
   }
   const uc = 255, Gm = 213;
-  var xe;
+  var Ee;
   (function(s) {
     s[s.ADD = 128] = "ADD", s[s.REPLACE = 0] = "REPLACE", s[s.DELETE = 64] = "DELETE", s[s.DELETE_AND_MOVE = 96] = "DELETE_AND_MOVE", s[s.MOVE_AND_ADD = 160] = "MOVE_AND_ADD", s[s.DELETE_AND_ADD = 192] = "DELETE_AND_ADD", s[s.CLEAR = 10] = "CLEAR", s[s.REVERSE = 15] = "REVERSE", s[s.MOVE = 32] = "MOVE", s[s.DELETE_BY_REFID = 33] = "DELETE_BY_REFID", s[s.ADD_BY_REFID = 129] = "ADD_BY_REFID";
-  })(xe || (xe = {}));
+  })(Ee || (Ee = {}));
   Symbol.metadata ?? (Symbol.metadata = /* @__PURE__ */ Symbol.for("Symbol.metadata"));
   const At = "~refId", ta = "~track", Ni = "~encoder", ki = "~decoder", Ia = "~filter", ai = "~getByIndex", pr = "~deleteByIndex", se = "~changes", _t = "~childType", Aa = "~onEncodeEnd", dA = "~onDecodeEnd", Bs = "~descriptors", bi = "~__numFields", $s = "~__refTypeFieldIndexes", ts = "~__viewFieldIndexes", Vr = "$__fieldIndexesByViewTag";
   let vM;
@@ -36356,11 +36356,11 @@ Schema instances may only have up to 64 fields.`);
       var _a3, _b3;
       this.filteredChanges !== void 0 ? (this.filteredChanges.operations.push(-e), (_a3 = this.root) == null ? void 0 : _a3.enqueueChangeTree(this, "filteredChanges")) : (this.changes.operations.push(-e), (_b3 = this.root) == null ? void 0 : _b3.enqueueChangeTree(this, "changes"));
     }
-    change(e, t = xe.ADD) {
+    change(e, t = Ee.ADD) {
       var _a3, _b3, _c3;
       const n = this.isFiltered || ((_b3 = (_a3 = this.metadata) == null ? void 0 : _a3[e]) == null ? void 0 : _b3.tag) !== void 0, i = n ? this.filteredChanges : this.changes, r = this.indexedOperations[e];
-      if (!r || r === xe.DELETE) {
-        const a = r && r === xe.DELETE ? xe.DELETE_AND_ADD : t;
+      if (!r || r === Ee.DELETE) {
+        const a = r && r === Ee.DELETE ? Ee.DELETE_AND_ADD : t;
         this.indexedOperations[e] = a;
       }
       qn(i, e), n ? (qn(this.allFilteredChanges, e), this.root && (this.root.enqueueChangeTree(this, "filteredChanges"), this.root.enqueueChangeTree(this, "allFilteredChanges"))) : (qn(this.allChanges, e), (_c3 = this.root) == null ? void 0 : _c3.enqueueChangeTree(this, "changes"));
@@ -36407,7 +36407,7 @@ Schema instances may only have up to 64 fields.`);
         return;
       }
       const i = this.filteredChanges !== void 0 ? this.filteredChanges : this.changes;
-      this.indexedOperations[e] = t ?? xe.DELETE, qn(i, e), bp(this.allChanges, n);
+      this.indexedOperations[e] = t ?? Ee.DELETE, qn(i, e), bp(this.allChanges, n);
       const r = this.getValue(e);
       return r && r[se] && ((_a3 = this.root) == null ? void 0 : _a3.remove(r[se])), this.filteredChanges !== void 0 ? (bp(this.allFilteredChanges, n), (_b3 = this.root) == null ? void 0 : _b3.enqueueChangeTree(this, "filteredChanges")) : (_c3 = this.root) == null ? void 0 : _c3.enqueueChangeTree(this, "changes"), r;
     }
@@ -36494,16 +36494,16 @@ Schema instances may only have up to 64 fields.`);
   }
   function od(s, e, t, n, i, r) {
     var _a3;
-    typeof t == "string" ? (_a3 = qt[t]) == null ? void 0 : _a3.call(qt, e, n, r) : t[Symbol.metadata] !== void 0 ? (qt.number(e, n[At], r), (i & xe.ADD) === xe.ADD && s.tryEncodeTypeId(e, t, n.constructor, r)) : qt.number(e, n[At], r);
+    typeof t == "string" ? (_a3 = qt[t]) == null ? void 0 : _a3.call(qt, e, n, r) : t[Symbol.metadata] !== void 0 ? (qt.number(e, n[At], r), (i & Ee.ADD) === Ee.ADD && s.tryEncodeTypeId(e, t, n.constructor, r)) : qt.number(e, n[At], r);
   }
   const HM = function(s, e, t, n, i, r, a, o, h) {
-    if (e[r.offset++] = (n | i) & 255, i === xe.DELETE) return;
+    if (e[r.offset++] = (n | i) & 255, i === Ee.DELETE) return;
     const c = t.ref, A = h[n];
     od(s, e, h[n].type, c[A.name], i, r);
   }, ld = function(s, e, t, n, i, r) {
-    if (e[r.offset++] = i & 255, qt.number(e, n, r), i === xe.DELETE) return;
+    if (e[r.offset++] = i & 255, qt.number(e, n, r), i === Ee.DELETE) return;
     const a = t.ref;
-    if ((i & xe.ADD) === xe.ADD && typeof a.set == "function") {
+    if ((i & Ee.ADD) === Ee.ADD && typeof a.set == "function") {
       const c = t.ref.$indexes.get(n);
       qt.string(e, c, r);
     }
@@ -36515,24 +36515,24 @@ Schema instances may only have up to 64 fields.`);
     if (c) {
       const d = h.tmpItems[n];
       if (!d) return;
-      A = d[At], i === xe.DELETE ? i = xe.DELETE_BY_REFID : i === xe.ADD && (i = xe.ADD_BY_REFID);
+      A = d[At], i === Ee.DELETE ? i = Ee.DELETE_BY_REFID : i === Ee.ADD && (i = Ee.ADD_BY_REFID);
     } else A = n;
-    if (e[r.offset++] = i & 255, qt.number(e, A, r), i === xe.DELETE || i === xe.DELETE_BY_REFID) return;
+    if (e[r.offset++] = i & 255, qt.number(e, A, r), i === Ee.DELETE || i === Ee.DELETE_BY_REFID) return;
     const l = t.getType(n), u = t.getValue(n, a);
     od(s, e, l, u, i, r);
   }, r0 = -1;
   function cd(s, e, t, n, i, r, a, o) {
     const h = s.root, c = t[ai](n);
     let A;
-    if ((e & xe.DELETE) === xe.DELETE) {
+    if ((e & Ee.DELETE) === Ee.DELETE) {
       const l = c == null ? void 0 : c[At];
-      l !== void 0 && h.removeRef(l), e !== xe.DELETE_AND_ADD && t[pr](n), A = void 0;
+      l !== void 0 && h.removeRef(l), e !== Ee.DELETE_AND_ADD && t[pr](n), A = void 0;
     }
-    if (e !== xe.DELETE) if ($t.is(i)) {
+    if (e !== Ee.DELETE) if ($t.is(i)) {
       const l = Ft.number(r, a);
-      if (A = h.refs.get(l), (e & xe.ADD) === xe.ADD) {
+      if (A = h.refs.get(l), (e & Ee.ADD) === Ee.ADD) {
         const u = s.getInstanceType(r, a, i);
-        A || (A = s.createInstanceOfType(u)), h.addRef(l, A, A !== c || e === xe.DELETE_AND_ADD && A === c);
+        A || (A = s.createInstanceOfType(u)), h.addRef(l, A, A !== c || e === Ee.DELETE_AND_ADD && A === c);
       }
     } else if (typeof i == "string") A = Ft[i](r, a);
     else {
@@ -36547,7 +36547,7 @@ Schema instances may only have up to 64 fields.`);
             typeof y == "object" && (p = y[At], h.removeRef(p)), o.push({
               ref: c,
               refId: p,
-              op: xe.DELETE,
+              op: Ee.DELETE,
               field: f,
               value: void 0,
               previousValue: y
@@ -36555,7 +36555,7 @@ Schema instances may only have up to 64 fields.`);
           }
         }
       }
-      h.addRef(u, A, d !== c || e === xe.DELETE_AND_ADD && d === c);
+      h.addRef(u, A, d !== c || e === Ee.DELETE_AND_ADD && d === c);
     }
     return {
       value: A,
@@ -36580,13 +36580,13 @@ Schema instances may only have up to 64 fields.`);
     });
   }, hd = function(s, e, t, n, i) {
     const r = e[t.offset++];
-    if (r === xe.CLEAR) {
+    if (r === Ee.CLEAR) {
       s.removeChildRefs(n, i), n.clear();
       return;
     }
     const a = Ft.number(e, t), o = n[_t];
     let h;
-    (r & xe.ADD) === xe.ADD ? typeof n.set == "function" ? (h = Ft.string(e, t), n.setIndex(a, h)) : h = a : h = n.getIndex(a);
+    (r & Ee.ADD) === Ee.ADD ? typeof n.set == "function" ? (h = Ft.string(e, t), n.setIndex(a, h)) : h = a : h = n.getIndex(a);
     const { value: c, previousValue: A } = cd(s, r, n, a, o, e, t, i);
     if (c != null) {
       if (typeof n.set == "function") n.$items.set(h, c);
@@ -36607,25 +36607,25 @@ Schema instances may only have up to 64 fields.`);
     });
   }, YM = function(s, e, t, n, i) {
     let r = e[t.offset++], a;
-    if (r === xe.CLEAR) {
+    if (r === Ee.CLEAR) {
       s.removeChildRefs(n, i), n.clear();
       return;
-    } else if (r === xe.REVERSE) {
+    } else if (r === Ee.REVERSE) {
       n.reverse();
       return;
-    } else if (r === xe.DELETE_BY_REFID) {
+    } else if (r === Ee.DELETE_BY_REFID) {
       const l = Ft.number(e, t), u = s.root.refs.get(l);
       a = n.findIndex((d) => d === u), n[pr](a), i.push({
         ref: n,
         refId: s.currentRefId,
-        op: xe.DELETE,
+        op: Ee.DELETE,
         field: "",
         dynamicIndex: a,
         value: void 0,
         previousValue: u
       });
       return;
-    } else if (r === xe.ADD_BY_REFID) {
+    } else if (r === Ee.ADD_BY_REFID) {
       const l = Ft.number(e, t), u = s.root.refs.get(l);
       u && (a = n.findIndex((d) => d === u)), (a === -1 || a === void 0) && (a = n.length);
     } else a = Ft.number(e, t);
@@ -36710,7 +36710,7 @@ Schema instances may only have up to 64 fields.`);
               if (r[se]) {
                 Ac(r, n[_t], n, i);
                 const a = n.items[i];
-                n.isMovingItems ? (a !== void 0 ? r[se].isNew ? n[se].indexedOperation(Number(i), xe.MOVE_AND_ADD) : (n[se].getChange(Number(i)) & xe.DELETE) === xe.DELETE ? n[se].indexedOperation(Number(i), xe.DELETE_AND_MOVE) : n[se].indexedOperation(Number(i), xe.MOVE) : r[se].isNew && n[se].indexedOperation(Number(i), xe.ADD), r[se].setParent(this, n[se].root, i)) : n.$changeAt(Number(i), r), a !== void 0 && ((_a3 = a[se].root) == null ? void 0 : _a3.remove(a[se]));
+                n.isMovingItems ? (a !== void 0 ? r[se].isNew ? n[se].indexedOperation(Number(i), Ee.MOVE_AND_ADD) : (n[se].getChange(Number(i)) & Ee.DELETE) === Ee.DELETE ? n[se].indexedOperation(Number(i), Ee.DELETE_AND_MOVE) : n[se].indexedOperation(Number(i), Ee.MOVE) : r[se].isNew && n[se].indexedOperation(Number(i), Ee.ADD), r[se].setParent(this, n[se].root, i)) : n.$changeAt(Number(i), r), a !== void 0 && ((_a3 = a[se].root) == null ? void 0 : _a3.remove(a[se]));
               } else n.$changeAt(Number(i), r);
               n.items[i] = r, n.tmpItems[i] = r;
             }
@@ -36749,7 +36749,7 @@ Schema instances may only have up to 64 fields.`);
       for (let i = 0, r = e.length; i < r; i++, t++) {
         const a = e[i];
         if (a == null) return;
-        typeof a == "object" && this[_t] && Ac(a, this[_t], this, i), n.indexedOperation(t, xe.ADD, this.items.length), this.items.push(a), this.tmpItems.push(a), (_a3 = a[se]) == null ? void 0 : _a3.setParent(this, n.root, t);
+        typeof a == "object" && this[_t] && Ac(a, this[_t], this, i), n.indexedOperation(t, Ee.ADD, this.items.length), this.items.push(a), this.tmpItems.push(a), (_a3 = a[se]) == null ? void 0 : _a3.setParent(this, n.root, t);
       }
       return t;
     }
@@ -36771,14 +36771,14 @@ Schema instances may only have up to 64 fields.`);
         return;
       }
       if (this.items[e] === t) return;
-      const n = this.items[e] !== void 0 ? typeof t == "object" ? xe.DELETE_AND_ADD : xe.REPLACE : xe.ADD, i = this[se];
+      const n = this.items[e] !== void 0 ? typeof t == "object" ? Ee.DELETE_AND_ADD : Ee.REPLACE : Ee.ADD, i = this[se];
       i.change(e, n), (_a3 = t[se]) == null ? void 0 : _a3.setParent(this, i.root, e);
     }
     $deleteAt(e, t) {
       this[se].delete(e, t);
     }
     $setAt(e, t, n) {
-      e === 0 && n === xe.ADD && this.items[e] !== void 0 ? this.items.unshift(t) : n === xe.DELETE_AND_MOVE ? (this.items.splice(e, 1), this.items[e] = t) : this.items[e] = t;
+      e === 0 && n === Ee.ADD && this.items[e] !== void 0 ? this.items.unshift(t) : n === Ee.DELETE_AND_MOVE ? (this.items.splice(e, 1), this.items[e] = t) : this.items[e] = t;
     }
     clear() {
       if (this.items.length === 0) return;
@@ -36786,7 +36786,7 @@ Schema instances may only have up to 64 fields.`);
       e.forEachChild((t, n) => {
         var _a3;
         (_a3 = e.root) == null ? void 0 : _a3.remove(t);
-      }), e.discard(true), e.operation(xe.CLEAR), this.items.length = 0, this.tmpItems.length = 0;
+      }), e.discard(true), e.operation(Ee.CLEAR), this.items.length = 0, this.tmpItems.length = 0;
     }
     concat(...e) {
       return new _Nn(...this.items.concat(...e));
@@ -36795,12 +36795,12 @@ Schema instances may only have up to 64 fields.`);
       return this.items.join(e);
     }
     reverse() {
-      return this[se].operation(xe.REVERSE), this.items.reverse(), this.tmpItems.reverse(), this;
+      return this[se].operation(Ee.REVERSE), this.items.reverse(), this.tmpItems.reverse(), this;
     }
     shift() {
       if (this.items.length === 0) return;
       const e = this[se], t = this.tmpItems.findIndex((i) => i === this.items[0]), n = this.items.findIndex((i) => i === this.items[0]);
-      return e.delete(t, xe.DELETE, n), e.shiftAllChangeIndexes(-1, n), this.deletedIndexes[t] = true, this.items.shift();
+      return e.delete(t, Ee.DELETE, n), e.shiftAllChangeIndexes(-1, n), this.deletedIndexes[t] = true, this.items.shift();
     }
     slice(e, t) {
       const n = new _Nn();
@@ -36809,7 +36809,7 @@ Schema instances may only have up to 64 fields.`);
     sort(e = JM) {
       this.isMovingItems = true;
       const t = this[se];
-      return this.items.sort(e).forEach((i, r) => t.change(r, xe.REPLACE)), this.tmpItems.sort(e), this.isMovingItems = false, this;
+      return this.items.sort(e).forEach((i, r) => t.change(r, Ee.REPLACE)), this.tmpItems.sort(e), this.isMovingItems = false, this;
     }
     splice(e, t, ...n) {
       var _a3, _b3, _c3;
@@ -36819,14 +36819,14 @@ Schema instances may only have up to 64 fields.`);
         t === void 0 && (t = r - e);
         for (let c = e; c < e + t; c++) {
           const A = h[c];
-          i.delete(A, xe.DELETE), this.deletedIndexes[A] = true;
+          i.delete(A, Ee.DELETE), this.deletedIndexes[A] = true;
         }
       } else t = 0;
       if (o > 0) {
         if (o > t) throw console.error("Inserting more elements than deleting during ArraySchema#splice()"), new Error("ArraySchema#splice(): insertCount must be equal or lower than deleteCount.");
         for (let c = 0; c < o; c++) {
           const A = (h[e] ?? r) + c;
-          i.indexedOperation(A, this.deletedIndexes[A] ? xe.DELETE_AND_ADD : xe.ADD), (_a3 = n[c][se]) == null ? void 0 : _a3.setParent(this, i.root, A);
+          i.indexedOperation(A, this.deletedIndexes[A] ? Ee.DELETE_AND_ADD : Ee.ADD), (_a3 = n[c][se]) == null ? void 0 : _a3.setParent(this, i.root, A);
         }
       }
       return t > o && i.shiftAllChangeIndexes(-(t - o), h[e + o]), i.filteredChanges !== void 0 ? (_b3 = i.root) == null ? void 0 : _b3.enqueueChangeTree(i, "filteredChanges") : (_c3 = i.root) == null ? void 0 : _c3.enqueueChangeTree(i, "changes"), this.items.splice(e, t, ...n);
@@ -36834,7 +36834,7 @@ Schema instances may only have up to 64 fields.`);
     unshift(...e) {
       const t = this[se];
       return t.shiftChangeIndexes(e.length), t.isFiltered ? qn(t.filteredChanges, this.items.length) : qn(t.allChanges, this.items.length), e.forEach((n, i) => {
-        t.change(i, xe.ADD);
+        t.change(i, Ee.ADD);
       }), this.tmpItems.unshift(...e), this.items.unshift(...e);
     }
     indexOf(e, t) {
@@ -37014,11 +37014,11 @@ Schema instances may only have up to 64 fields.`);
       const n = this[se], i = t[se] !== void 0;
       let r, a;
       if (typeof n.indexes[e] < "u") {
-        r = n.indexes[e], a = xe.REPLACE;
+        r = n.indexes[e], a = Ee.REPLACE;
         const o = this.$items.get(e);
         if (o === t) return;
-        i && (a = xe.DELETE_AND_ADD, o !== void 0 && ((_a3 = o[se].root) == null ? void 0 : _a3.remove(o[se]))), this.deletedItems[r] && delete this.deletedItems[r];
-      } else r = n.indexes[bi] ?? 0, a = xe.ADD, this.$indexes.set(r, e), n.indexes[e] = r, n.indexes[bi] = r + 1;
+        i && (a = Ee.DELETE_AND_ADD, o !== void 0 && ((_a3 = o[se].root) == null ? void 0 : _a3.remove(o[se]))), this.deletedItems[r] && delete this.deletedItems[r];
+      } else r = n.indexes[bi] ?? 0, a = Ee.ADD, this.$indexes.set(r, e), n.indexes[e] = r, n.indexes[bi] = r + 1;
       return this.$items.set(e, t), n.change(r, a), i && t[se].setParent(this, n.root, r), this;
     }
     get(e) {
@@ -37034,7 +37034,7 @@ Schema instances may only have up to 64 fields.`);
       e.discard(true), e.indexes = {}, e.forEachChild((t, n) => {
         var _a3;
         (_a3 = e.root) == null ? void 0 : _a3.remove(t);
-      }), this.$indexes.clear(), this.$items.clear(), e.operation(xe.CLEAR);
+      }), this.$indexes.clear(), this.$items.clear(), e.operation(Ee.CLEAR);
     }
     has(e) {
       return this.$items.has(e);
@@ -37141,7 +37141,7 @@ Schema instances may only have up to 64 fields.`);
       e.discard(true), e.indexes = {}, e.forEachChild((t, n) => {
         var _a3;
         (_a3 = e.root) == null ? void 0 : _a3.remove(t);
-      }), this.$indexes.clear(), this.$items.clear(), e.operation(xe.CLEAR);
+      }), this.$indexes.clear(), this.$items.clear(), e.operation(Ee.CLEAR);
     }
     has(e) {
       return Array.from(this.$items.values()).some((t) => t === e);
@@ -37223,7 +37223,7 @@ Schema instances may only have up to 64 fields.`);
       if (this.has(e)) return false;
       const t = this.$refId++;
       e[se] !== void 0 && e[se].setParent(this, this[se].root, t);
-      const n = ((_a3 = this[se].indexes[t]) == null ? void 0 : _a3.op) ?? xe.ADD;
+      const n = ((_a3 = this[se].indexes[t]) == null ? void 0 : _a3.op) ?? Ee.ADD;
       return this[se].indexes[t] = t, this.$indexes.set(t, t), this.$items.set(t, e), this[se].change(t, n), t;
     }
     entries() {
@@ -37240,7 +37240,7 @@ Schema instances may only have up to 64 fields.`);
     }
     clear() {
       const e = this[se];
-      e.discard(true), e.indexes = {}, this.$indexes.clear(), this.$items.clear(), e.operation(xe.CLEAR);
+      e.discard(true), e.indexes = {}, this.$indexes.clear(), this.$items.clear(), e.operation(Ee.CLEAR);
     }
     has(e) {
       const t = this.$items.values();
@@ -37321,7 +37321,7 @@ Schema instances may only have up to 64 fields.`);
           if (i != null) {
             n ? (n.constructor === Nn && !(i instanceof Nn) && (i = new Nn(...i)), n.constructor === pi && !(i instanceof pi) && (i = new pi(i)), i[_t] = t) : typeof t != "string" ? Ac(i, t, this, s.substring(1)) : WM(i, t, this, s.substring(1));
             const a = this[se];
-            r !== void 0 && r[se] ? ((_a3 = a.root) == null ? void 0 : _a3.remove(r[se]), this.constructor[ta](a, e, xe.DELETE_AND_ADD)) : this.constructor[ta](a, e, xe.ADD), (_b3 = i[se]) == null ? void 0 : _b3.setParent(this, a.root, e);
+            r !== void 0 && r[se] ? ((_a3 = a.root) == null ? void 0 : _a3.remove(r[se]), this.constructor[ta](a, e, Ee.DELETE_AND_ADD)) : this.constructor[ta](a, e, Ee.ADD), (_b3 = i[se]) == null ? void 0 : _b3.setParent(this, a.root, e);
           } else r !== void 0 && this[se].delete(e);
           this[s] = i;
         }
@@ -37380,7 +37380,7 @@ Schema instances may only have up to 64 fields.`);
     static isSchema(e) {
       return typeof (e == null ? void 0 : e.assign) == "function";
     }
-    static [(_y2 = Symbol.metadata, _x2 = Ni, _w2 = ki, _v2 = At, ta)](e, t, n = xe.ADD) {
+    static [(_y2 = Symbol.metadata, _x2 = Ni, _w2 = ki, _v2 = At, ta)](e, t, n = Ee.ADD) {
       e.change(t, n);
     }
     static [Ia](e, t, n) {
@@ -37487,7 +37487,7 @@ Schema instances may only have up to 64 fields.`);
       function o(h) {
         h.operations.filter((c) => c).forEach((c) => {
           const A = n.indexedOperations[c];
-          a += `- [${c}]: ${xe[A]} (${JSON.stringify(n.getValue(Number(c), t))})
+          a += `- [${c}]: ${Ee[A]} (${JSON.stringify(n.getValue(Number(c), t))})
 `;
         });
       }
@@ -37531,7 +37531,7 @@ Schema instances may only have up to 64 fields.`);
 `;
         for (const g in u) {
           const f = u[g];
-          n += `${Ql(d + 1)}${xe[f]}: ${g}
+          n += `${Ql(d + 1)}${Ee[f]}: ${g}
 `;
         }
       }
@@ -37566,7 +37566,7 @@ Schema instances may only have up to 64 fields.`);
       if (r === 0) {
         const a = e.allChanges.operations;
         let o = a.length;
-        for (; o--; ) e.indexedOperations[a[o]] = xe.ADD, qn(e.changes, o);
+        for (; o--; ) e.indexedOperations[a[o]] = Ee.ADD, qn(e.changes, o);
       }
       return this.refCount[n] = (r || 0) + 1, i;
     }
@@ -37661,7 +37661,7 @@ Schema instances may only have up to 64 fields.`);
             n[e.offset++] = Math.abs(x) & 255;
             continue;
           }
-          const E = r ? xe.ADD : A.indexedOperations[x];
+          const E = r ? Ee.ADD : A.indexedOperations[x];
           x === void 0 || E === void 0 || g && !g(u, x, t) || m(this, n, A, x, E, e, r, o, f);
         }
       }
@@ -37700,7 +37700,7 @@ Schema instances may only have up to 64 fields.`);
         const A = h.ref, l = A.constructor, u = l[Ni], d = l[Symbol.metadata];
         i[n.offset++] = uc & 255, qt.number(i, A[At], n);
         for (let p = 0, m = c.length; p < m; p++) {
-          const g = Number(c[p]), y = h.ref[ai](g) !== void 0 && o[g] || xe.DELETE;
+          const g = Number(c[p]), y = h.ref[ai](g) !== void 0 && o[g] || Ee.DELETE;
           u(this, i, h, g, y, n, false, true, d);
         }
       }
@@ -37797,7 +37797,7 @@ Schema instances may only have up to 64 fields.`);
     }
     addCallback(e, t, n) {
       if (e === void 0) {
-        const i = typeof t == "number" ? xe[t] : t;
+        const i = typeof t == "number" ? Ee[t] : t;
         throw new Error(`Can't addCallback on '${i}' (refId is undefined)`);
       }
       return this.callbacks[e] || (this.callbacks[e] = {}), this.callbacks[e][t] || (this.callbacks[e][t] = []), this.callbacks[e][t].push(n), () => this.removeCallback(e, t, n);
@@ -37867,7 +37867,7 @@ Schema instances may only have up to 64 fields.`);
         t.push({
           ref: e,
           refId: i,
-          op: xe.DELETE,
+          op: Ee.DELETE,
           field: a,
           value: void 0,
           previousValue: r
@@ -40107,7 +40107,12 @@ The format should be roomId:reconnectionToken`);
         console.log("[Network] Projectile spawned:", n, t.type, "owner:", t.ownerId), this.emit("projectileSpawn", {
           projectile: t,
           id: n
-        });
+        }), t.onChange = () => {
+          this.emit("projectileUpdate", {
+            projectile: t,
+            id: n
+          });
+        };
       }, e.projectiles.onRemove = (t, n) => {
         console.log("[Network] Projectile removed:", n), this.emit("projectileRemove", {
           projectile: t,
@@ -40227,7 +40232,7 @@ The format should be roomId:reconnectionToken`);
       this.eventListeners[e] && this.eventListeners[e].forEach((n) => n(t));
     }
   }
-  const Ie = new O2(), Yp = "starstrafe_audio_settings", Nl = {
+  const xe = new O2(), Yp = "starstrafe_audio_settings", Nl = {
     musicVolume: 0.7,
     sfxVolume: 1,
     masterVolume: 1
@@ -40516,7 +40521,7 @@ The format should be roomId:reconnectionToken`);
           this.showScreen(We.MAIN_MENU);
           break;
         case We.LOBBY:
-          Ie.leaveRoom();
+          xe.leaveRoom();
           break;
       }
     }
@@ -40531,15 +40536,15 @@ The format should be roomId:reconnectionToken`);
       this.playerName = e, localStorage.setItem("starstrafe_callsign", e);
     }
     setupNetworkListeners() {
-      Ie.on("roomJoined", () => {
+      xe.on("roomJoined", () => {
         this.showScreen(We.LOBBY);
-      }), Ie.on("stateChange", (e) => {
+      }), xe.on("stateChange", (e) => {
         e.phase === "playing" && this.currentScreen !== We.PLAYING ? (this.showScreen(We.PLAYING), this.emit("gameStart")) : e.phase === "results" && this.currentScreen !== We.RESULTS ? this.showScreen(We.RESULTS) : e.phase === "lobby" && this.currentScreen === We.RESULTS ? this.showScreen(We.LOBBY) : (e.phase === "countdown" || e.phase === "lobby") && this.renderLobby();
-      }), Ie.on("roomLeft", () => {
+      }), xe.on("roomLeft", () => {
         this.showScreen(We.MAIN_MENU), this.chatMessages = [];
-      }), Ie.on("chat", (e) => {
+      }), xe.on("chat", (e) => {
         this.addChatMessage(e);
-      }), Ie.on("error", (e) => {
+      }), xe.on("error", (e) => {
         var _a3;
         console.error("[Menu] Network error:", e);
         let t = "Connection error";
@@ -40726,7 +40731,7 @@ The format should be roomId:reconnectionToken`);
           c.textContent = "", c.className = "code-status", o = true, A.disabled = false;
           return;
         }
-        c.textContent = "checking...", c.className = "code-status checking", await Ie.connect(), await Ie.checkRoomExists(u) ? (c.textContent = "\u2717 taken", c.className = "code-status invalid", o = false, A.disabled = true) : (c.textContent = "\u2713 available", c.className = "code-status valid", o = true, A.disabled = false);
+        c.textContent = "checking...", c.className = "code-status checking", await xe.connect(), await xe.checkRoomExists(u) ? (c.textContent = "\u2717 taken", c.className = "code-status invalid", o = false, A.disabled = true) : (c.textContent = "\u2713 available", c.className = "code-status valid", o = true, A.disabled = false);
       };
       h.addEventListener("input", () => {
         clearTimeout(a), a = setTimeout(l, 500);
@@ -40780,7 +40785,7 @@ The format should be roomId:reconnectionToken`);
         senderName: e.senderName,
         text: e.text,
         timestamp: e.timestamp,
-        isLocal: e.senderId === Ie.sessionId
+        isLocal: e.senderId === xe.sessionId
       }), this.chatMessages.length > this.maxChatMessages && this.chatMessages.shift(), this.updateChatDisplay());
     }
     updateChatDisplay() {
@@ -40800,7 +40805,7 @@ The format should be roomId:reconnectionToken`);
       const e = document.getElementById("chat-input");
       if (!e) return;
       const t = e.value.trim();
-      t && (Ie.sendChat(t), e.value = "");
+      t && (xe.sendChat(t), e.value = "");
     }
     toggleMute(e) {
       this.mutedPlayers.has(e) ? this.mutedPlayers.delete(e) : this.mutedPlayers.add(e), localStorage.setItem("starstrafe_muted", JSON.stringify([
@@ -40809,9 +40814,9 @@ The format should be roomId:reconnectionToken`);
     }
     renderLobby() {
       var _a3, _b3, _c3, _d2, _e4, _f3, _g3;
-      const e = Ie.getState();
+      const e = xe.getState();
       if (!e) return;
-      const t = Ie.isHost(), n = Ie.getLocalPlayer(), i = Ie.getPlayers(), r = e.phase === "countdown", a = i.every(([, A]) => A.ready), o = t && i.length >= 1 && (a || i.length === 1);
+      const t = xe.isHost(), n = xe.getLocalPlayer(), i = xe.getPlayers(), r = e.phase === "countdown", a = i.every(([, A]) => A.ready), o = t && i.length >= 1 && (a || i.length === 1);
       this.container.innerHTML = `
       <div class="menu-screen lobby">
         <div class="menu-header">
@@ -40820,11 +40825,11 @@ The format should be roomId:reconnectionToken`);
           <div class="room-info">
             <span class="mode-badge ${e.mode}">${e.mode === "ffa" ? "FFA" : "TEAM"}</span>
             <div class="room-code-wrapper">
-              <span class="room-code" id="room-code-btn">CODE: ${((_b3 = (_a3 = Ie.room) == null ? void 0 : _a3.roomId) == null ? void 0 : _b3.toUpperCase()) || "..."}</span>
+              <span class="room-code" id="room-code-btn">CODE: ${((_b3 = (_a3 = xe.room) == null ? void 0 : _a3.roomId) == null ? void 0 : _b3.toUpperCase()) || "..."}</span>
               <div class="share-tooltip" id="share-tooltip">
                 <label>SHARE LINK</label>
                 <div class="share-input-group">
-                  <input type="text" id="share-url" readonly value="${window.location.origin}?join=${((_c3 = Ie.room) == null ? void 0 : _c3.roomId) || ""}" />
+                  <input type="text" id="share-url" readonly value="${window.location.origin}?join=${((_c3 = xe.room) == null ? void 0 : _c3.roomId) || ""}" />
                   <button class="copy-btn" id="btn-copy">\u{1F4CB}</button>
                 </div>
               </div>
@@ -40844,13 +40849,13 @@ The format should be roomId:reconnectionToken`);
             <h3>PILOTS (${i.length}/8)</h3>
             <div class="player-list">
               ${i.map(([A, l]) => `
-                <div class="player-card ${l.ready ? "ready" : ""} ${A === Ie.sessionId ? "local" : ""} ${e.mode === "team" ? `team-${l.team}` : ""}">
+                <div class="player-card ${l.ready ? "ready" : ""} ${A === xe.sessionId ? "local" : ""} ${e.mode === "team" ? `team-${l.team}` : ""}">
                   <div class="player-info">
                     <span class="player-name">${l.name}${e.hostId === A ? " \u2605" : ""}</span>
                     <span class="player-class">${l.shipClass.toUpperCase()}</span>
                   </div>
                   <div class="player-actions">
-                    ${A !== Ie.sessionId ? `
+                    ${A !== xe.sessionId ? `
                       <button class="mute-btn ${this.mutedPlayers.has(A) ? "muted" : ""}" data-session="${A}" title="${this.mutedPlayers.has(A) ? "Unmute" : "Mute"}">
                         ${this.mutedPlayers.has(A) ? "\u{1F507}" : "\u{1F50A}"}
                       </button>
@@ -40912,7 +40917,7 @@ The format should be roomId:reconnectionToken`);
         </div>
       </div>
     `, document.getElementById("btn-leave").addEventListener("click", () => {
-        Ie.leaveRoom();
+        xe.leaveRoom();
       });
       const h = document.getElementById("share-tooltip");
       document.getElementById("room-code-btn").addEventListener("click", (A) => {
@@ -40927,12 +40932,12 @@ The format should be roomId:reconnectionToken`);
         once: true
       }), document.querySelectorAll(".class-btn").forEach((A) => {
         A.addEventListener("click", () => {
-          Ie.selectClass(A.dataset.class);
+          xe.selectClass(A.dataset.class);
         });
       }), (_d2 = document.getElementById("chk-ready")) == null ? void 0 : _d2.addEventListener("change", () => {
-        Ie.toggleReady();
+        xe.toggleReady();
       }), (_e4 = document.getElementById("btn-start")) == null ? void 0 : _e4.addEventListener("click", () => {
-        Ie.startGame();
+        xe.startGame();
       }), (_f3 = document.getElementById("btn-send-chat")) == null ? void 0 : _f3.addEventListener("click", () => {
         this.sendChatMessage();
       }), (_g3 = document.getElementById("chat-input")) == null ? void 0 : _g3.addEventListener("keydown", (A) => {
@@ -40968,9 +40973,9 @@ The format should be roomId:reconnectionToken`);
       this.container.innerHTML = "", this.container.classList.add("hidden");
     }
     renderResults() {
-      const e = Ie.getState();
+      const e = xe.getState();
       if (!e) return;
-      const t = Ie.getPlayers().sort((n, i) => i[1].kills - n[1].kills);
+      const t = xe.getPlayers().sort((n, i) => i[1].kills - n[1].kills);
       this.container.classList.remove("hidden"), this.container.innerHTML = `
       <div class="menu-screen results">
         <div class="results-header">
@@ -40991,7 +40996,7 @@ The format should be roomId:reconnectionToken`);
             <span>K/D</span>
           </div>
           ${t.map(([n, i], r) => `
-            <div class="scoreboard-row ${n === Ie.sessionId ? "local" : ""} ${e.mode === "team" ? `team-${i.team}` : ""}">
+            <div class="scoreboard-row ${n === xe.sessionId ? "local" : ""} ${e.mode === "team" ? `team-${i.team}` : ""}">
               <span class="rank">#${r + 1}</span>
               <span class="name">${i.name}</span>
               <span class="kills">${i.kills}</span>
@@ -41297,7 +41302,7 @@ The format should be roomId:reconnectionToken`);
       this.container.classList.add("hidden");
     }
     async createGame(e, t, n, i, r = 8, a = "hangar", o = null) {
-      this.showLoading("Creating arena..."), await Ie.connect(), await Ie.createRoom({
+      this.showLoading("Creating arena..."), await xe.connect(), await xe.createRoom({
         roomName: e,
         mode: t,
         isPublic: n,
@@ -41309,19 +41314,19 @@ The format should be roomId:reconnectionToken`);
       });
     }
     async joinByCode(e) {
-      this.showLoading("Joining..."), await Ie.connect(), await Ie.joinRoom(e, {
+      this.showLoading("Joining..."), await xe.connect(), await xe.joinRoom(e, {
         playerName: this.playerName
       });
     }
     async quickMatch() {
-      this.showLoading("Finding match..."), await Ie.connect();
-      const t = (await Ie.getAvailableRooms()).filter((n) => {
+      this.showLoading("Finding match..."), await xe.connect();
+      const t = (await xe.getAvailableRooms()).filter((n) => {
         var _a3, _b3;
         return ((_a3 = n.metadata) == null ? void 0 : _a3.isPublic) && n.clients < (((_b3 = n.metadata) == null ? void 0 : _b3.maxPlayers) || 8);
       });
-      t.length > 0 ? await Ie.joinRoom(t[0].roomId, {
+      t.length > 0 ? await xe.joinRoom(t[0].roomId, {
         playerName: this.playerName
-      }) : await Ie.joinOrCreate({
+      }) : await xe.joinOrCreate({
         playerName: this.playerName,
         autoStart: true
       });
@@ -41329,8 +41334,8 @@ The format should be roomId:reconnectionToken`);
     async refreshRoomList() {
       const e = document.getElementById("room-list");
       if (!e) return;
-      Ie.connected || await Ie.connect();
-      const t = await Ie.getAvailableRooms();
+      xe.connected || await xe.connect();
+      const t = await xe.getAvailableRooms();
       if (this.roomList = t, t.length === 0) {
         e.innerHTML = '<div class="empty">No public matches found. Create one!</div>';
         return;
@@ -42620,13 +42625,13 @@ The format should be roomId:reconnectionToken`);
       }), this.animate();
     }
     setupNetworkListeners() {
-      Ie.on("roomJoined", () => {
+      xe.on("roomJoined", () => {
         this.preloadLevel();
-      }), Ie.on("playerJoin", ({ player: e, sessionId: t, isLocal: n }) => {
+      }), xe.on("playerJoin", ({ player: e, sessionId: t, isLocal: n }) => {
         !n && this.isMultiplayer && this.addRemotePlayer(t, e);
-      }), Ie.on("playerLeave", ({ sessionId: e }) => {
+      }), xe.on("playerLeave", ({ sessionId: e }) => {
         this.removeRemotePlayer(e);
-      }), Ie.on("playerUpdate", ({ player: e, sessionId: t, isLocal: n }) => {
+      }), xe.on("playerUpdate", ({ player: e, sessionId: t, isLocal: n }) => {
         if (!n && this.remotePlayers.has(t)) this.remotePlayers.get(t).updateFromServer(e);
         else if (n && this.player) {
           this.player.health = e.health, this.player.maxHealth = e.maxHealth, this.player.missiles = e.missiles, this.player.maxMissiles = e.maxMissiles, this.player.hasLaserUpgrade = e.hasLaserUpgrade;
@@ -42640,27 +42645,29 @@ The format should be roomId:reconnectionToken`);
             y: e.qy,
             z: e.qz,
             w: e.qw
-          }, i), Ie.clearProcessedInputs(i));
+          }, i), xe.clearProcessedInputs(i));
         }
-      }), Ie.on("projectileSpawn", ({ projectile: e, id: t }) => {
-        if (console.log("[Game] Projectile spawn event:", t, "owner:", e.ownerId, "isLocal:", e.ownerId === Ie.sessionId), e.ownerId !== Ie.sessionId) this.spawnNetworkProjectile(t, e);
+      }), xe.on("projectileSpawn", ({ projectile: e, id: t }) => {
+        if (console.log("[Game] Projectile spawn event:", t, "owner:", e.ownerId, "isLocal:", e.ownerId === xe.sessionId), e.ownerId !== xe.sessionId) this.spawnNetworkProjectile(t, e);
         else if (e.type === "missile") {
           for (; this.localMissileQueue.length > 0 && this.localMissileQueue[0].disposed; ) this.localMissileQueue.shift();
           const n = this.localMissileQueue.shift();
           n && !n.disposed && (this.localMissileIds.set(t, n), console.log("[Game] Linked local missile to server ID:", t));
         }
-      }), Ie.on("projectileRemove", ({ id: e }) => {
+      }), xe.on("projectileRemove", ({ id: e }) => {
         this.removeNetworkProjectile(e);
-      }), Ie.on("collectibleSpawn", ({ collectible: e, id: t }) => {
+      }), xe.on("projectileUpdate", ({ projectile: e, id: t }) => {
+        this.updateNetworkProjectile(t, e);
+      }), xe.on("collectibleSpawn", ({ collectible: e, id: t }) => {
         this.spawnCollectible(t, e);
-      }), Ie.on("collectibleRemove", ({ id: e }) => {
+      }), xe.on("collectibleRemove", ({ id: e }) => {
         this.removeCollectible(e);
-      }), Ie.on("hit", (e) => {
+      }), xe.on("hit", (e) => {
         this.handleNetworkHit(e);
-      }), Ie.on("kill", (e) => {
+      }), xe.on("kill", (e) => {
         this.showKillFeed(e.killerName, e.victimName);
         let t = null;
-        if (e.victimId === Ie.sessionId) t = this.camera.position.clone(), this.handleLocalPlayerDeath();
+        if (e.victimId === xe.sessionId) t = this.camera.position.clone(), this.handleLocalPlayerDeath();
         else {
           const n = this.remotePlayers.get(e.victimId);
           n && n.mesh && (t = n.mesh.position.clone());
@@ -42675,11 +42682,11 @@ The format should be roomId:reconnectionToken`);
             b: 0.1
           }, 80);
         }
-      }), Ie.on("respawn", (e) => {
-        e.playerId === Ie.sessionId && this.handleLocalPlayerRespawn();
-      }), Ie.on("stateChange", (e) => {
+      }), xe.on("respawn", (e) => {
+        e.playerId === xe.sessionId && this.handleLocalPlayerRespawn();
+      }), xe.on("stateChange", (e) => {
         e.phase === "results" && this.onMatchEnd();
-      }), Ie.on("collectiblePickup", (e) => {
+      }), xe.on("collectiblePickup", (e) => {
         this.handleCollectiblePickup(e);
       });
     }
@@ -42719,12 +42726,12 @@ The format should be roomId:reconnectionToken`);
     }
     startMultiplayerGame() {
       var _a3, _b3, _c3, _d2;
-      this.isMultiplayer = true, this.renderer.domElement.style.display = "block", Ie.getState();
-      const e = Ie.getLocalPlayer();
+      this.isMultiplayer = true, this.renderer.domElement.style.display = "block", xe.getState();
+      const e = xe.getLocalPlayer();
       if (!e) return;
       const t = _p[e.shipClass] || _p.fighter;
-      this.player = new HB(this.camera, this.input, this.level, this.scene), this.player.health = e.health, this.player.maxHealth = e.maxHealth, this.player.missiles = e.missiles, this.player.maxMissiles = e.maxMissiles || t.maxMissiles, this.player.hasLaserUpgrade = e.hasLaserUpgrade || false, this.player.acceleration = t.acceleration, this.player.maxSpeed = t.maxSpeed, this.camera.position.set(e.x, e.y, e.z), this.camera.quaternion.set(e.qx, e.qy, e.qz, e.qw), Ie.getPlayers().forEach(([n, i]) => {
-        n !== Ie.sessionId && this.addRemotePlayer(n, i);
+      this.player = new HB(this.camera, this.input, this.level, this.scene), this.player.health = e.health, this.player.maxHealth = e.maxHealth, this.player.missiles = e.missiles, this.player.maxMissiles = e.maxMissiles || t.maxMissiles, this.player.hasLaserUpgrade = e.hasLaserUpgrade || false, this.player.acceleration = t.acceleration, this.player.maxSpeed = t.maxSpeed, this.camera.position.set(e.x, e.y, e.z), this.camera.quaternion.set(e.qx, e.qy, e.qz, e.qw), xe.getPlayers().forEach(([n, i]) => {
+        n !== xe.sessionId && this.addRemotePlayer(n, i);
       }), (_d2 = (_c3 = (_b3 = (_a3 = document.body).requestPointerLock) == null ? void 0 : _b3.call(_a3)) == null ? void 0 : _c3.catch) == null ? void 0 : _d2.call(_c3, () => {
         console.warn("[Game] Pointer lock failed - click to capture");
       }), document.getElementById("crosshair").classList.add("active"), document.getElementById("hud").classList.add("active"), es.hide(), this.gameManager.setState({
@@ -42735,7 +42742,7 @@ The format should be roomId:reconnectionToken`);
     }
     addRemotePlayer(e, t) {
       if (this.remotePlayers.has(e)) return;
-      const n = Ie.getState(), i = new hM(this.scene, t, (n == null ? void 0 : n.mode) === "team");
+      const n = xe.getState(), i = new hM(this.scene, t, (n == null ? void 0 : n.mode) === "team");
       this.remotePlayers.set(e, i);
     }
     removeRemotePlayer(e) {
@@ -42769,7 +42776,7 @@ The format should be roomId:reconnectionToken`);
         };
         this.particles.emitHitSparks(n, i, 30);
       }
-      e.playerId === Ie.sessionId && this.player && (e.type === "laser_upgrade" ? (this.player.hasLaserUpgrade = true, this.showPickupMessage("LASER UPGRADE ACQUIRED")) : e.type === "missile" && this.showPickupMessage("MISSILES REFILLED"));
+      e.playerId === xe.sessionId && this.player && (e.type === "laser_upgrade" ? (this.player.hasLaserUpgrade = true, this.showPickupMessage("LASER UPGRADE ACQUIRED")) : e.type === "missile" && this.showPickupMessage("MISSILES REFILLED"));
     }
     showPickupMessage(e) {
       const t = document.querySelector(".pickup-message");
@@ -42802,9 +42809,17 @@ The format should be roomId:reconnectionToken`);
       const t = this.networkProjectiles.get(e);
       t && (t.type === "missile" ? t.obj.dispose(this.scene) : t.obj.dispose(this.scene), this.networkProjectiles.delete(e));
     }
+    updateNetworkProjectile(e, t) {
+      const n = this.networkProjectiles.get(e);
+      if (n) if (n.type === "missile") {
+        n.obj.group.position.set(t.x, t.y, t.z), n.obj.direction.set(t.dx, t.dy, t.dz).normalize();
+        const i = new w(0, 0, 1);
+        n.obj.group.quaternion.setFromUnitVectors(i, n.obj.direction);
+      } else n.obj.mesh.position.set(t.x, t.y, t.z), n.obj.direction.set(t.dx, t.dy, t.dz).normalize();
+    }
     handleNetworkHit(e) {
       console.log("[Game] Network hit received:", e);
-      const t = new w(e.x, e.y, e.z), n = new w(0, 1, 0), i = e.shooterId === Ie.sessionId, r = i ? 65535 : 16746496, a = new Yh(this.scene, t, n, r, this.dynamicLights);
+      const t = new w(e.x, e.y, e.z), n = new w(0, 1, 0), i = e.shooterId === xe.sessionId, r = i ? 65535 : 16746496, a = new Yh(this.scene, t, n, r, this.dynamicLights);
       if (this.impacts.push(a), this.particles) {
         const o = i ? {
           r: 0,
@@ -42834,7 +42849,7 @@ The format should be roomId:reconnectionToken`);
           }
         }
       }
-      if (e.targetId !== Ie.sessionId) {
+      if (e.targetId !== xe.sessionId) {
         const o = this.remotePlayers.get(e.targetId);
         o && o.takeDamage(e.damage);
       } else console.log("[Game] Local player took damage, showing vignette"), this.player.health -= e.damage, this.player.lastDamageTime = this.clock.elapsedTime, this.showDamageIndicator(t);
@@ -42865,7 +42880,7 @@ The format should be roomId:reconnectionToken`);
     }
     handleLocalPlayerRespawn() {
       document.getElementById("respawn-overlay").classList.remove("active");
-      const t = Ie.getLocalPlayer();
+      const t = xe.getLocalPlayer();
       t && this.player && (this.player.health = t.health, this.player.maxHealth = t.maxHealth, this.player.missiles = t.missiles, this.player.lastDamageTime = 0, this.camera.position.set(t.x, t.y, t.z), this.camera.quaternion.set(t.qx, t.qy, t.qz, t.qw), this._hudLast.health = null, this._hudLast.missiles = null);
     }
     showKillFeed(e, t) {
@@ -42927,7 +42942,7 @@ The format should be roomId:reconnectionToken`);
     }
     showLeaderboard() {
       this.leaderboardEl || (this.leaderboardEl = document.createElement("div"), this.leaderboardEl.id = "tab-leaderboard", document.body.appendChild(this.leaderboardEl));
-      const e = Ie.getPlayers().map(([t, n]) => ({
+      const e = xe.getPlayers().map(([t, n]) => ({
         id: t,
         name: n.name,
         kills: n.kills,
@@ -42943,7 +42958,7 @@ The format should be roomId:reconnectionToken`);
           <span class="lb-deaths">D</span>
         </div>
         ${e.map((t, n) => `
-          <div class="leaderboard-row ${t.id === Ie.sessionId ? "local" : ""}">
+          <div class="leaderboard-row ${t.id === xe.sessionId ? "local" : ""}">
             <span class="lb-rank">${n + 1}</span>
             <span class="lb-name">${t.name}</span>
             <span class="lb-kills">${t.kills}</span>
@@ -42970,7 +42985,7 @@ The format should be roomId:reconnectionToken`);
       });
     }
     leaveMatch() {
-      this.isEscMenuOpen = false, this.escMenu && (this.escMenu.style.display = "none"), this.isMultiplayer && (Ie.leaveRoom(), this.cleanupMultiplayer(), this.isMultiplayer = false), this.renderer.domElement.style.display = "none", document.getElementById("crosshair").classList.remove("active"), document.getElementById("hud").classList.remove("active"), this.player = null, es.show(), this.gameManager.setState({
+      this.isEscMenuOpen = false, this.escMenu && (this.escMenu.style.display = "none"), this.isMultiplayer && (xe.leaveRoom(), this.cleanupMultiplayer(), this.isMultiplayer = false), this.renderer.domElement.style.display = "none", document.getElementById("crosshair").classList.remove("active"), document.getElementById("hud").classList.remove("active"), this.player = null, es.show(), this.gameManager.setState({
         currentState: jt.MENU,
         isRunning: false,
         isMultiplayer: false
@@ -42992,7 +43007,7 @@ The format should be roomId:reconnectionToken`);
       if (!this.gameManager.isPlaying()) return;
       Wr.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
       const e = this.player.getWeaponSpawnPoint();
-      this.isMultiplayer && Ie.sendFire("laser", e, Wr);
+      this.isMultiplayer && xe.sendFire("laser", e, Wr);
       const t = new qh(this.scene, e, Wr, true);
       this.projectiles.push(t), (_a3 = this.dynamicLights) == null ? void 0 : _a3.flash(e, 65535, {
         intensity: 10,
@@ -43010,7 +43025,7 @@ The format should be roomId:reconnectionToken`);
       const t = this.player.getMissileSpawnPoint(), n = new vp(this.scene, t, Wr, {
         particles: this.particles
       });
-      this.missiles.push(n), this.isMultiplayer && (Ie.sendFire("missile", t, Wr), this.localMissileQueue.push(n)), (_a3 = this.dynamicLights) == null ? void 0 : _a3.flash(t, 16755251, {
+      this.missiles.push(n), this.isMultiplayer && (xe.sendFire("missile", t, Wr), this.localMissileQueue.push(n)), (_a3 = this.dynamicLights) == null ? void 0 : _a3.flash(t, 16755251, {
         intensity: 14,
         distance: 20,
         ttl: 0.07,
@@ -43027,7 +43042,7 @@ The format should be roomId:reconnectionToken`);
       this._hudAccum = 0;
       const t = Math.max(0, Math.round(this.player.health / this.player.maxHealth * 100)), n = this.player.missiles, i = Math.max(0, Math.round(this.player.boostFuel / this.player.maxBoostFuel * 100));
       let r = 0;
-      if (this.isMultiplayer && (r = ((_a3 = Ie.getLocalPlayer()) == null ? void 0 : _a3.kills) || 0), t !== this._hudLast.health && (this.hud.health.textContent = String(t), this._hudLast.health = t), r !== this._hudLast.kills && (this.hud.kills.textContent = String(r), this._hudLast.kills = r), n !== this._hudLast.missiles) {
+      if (this.isMultiplayer && (r = ((_a3 = xe.getLocalPlayer()) == null ? void 0 : _a3.kills) || 0), t !== this._hudLast.health && (this.hud.health.textContent = String(t), this._hudLast.health = t), r !== this._hudLast.kills && (this.hud.kills.textContent = String(r), this._hudLast.kills = r), n !== this._hudLast.missiles) {
         const a = this.player.maxMissiles || n;
         this.hud.missiles.textContent = `${n}/${a}`, this._hudLast.missiles = n;
       }
@@ -43035,8 +43050,8 @@ The format should be roomId:reconnectionToken`);
     }
     sendInputToServer(e) {
       if (!this.isMultiplayer || !this.player) return;
-      const t = Ie.getState();
-      !t || t.phase !== "playing" || (this.lastInputSeq = Ie.sendInput({
+      const t = xe.getState();
+      !t || t.phase !== "playing" || (this.lastInputSeq = xe.sendInput({
         x: this.camera.position.x,
         y: this.camera.position.y,
         z: this.camera.position.z,
@@ -43066,9 +43081,13 @@ The format should be roomId:reconnectionToken`);
           ...Array.from(this.remotePlayers.values())
         ];
         this.missiles.forEach((i) => i.update(e, n)), this.isMultiplayer && this.localMissileIds.forEach((i, r) => {
-          i.disposed || i.lifetime <= 0 ? this.localMissileIds.delete(r) : i.target && Ie.sendMissileUpdate(r, i.group.position, i.direction);
+          i.disposed || i.lifetime <= 0 ? this.localMissileIds.delete(r) : i.target && xe.sendMissileUpdate(r, i.group.position, i.direction);
         }), this.networkProjectiles.forEach((i) => {
-          i.type === "projectile" ? i.obj.update(e) : i.type === "missile" && i.obj.update(e, n);
+          if (i.type === "projectile") i.obj.update(e);
+          else if (i.type === "missile") {
+            if (i.obj.lifetime -= e, i.obj.particles) for (i.obj.spawnTimer += e; i.obj.spawnTimer >= i.obj.spawnRate; ) i.obj.spawnTimer -= i.obj.spawnRate, i.obj.particles.emitMissileExhaust(i.obj.group.position, i.obj.group.quaternion, i.obj.direction);
+            i.obj.trail.material.opacity = 0.6 + Math.random() * 0.25;
+          }
         });
         for (let i = this.explosions.length - 1; i >= 0; i--) this.explosions[i].update(e) || this.explosions.splice(i, 1);
         for (let i = this.impacts.length - 1; i >= 0; i--) this.impacts[i].update(e) || this.impacts.splice(i, 1);
