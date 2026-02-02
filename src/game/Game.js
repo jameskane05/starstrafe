@@ -527,6 +527,8 @@ export class Game {
     const data = this.networkProjectiles.get(id);
     if (!data) return;
     
+    console.log("[Game] Updating network projectile:", id, "pos:", projectile.x.toFixed(1), projectile.y.toFixed(1), projectile.z.toFixed(1));
+    
     // Update position and direction from server (for homing missiles)
     if (data.type === "missile") {
       data.obj.group.position.set(projectile.x, projectile.y, projectile.z);
@@ -1127,13 +1129,21 @@ export class Game {
       }
 
       // Update network projectiles
-      // Missiles are server-authoritative (position synced via projectileUpdate)
-      // Only update visuals like particle effects, not position/direction
-      this.networkProjectiles.forEach((data) => {
+      // Missiles sync position from server state directly
+      this.networkProjectiles.forEach((data, id) => {
         if (data.type === "projectile") {
           data.obj.update(delta);
         } else if (data.type === "missile") {
-          // Only update particle effects, position comes from server
+          // Get current position from server state
+          const serverProj = NetworkManager.getState()?.projectiles?.get(id);
+          if (serverProj) {
+            data.obj.group.position.set(serverProj.x, serverProj.y, serverProj.z);
+            data.obj.direction.set(serverProj.dx, serverProj.dy, serverProj.dz).normalize();
+            const forward = new THREE.Vector3(0, 0, 1);
+            data.obj.group.quaternion.setFromUnitVectors(forward, data.obj.direction);
+          }
+          
+          // Update particle effects
           data.obj.lifetime -= delta;
           if (data.obj.particles) {
             data.obj.spawnTimer += delta;

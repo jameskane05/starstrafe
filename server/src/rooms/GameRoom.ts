@@ -472,10 +472,12 @@ export class GameRoom extends Room {
       const prevY = proj.y;
       const prevZ = proj.z;
       
-      // Update position
-      proj.x += proj.dx * proj.speed * dt;
-      proj.y += proj.dy * proj.speed * dt;
-      proj.z += proj.dz * proj.speed * dt;
+      // Only move lasers server-side; missiles are moved by owner's client via missileUpdate
+      if (proj.type !== "missile") {
+        proj.x += proj.dx * proj.speed * dt;
+        proj.y += proj.dy * proj.speed * dt;
+        proj.z += proj.dz * proj.speed * dt;
+      }
       proj.lifetime -= dt;
       
       if (proj.lifetime <= 0) {
