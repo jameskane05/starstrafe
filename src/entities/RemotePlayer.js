@@ -23,7 +23,7 @@ async function loadCockpitModel() {
   cockpitLoading = new Promise((resolve) => {
     const loader = new GLTFLoader();
     loader.load(
-      "/cockpit.glb",
+      "./cockpit.glb",
       (gltf) => {
         cockpitModel = gltf.scene;
         resolve(cockpitModel);

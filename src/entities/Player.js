@@ -66,7 +66,7 @@ export class Player {
   loadCockpit(scene) {
     const loader = new GLTFLoader();
     loader.load(
-      "/cockpit.glb",
+      "./cockpit.glb",
       (gltf) => {
         this.cockpit = gltf.scene;
         this.cockpit.scale.setScalar(0.5);

@@ -1,7 +1,7 @@
 import * as Colyseus from "@colyseus/sdk";
 
 // Set to your Colyseus Cloud URL after deployment, or leave null for localhost
-const CLOUD_SERVER_URL = null; // e.g., "wss://your-app-id.colyseus.cloud"
+const CLOUD_SERVER_URL = "https://us-ord-23ba76a6.colyseus.cloud";
 const LOCAL_SERVER_URL = "ws://localhost:2567";
 
 class NetworkManager {
@@ -313,6 +313,19 @@ class NetworkManager {
     console.log("[Network] Sending fire:", weapon);
     this.room.send("fire", {
       weapon,
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      dx: direction.x,
+      dy: direction.y,
+      dz: direction.z,
+    });
+  }
+
+  sendMissileUpdate(projectileId, position, direction) {
+    if (!this.room) return;
+    this.room.send("missileUpdate", {
+      id: projectileId,
       x: position.x,
       y: position.y,
       z: position.z,

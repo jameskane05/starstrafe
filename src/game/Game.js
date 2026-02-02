@@ -70,6 +70,10 @@ export class Game {
       smoothCorrection: true,
     });
     this.lastInputSeq = 0;
+    
+    // Track local missiles with their server IDs for homing sync
+    this.localMissileQueue = []; // Missiles waiting to be linked to server IDs
+    this.localMissileIds = new Map(); // serverId -> local missile
   }
 
   async init() {
@@ -173,6 +177,11 @@ export class Game {
   }
 
   setupNetworkListeners() {
+    // Preload level as soon as player joins a room (lobby)
+    NetworkManager.on("roomJoined", () => {
+      this.preloadLevel();
+    });
+
     NetworkManager.on("playerJoin", ({ player, sessionId, isLocal }) => {
       if (!isLocal && this.isMultiplayer) {
         this.addRemotePlayer(sessionId, player);
@@ -212,6 +221,17 @@ export class Game {
       console.log("[Game] Projectile spawn event:", id, "owner:", projectile.ownerId, "isLocal:", projectile.ownerId === NetworkManager.sessionId);
       if (projectile.ownerId !== NetworkManager.sessionId) {
         this.spawnNetworkProjectile(id, projectile);
+      } else if (projectile.type === "missile") {
+        // Link our local missile to this server ID for homing sync
+        // Filter out any already-disposed missiles from queue first
+        while (this.localMissileQueue.length > 0 && this.localMissileQueue[0].disposed) {
+          this.localMissileQueue.shift();
+        }
+        const localMissile = this.localMissileQueue.shift();
+        if (localMissile && !localMissile.disposed) {
+          this.localMissileIds.set(id, localMissile);
+          console.log("[Game] Linked local missile to server ID:", id);
+        }
       }
     });
 
@@ -283,25 +303,52 @@ export class Game {
     });
   }
 
-  async loadLevelAndStart() {
-    // Prevent multiple calls
-    if (this.isLoadingLevel) return;
+  /**
+   * Preload level assets in the background (called when joining lobby)
+   */
+  async preloadLevel() {
+    // Don't preload if already loading or loaded
+    if (this.isLoadingLevel || this.sceneManager.hasObject("level")) {
+      return;
+    }
+    
+    console.log("[Game] Preloading level...");
     this.isLoadingLevel = true;
     
+    try {
+      const sceneData = await import("../data/sceneData.js");
+      const levelData = sceneData.sceneObjects?.level || sceneData.default?.level;
+      
+      if (levelData) {
+        // Start loading but don't block - SceneManager handles deduplication
+        await this.sceneManager.loadObject(levelData, (progress) => {
+          console.log(`[Game] Preload progress: ${Math.round(progress * 100)}%`);
+        });
+        console.log("[Game] Level preloaded successfully");
+      }
+    } catch (err) {
+      console.error("[Game] Level preload failed:", err);
+    }
+    
+    this.isLoadingLevel = false;
+  }
+
+  async loadLevelAndStart() {
     // Set state to PLAYING
     this.gameManager.setState({ 
       currentState: GAME_STATES.PLAYING,
       currentLevel: "hangar"
     });
     
-    // Check if level needs to be loaded
+    // Wait for level if still loading from preload, or load now if not started
     if (!this.sceneManager.hasObject("level")) {
+      console.log("[Game] Waiting for level to load...");
       try {
         const sceneData = await import("../data/sceneData.js");
         const levelData = sceneData.sceneObjects?.level || sceneData.default?.level;
         
         if (levelData) {
-          console.log("[Game] Loading level:", levelData.path);
+          // SceneManager deduplicates - if preload started, this awaits that promise
           await this.sceneManager.loadObject(levelData, (progress) => {
             MenuManager.updateLoadingProgress(progress);
           });
@@ -310,9 +357,10 @@ export class Game {
       } catch (err) {
         console.error("[Game] Level load failed:", err);
       }
+    } else {
+      console.log("[Game] Level already preloaded");
     }
     
-    this.isLoadingLevel = false;
     MenuManager.loadingComplete();
   }
 
@@ -911,14 +959,16 @@ export class Game {
     _fireDir.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
     const spawnPos = this.player.getMissileSpawnPoint();
 
-    if (this.isMultiplayer) {
-      NetworkManager.sendFire("missile", spawnPos, _fireDir);
-    }
-
     const missile = new Missile(this.scene, spawnPos, _fireDir, {
       particles: this.particles,
     });
     this.missiles.push(missile);
+
+    if (this.isMultiplayer) {
+      NetworkManager.sendFire("missile", spawnPos, _fireDir);
+      // Add to queue to link with server ID when we receive projectileSpawn
+      this.localMissileQueue.push(missile);
+    }
 
     this.dynamicLights?.flash(spawnPos, 0xffaa33, {
       intensity: 14,
@@ -1038,6 +1088,22 @@ export class Game {
       // Combine enemies and remote players as potential missile targets
       const missileTargets = [...this.enemies, ...Array.from(this.remotePlayers.values())];
       this.missiles.forEach((m) => m.update(delta, missileTargets));
+
+      // Send position updates for homing missiles to server
+      if (this.isMultiplayer) {
+        this.localMissileIds.forEach((missile, serverId) => {
+          if (missile.disposed || missile.lifetime <= 0) {
+            this.localMissileIds.delete(serverId);
+          } else if (missile.target) {
+            // Only send updates when actively homing
+            NetworkManager.sendMissileUpdate(
+              serverId,
+              missile.group.position,
+              missile.direction
+            );
+          }
+        });
+      }
 
       // Update network projectiles - they can also home on remote players
       this.networkProjectiles.forEach((data) => {

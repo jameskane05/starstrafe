@@ -10,10 +10,12 @@
     "kill-server": "npx kill-port 2567",
     "build": "cd server && npm install && npm run build",
     "build:client": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:gh": "npm run build:client && gh-pages -d dist"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "gh-pages": "^6.3.0",
     "kill-port": "^2.0.1",
     "vite": "^7.2.4",
     "vite-plugin-top-level-await": "^1.6.0",

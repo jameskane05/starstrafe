@@ -78,6 +78,7 @@ export class GameRoom extends Room {
   private registerMessageHandlers() {
     this.onMessage("input", (client, data) => this.handleInput(client, data));
     this.onMessage("fire", (client, data) => this.handleFire(client, data));
+    this.onMessage("missileUpdate", (client, data) => this.handleMissileUpdate(client, data));
     this.onMessage("classSelect", (client, data) => this.handleClassSelect(client, data));
     this.onMessage("ready", (client) => this.handleReady(client));
     this.onMessage("startGame", (client) => this.handleStartGame(client));
@@ -191,6 +192,25 @@ export class GameRoom extends Room {
         this.spawnProjectile(player, data, "missile", 30, classStats.missileDamage);
       }
     }
+  }
+
+  private handleMissileUpdate(client: Client, data: any) {
+    const proj = this.state.projectiles.get(data.id);
+    if (!proj) return;
+    
+    // Only allow updates from the owner
+    if (proj.ownerId !== client.sessionId) return;
+    
+    // Only update missiles, not lasers
+    if (proj.type !== "missile") return;
+    
+    // Update position and direction from client (for homing)
+    proj.x = data.x;
+    proj.y = data.y;
+    proj.z = data.z;
+    proj.dx = data.dx;
+    proj.dy = data.dy;
+    proj.dz = data.dz;
   }
 
   private spawnProjectile(player: Player, data: any, type: string, speed: number, damage: number) {

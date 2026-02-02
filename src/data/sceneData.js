@@ -22,7 +22,7 @@ export const sceneObjects = {
   level: {
     id: "level",
     type: "splat",
-    path: "/level.compressed.ply",
+    path: "./level.compressed.ply",
     description: "Level environment gaussian splat",
     position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },

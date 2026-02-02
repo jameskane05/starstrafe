@@ -25,7 +25,7 @@ async function loadShipModels() {
     for (let i = 0; i < NUM_SHIP_MODELS; i++) {
       promises.push(
         loader
-          .loadAsync(`/ships/enemy-ship-${i}.glb`)
+          .loadAsync(`./ships/enemy-ship-${i}.glb`)
           .then((gltf) => {
             shipModels[i] = gltf.scene;
           })

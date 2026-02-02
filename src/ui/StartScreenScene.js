@@ -216,7 +216,7 @@ export class StartScreenScene {
     
     return new Promise((resolve) => {
       loader.load(
-        "/cockpit.glb",
+        "./cockpit.glb",
         (gltf) => {
           this.ship = gltf.scene;
           this.ship.scale.setScalar(1.6);
