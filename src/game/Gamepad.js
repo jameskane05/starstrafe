@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'starstrafe_gamepad_bindings';
+const PRESETS_KEY = 'starstrafe_gamepad_presets';
+const ACTIVE_PRESET_KEY = 'starstrafe_gamepad_active_preset';
 
 export const DEFAULT_GAMEPAD_BINDINGS = {
   leftStickX: 'moveX',      // Left stick horizontal -> strafe left/right
@@ -87,6 +89,8 @@ class GamepadManager {
   constructor() {
     this.gamepad = null;
     this.connected = false;
+    this.presets = this.loadPresets();
+    this.activePreset = localStorage.getItem(ACTIVE_PRESET_KEY) || 'default';
     this.bindings = this.load();
     this.deadzone = 0.15;
     this.triggerThreshold = 0.1;
@@ -107,14 +111,44 @@ class GamepadManager {
     window.addEventListener('gamepaddisconnected', (e) => this.handleDisconnect(e));
   }
 
-  load() {
+  loadPresets() {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(PRESETS_KEY);
       if (stored) {
-        return { ...DEFAULT_GAMEPAD_BINDINGS, ...JSON.parse(stored) };
+        return JSON.parse(stored);
       }
     } catch (e) {
-      console.warn('[Gamepad] Failed to load bindings:', e);
+      console.warn('[Gamepad] Failed to load presets:', e);
+    }
+    return {};
+  }
+
+  savePresets() {
+    try {
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(this.presets));
+    } catch (e) {
+      console.warn('[Gamepad] Failed to save presets:', e);
+    }
+  }
+
+  load() {
+    if (this.activePreset === 'default') {
+      return { ...DEFAULT_GAMEPAD_BINDINGS };
+    }
+    if (this.activePreset === 'custom') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          return { ...DEFAULT_GAMEPAD_BINDINGS, ...JSON.parse(stored) };
+        }
+      } catch (e) {
+        console.warn('[Gamepad] Failed to load bindings:', e);
+      }
+      return { ...DEFAULT_GAMEPAD_BINDINGS };
+    }
+    // Load from named preset
+    if (this.presets[this.activePreset]) {
+      return { ...DEFAULT_GAMEPAD_BINDINGS, ...this.presets[this.activePreset] };
     }
     return { ...DEFAULT_GAMEPAD_BINDINGS };
   }
@@ -122,14 +156,52 @@ class GamepadManager {
   save() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.bindings));
+      // When saving custom changes, switch to custom preset
+      if (this.activePreset === 'default') {
+        this.activePreset = 'custom';
+        localStorage.setItem(ACTIVE_PRESET_KEY, 'custom');
+      }
     } catch (e) {
       console.warn('[Gamepad] Failed to save bindings:', e);
     }
   }
 
+  getPresetNames() {
+    return ['default', 'custom', ...Object.keys(this.presets)];
+  }
+
+  loadPreset(name) {
+    this.activePreset = name;
+    localStorage.setItem(ACTIVE_PRESET_KEY, name);
+    this.bindings = this.load();
+  }
+
+  saveAsPreset(name) {
+    const safeName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (safeName && safeName !== 'default' && safeName !== 'custom') {
+      this.presets[safeName] = { ...this.bindings };
+      this.savePresets();
+      this.activePreset = safeName;
+      localStorage.setItem(ACTIVE_PRESET_KEY, safeName);
+    }
+  }
+
+  deletePreset(name) {
+    if (name !== 'default' && name !== 'custom' && this.presets[name]) {
+      delete this.presets[name];
+      this.savePresets();
+      this.loadPreset('default');
+    }
+  }
+
+  isCustom() {
+    return this.activePreset === 'custom';
+  }
+
   resetToDefault() {
+    this.activePreset = 'default';
+    localStorage.setItem(ACTIVE_PRESET_KEY, 'default');
     this.bindings = { ...DEFAULT_GAMEPAD_BINDINGS };
-    this.save();
   }
 
   handleConnect(e) {

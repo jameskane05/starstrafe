@@ -101,14 +101,14 @@ export class Input {
         return;
       }
       
-      KeyBindings.setBinding(this.rebindingAction, [e.code]);
+      KeyBindings.setBinding(this.rebindingAction, e.code);
       this.rebindingAction = null;
       this.onRebindCallback?.(e.code);
       this.onRebindCallback = null;
       return;
     }
     
-    if (e.code === 'Tab') e.preventDefault();
+    if (e.code === 'Tab' && this.game.gameManager?.isPlaying()) e.preventDefault();
     this.setKey(e.code, true);
   }
 
@@ -132,7 +132,7 @@ export class Input {
     if (KeyBindings.isKeyBound('lookLeft', code)) this.keys.lookLeft = value;
     if (KeyBindings.isKeyBound('lookRight', code)) this.keys.lookRight = value;
     
-    if (KeyBindings.isKeyBound('leaderboard', code)) {
+    if (KeyBindings.isKeyBound('leaderboard', code) && this.game.gameManager?.isPlaying()) {
       if (value) this.game.showLeaderboard();
       else this.game.hideLeaderboard();
     }
@@ -202,11 +202,13 @@ export class Input {
       this.game.toggleEscMenu();
     }
     
-    if (GamepadInput.getButtonJustPressed('leaderboard')) {
-      this.game.showLeaderboard();
-    }
-    if (GamepadInput.state.prevButtons.back && !GamepadInput.state.buttons.back) {
-      this.game.hideLeaderboard();
+    if (this.game.gameManager?.isPlaying()) {
+      if (GamepadInput.getButtonJustPressed('leaderboard')) {
+        this.game.showLeaderboard();
+      }
+      if (GamepadInput.state.prevButtons.back && !GamepadInput.state.buttons.back) {
+        this.game.hideLeaderboard();
+      }
     }
   }
 

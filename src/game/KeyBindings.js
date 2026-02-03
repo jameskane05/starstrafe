@@ -2,21 +2,21 @@ const STORAGE_KEY = 'starstrafe_keybindings';
 const PRESETS_KEY = 'starstrafe_keybinding_presets';
 
 export const DEFAULT_BINDINGS = {
-  forward: ['KeyW'],
-  backward: ['KeyS'],
-  left: ['KeyA'],
-  right: ['KeyD'],
-  rollLeft: ['KeyQ'],
-  rollRight: ['KeyE'],
-  strafeUp: ['KeyZ'],
-  strafeDown: ['KeyC'],
-  boost: ['ShiftLeft', 'ShiftRight'],
-  lookUp: ['ArrowUp'],
-  lookDown: ['ArrowDown'],
-  lookLeft: ['ArrowLeft'],
-  lookRight: ['ArrowRight'],
-  leaderboard: ['Tab'],
-  pause: ['Escape'],
+  forward: 'KeyW',
+  backward: 'KeyS',
+  left: 'KeyA',
+  right: 'KeyD',
+  rollLeft: 'KeyQ',
+  rollRight: 'KeyE',
+  strafeUp: 'KeyZ',
+  strafeDown: 'KeyC',
+  boost: 'ShiftLeft',
+  lookUp: 'ArrowUp',
+  lookDown: 'ArrowDown',
+  lookLeft: 'ArrowLeft',
+  lookRight: 'ArrowRight',
+  leaderboard: 'Tab',
+  pause: 'Escape',
 };
 
 export const ACTION_LABELS = {
@@ -90,6 +90,12 @@ class KeyBindingsManager {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
+        // Migrate from old array format to single key format
+        for (const [action, value] of Object.entries(parsed)) {
+          if (Array.isArray(value)) {
+            parsed[action] = value[0] || null;
+          }
+        }
         return { ...this.deepCopy(DEFAULT_BINDINGS), ...parsed };
       }
     } catch (e) {
@@ -109,7 +115,18 @@ class KeyBindingsManager {
   loadPresets() {
     try {
       const stored = localStorage.getItem(PRESETS_KEY);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const presets = JSON.parse(stored);
+        // Migrate from old array format
+        for (const presetName of Object.keys(presets)) {
+          for (const [action, value] of Object.entries(presets[presetName])) {
+            if (Array.isArray(value)) {
+              presets[presetName][action] = value[0] || null;
+            }
+          }
+        }
+        return presets;
+      }
     } catch (e) {
       console.warn('[KeyBindings] Failed to load presets:', e);
     }
@@ -129,11 +146,11 @@ class KeyBindingsManager {
   }
 
   getBinding(action) {
-    return this.bindings[action] || [];
+    return this.bindings[action] || null;
   }
 
-  setBinding(action, keys) {
-    this.bindings[action] = Array.isArray(keys) ? keys : [keys];
+  setBinding(action, key) {
+    this.bindings[action] = key;
     this.markAsCustom();
     this.save();
   }
@@ -146,32 +163,18 @@ class KeyBindingsManager {
     }
   }
 
-  addKey(action, key) {
-    if (!this.bindings[action]) this.bindings[action] = [];
-    if (!this.bindings[action].includes(key)) {
-      this.bindings[action].push(key);
-      this.save();
-    }
-  }
-
-  removeKey(action, key) {
-    if (!this.bindings[action]) return;
-    this.bindings[action] = this.bindings[action].filter(k => k !== key);
-    this.save();
-  }
-
   clearBinding(action) {
-    this.bindings[action] = [];
+    this.bindings[action] = null;
     this.save();
   }
 
   isKeyBound(action, code) {
-    return this.bindings[action]?.includes(code) || false;
+    return this.bindings[action] === code;
   }
 
   getActionForKey(code) {
-    for (const [action, keys] of Object.entries(this.bindings)) {
-      if (keys.includes(code)) return action;
+    for (const [action, key] of Object.entries(this.bindings)) {
+      if (key === code) return action;
     }
     return null;
   }

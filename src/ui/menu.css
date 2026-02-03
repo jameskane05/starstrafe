@@ -1874,10 +1874,15 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
   letter-spacing: 0.1em;
+  white-space: nowrap;
 }
 
 .gamepad-status.connected {
   color: var(--accent-green);
+}
+
+.gamepad-preset-controls {
+  margin-left: auto;
 }
 
 .gamepad-list {
@@ -1894,7 +1899,7 @@
   font-size: 1rem;
 }
 
-.gamepad-action {
+.gamepad-input {
   font-size: 0.85rem;
   color: var(--accent-cyan);
   text-align: right;

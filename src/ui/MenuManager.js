@@ -4,6 +4,7 @@ import { KeyBindings, ACTION_LABELS, getKeyDisplayName, DEFAULT_BINDINGS } from 
 import { GamepadInput, GAMEPAD_INPUT_LABELS, GAMEPAD_ACTION_LABELS } from "../game/Gamepad.js";
 import { AudioSettings } from "../game/AudioSettings.js";
 import { StartScreenScene } from "./StartScreenScene.js";
+import proceduralAudio from "../audio/ProceduralAudio.js";
 
 const SCREENS = {
   MAIN_MENU: "mainMenu",
@@ -50,6 +51,15 @@ class MenuManager {
     // Initialize start screen 3D scene
     this.startScene = new StartScreenScene();
     await this.startScene.init(document.body);
+
+    // Initialize procedural audio on first user interaction
+    const initAudio = () => {
+      proceduralAudio.init();
+      document.removeEventListener('click', initAudio);
+      document.removeEventListener('keydown', initAudio);
+    };
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('keydown', initAudio, { once: true });
 
     this.setupNetworkListeners();
     this.setupMenuNavigation();
@@ -146,6 +156,7 @@ class MenuManager {
     
     this.focusIndex = (this.focusIndex + direction + this.focusableElements.length) % this.focusableElements.length;
     this.updateFocus();
+    proceduralAudio.uiNavigate();
   }
 
   updateFocusableElements() {
@@ -168,6 +179,7 @@ class MenuManager {
     this.updateFocusableElements();
     const el = this.focusableElements[this.focusIndex];
     if (el) {
+      proceduralAudio.uiClick();
       el.click();
       if (el.type === 'checkbox') {
         el.checked = !el.checked;
@@ -227,6 +239,11 @@ class MenuManager {
       } else if (state.phase === "lobby" && this.currentScreen === SCREENS.RESULTS) {
         this.showScreen(SCREENS.LOBBY);
       } else if (state.phase === "countdown" || state.phase === "lobby") {
+        // Play countdown beeps
+        if (state.phase === "countdown" && state.countdown !== this._lastCountdown) {
+          this._lastCountdown = state.countdown;
+          proceduralAudio.uiCountdown(state.countdown === 1);
+        }
         this.renderLobby();
       }
     });
@@ -1025,9 +1042,7 @@ class MenuManager {
               <div class="keybind-row" data-action="${action}">
                 <span class="keybind-action">${ACTION_LABELS[action]}</span>
                 <div class="keybind-keys">
-                  ${(bindings[action] || []).map(key => `
-                    <span class="keybind-key">${getKeyDisplayName(key)}</span>
-                  `).join('') || '<span class="keybind-unset">UNBOUND</span>'}
+                  ${bindings[action] ? `<span class="keybind-key">${getKeyDisplayName(bindings[action])}</span>` : '<span class="keybind-unset">UNBOUND</span>'}
                 </div>
                 <button class="rebind-btn" data-action="${action}">REBIND</button>
               </div>
@@ -1040,18 +1055,22 @@ class MenuManager {
         <div class="options-section">
           <div class="options-header-row">
             <span class="gamepad-status ${gpConnected ? 'connected' : ''}" id="gamepad-status">${gpConnected ? '● CONNECTED' : '○ NOT DETECTED'}</span>
+            <div class="preset-controls gamepad-preset-controls">
+              <select id="gamepad-preset-select" class="menu-select preset-select">
+                ${GamepadInput.getPresetNames().map(p => `<option value="${p}" ${p === GamepadInput.activePreset ? 'selected' : ''}>${p.toUpperCase()}${p === 'custom' ? ' *' : ''}</option>`).join('')}
+              </select>
+              <button class="options-btn" id="btn-save-gamepad-preset" title="Save current as new preset" ${!GamepadInput.isCustom() ? 'disabled' : ''}>SAVE AS</button>
+              <button class="options-btn danger" id="btn-delete-gamepad-preset" title="Delete selected preset" ${GamepadInput.activePreset === 'default' || GamepadInput.activePreset === 'custom' ? 'disabled' : ''}>DELETE</button>
+            </div>
           </div>
           <div class="keybind-list gamepad-list">
             ${Object.entries(gpBindings).map(([input, action]) => `
               <div class="keybind-row gamepad-row">
-                <span class="keybind-action">${GAMEPAD_INPUT_LABELS[input] || input}</span>
+                <span class="keybind-action">${GAMEPAD_ACTION_LABELS[action] || action}</span>
                 <span class="gamepad-arrow">→</span>
-                <span class="gamepad-action">${GAMEPAD_ACTION_LABELS[action] || action}</span>
+                <span class="gamepad-input">${GAMEPAD_INPUT_LABELS[input] || input}</span>
               </div>
             `).join('')}
-          </div>
-          <div class="options-footer">
-            <button class="menu-btn secondary" id="btn-reset-gamepad">RESET GAMEPAD</button>
           </div>
           <p class="gamepad-hint">Gamepad auto-switches when input is detected</p>
         </div>
@@ -1130,10 +1149,25 @@ class MenuManager {
       }
     });
 
-    document.getElementById("btn-reset-gamepad")?.addEventListener("click", () => {
-      if (confirm("Reset gamepad bindings to defaults?")) {
-        GamepadInput.resetToDefault();
+    document.getElementById("gamepad-preset-select")?.addEventListener("change", (e) => {
+      GamepadInput.loadPreset(e.target.value);
+      this.renderOptions(this.optionsReturnScreen);
+    });
+
+    document.getElementById("btn-save-gamepad-preset")?.addEventListener("click", () => {
+      const name = prompt("Enter preset name:");
+      if (name && name.trim()) {
+        GamepadInput.saveAsPreset(name.trim().toLowerCase());
         this.renderOptions(this.optionsReturnScreen);
+      }
+    });
+
+    document.getElementById("btn-delete-gamepad-preset")?.addEventListener("click", () => {
+      if (GamepadInput.activePreset !== 'default' && GamepadInput.activePreset !== 'custom') {
+        if (confirm(`Delete preset "${GamepadInput.activePreset}"?`)) {
+          GamepadInput.deletePreset(GamepadInput.activePreset);
+          this.renderOptions(this.optionsReturnScreen);
+        }
       }
     });
 
@@ -1326,10 +1360,25 @@ class MenuManager {
       }
     });
 
-    document.getElementById("btn-reset-gamepad")?.addEventListener("click", () => {
-      if (confirm("Reset gamepad bindings to defaults?")) {
-        GamepadInput.resetToDefault();
+    document.getElementById("gamepad-preset-select")?.addEventListener("change", (e) => {
+      GamepadInput.loadPreset(e.target.value);
+      this.renderOptionsInGame();
+    });
+
+    document.getElementById("btn-save-gamepad-preset")?.addEventListener("click", () => {
+      const name = prompt("Enter preset name:");
+      if (name && name.trim()) {
+        GamepadInput.saveAsPreset(name.trim().toLowerCase());
         this.renderOptionsInGame();
+      }
+    });
+
+    document.getElementById("btn-delete-gamepad-preset")?.addEventListener("click", () => {
+      if (GamepadInput.activePreset !== 'default' && GamepadInput.activePreset !== 'custom') {
+        if (confirm(`Delete preset "${GamepadInput.activePreset}"?`)) {
+          GamepadInput.deletePreset(GamepadInput.activePreset);
+          this.renderOptionsInGame();
+        }
       }
     });
 

@@ -21,6 +21,7 @@ import NetworkManager from "../network/NetworkManager.js";
 import MenuManager from "../ui/MenuManager.js";
 import { Prediction } from "../network/Prediction.js";
 import MusicManager from "../audio/MusicManager.js";
+import proceduralAudio from "../audio/ProceduralAudio.js";
 
 const _fireDir = new THREE.Vector3();
 const _hitPos = new THREE.Vector3();
@@ -270,6 +271,10 @@ export class Game {
         if (remote && remote.mesh) {
           victimPos = remote.mesh.position.clone();
         }
+        // We got a kill!
+        if (data.killerId === NetworkManager.sessionId) {
+          proceduralAudio.killConfirm();
+        }
       }
       
       // Spawn big player death explosion
@@ -282,6 +287,7 @@ export class Game {
           { big: true }
         );
         this.explosions.push(explosion);
+        proceduralAudio.explosion(true);
         
         // Add massive particle explosion
         if (this.particles) {
@@ -293,6 +299,7 @@ export class Game {
     NetworkManager.on("respawn", (data) => {
       if (data.playerId === NetworkManager.sessionId) {
         this.handleLocalPlayerRespawn();
+        proceduralAudio.respawn();
       }
     });
 
@@ -469,6 +476,7 @@ export class Game {
     
     // Update local player if they picked it up
     if (data.playerId === NetworkManager.sessionId && this.player) {
+      proceduralAudio.collectPickup();
       if (data.type === "laser_upgrade") {
         this.player.hasLaserUpgrade = true;
         this.showPickupMessage("LASER UPGRADE ACQUIRED");
@@ -610,6 +618,7 @@ export class Game {
       this.player.health -= data.damage;
       this.player.lastDamageTime = this.clock.elapsedTime;
       this.showDamageIndicator(hitPos);
+      proceduralAudio.shieldHit();
     }
   }
 
@@ -961,6 +970,8 @@ export class Game {
     const projectile = new Projectile(this.scene, spawnPos, _fireDir, true);
     this.projectiles.push(projectile);
 
+    proceduralAudio.laserFire();
+
     this.dynamicLights?.flash(spawnPos, 0x00ffff, {
       intensity: 10,
       distance: 16,
@@ -986,6 +997,8 @@ export class Game {
       particles: this.particles,
     });
     this.missiles.push(missile);
+
+    proceduralAudio.missileFire();
 
     if (this.isMultiplayer) {
       NetworkManager.sendFire("missile", spawnPos, _fireDir);
