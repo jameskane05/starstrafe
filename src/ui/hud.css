@@ -36,6 +36,13 @@ canvas {
   opacity: 1;
 }
 
+@media (max-width: 768px) {
+  #hud {
+    bottom: auto;
+    top: 60px;
+  }
+}
+
 #crosshair {
   display: none;
 }
@@ -209,4 +216,98 @@ canvas {
 .pickup-message.visible {
   opacity: 1;
   transform: translateX(-50%) scale(1.1);
+}
+
+#mobile-controls {
+  display: none;
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+#mobile-controls.active {
+  display: block;
+  pointer-events: auto;
+}
+
+#mobile-controls * {
+  pointer-events: auto;
+}
+
+#mobile-controls .joystick {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  border-radius: 50%;
+  background: rgba(0, 40, 60, 0.6);
+  border: 2px solid rgba(0, 255, 255, 0.4);
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#mobile-controls .joystick .thumb {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(0, 255, 255, 0.5);
+  transition: transform 0.05s;
+}
+
+#mobile-controls .joystick-move {
+  left: 24px;
+}
+
+#mobile-controls .joystick-look {
+  right: 24px;
+}
+
+#mobile-controls .action-buttons {
+  position: absolute;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+#mobile-controls .action-buttons button {
+  width: 48px;
+  height: 48px;
+  font-size: 1.4rem;
+  border: 2px solid rgba(0, 255, 255, 0.5);
+  background: rgba(0, 40, 60, 0.7);
+  color: #fff;
+  border-radius: 12px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (orientation: landscape) {
+  #mobile-controls .action-buttons {
+    top: 50%;
+    right: 140px;
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+@media (orientation: portrait) {
+  #mobile-controls .joystick {
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  #mobile-controls .action-buttons {
+    bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: row;
+    gap: 12px;
+  }
+  #mobile-controls .action-buttons button {
+    min-width: 52px;
+    min-height: 52px;
+  }
 }

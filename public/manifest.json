@@ -1,0 +1,13 @@
+{
+  "name": "STARSTRAFE",
+  "short_name": "STARSTRAFE",
+  "description": "6DOF space shooter",
+  "theme_color": "#050510",
+  "background_color": "#050510",
+  "display": "standalone",
+  "orientation": "any",
+  "start_url": "/",
+  "icons": [
+    { "src": "/vite.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
