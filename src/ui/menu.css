@@ -38,6 +38,13 @@
   z-index: 1000;
   font-family: 'Rajdhani', sans-serif;
   color: var(--text-primary);
+  user-select: none;
+}
+
+#menu-container input,
+#menu-container select,
+#menu-container textarea {
+  user-select: text;
 }
 
 #menu-container.hidden {
@@ -136,7 +143,8 @@
   gap: 0.5rem;
 }
 
-.name-input-group label {
+.name-input-group label,
+.menu-buttons > label {
   font-size: 0.8rem;
   color: var(--text-secondary);
   letter-spacing: 0.2em;

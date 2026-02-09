@@ -67,6 +67,11 @@ class SceneManager {
       this.objectData.set(id, objectData);
       this.loadingPromises.delete(id);
       console.log(`[SceneManager] Loaded: ${id} (${type})`);
+
+      if (objectData.gizmo && window.gizmoManager) {
+        window.gizmoManager.registerObject(object, id, type);
+      }
+
       return object;
     } catch (error) {
       this.loadingPromises.delete(id);
@@ -85,7 +90,7 @@ class SceneManager {
     
     const splatMesh = new SplatMesh({
       url: path,
-      editable: false,
+      editable: true, // Allow SplatEdit layers to affect this splat (for headlight effects)
       paged: paged || false,  // Enable streaming for LOD files
       onProgress: (progress) => {
         if (onProgress) onProgress(progress);
@@ -163,6 +168,11 @@ class SceneManager {
               model.visible = false;
             }
 
+            // Occluder mesh: writes to depth buffer for particle/projectile occlusion
+            if (options.occluder) {
+              this._applyOccluderMaterial(model, options.debugWireframe);
+            }
+
             // Physics collider support (would need physicsManager)
             if (options.physicsCollider && this.physicsManager) {
               this._createPhysicsCollider(id, model, position, rotation);
@@ -178,6 +188,49 @@ class SceneManager {
         }
       );
     });
+  }
+
+  /**
+   * Apply occluder material to a model - writes to depth buffer to occlude transparent objects
+   * @param {THREE.Object3D} model - The model to apply the material to
+   * @param {boolean} debugWireframe - If true, show a visible wireframe for alignment
+   */
+  _applyOccluderMaterial(model, debugWireframe = false) {
+    model.traverse((child) => {
+      if (child.isMesh) {
+        if (debugWireframe) {
+          // Debug mode: visible green wireframe
+          child.material = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.3,
+            depthWrite: true,
+            depthTest: true,
+          });
+        } else {
+          // Production mode: invisible but writes to depth buffer
+          child.material = new THREE.MeshBasicMaterial({
+            colorWrite: false, // Don't write any color pixels
+            depthWrite: true, // Write to depth buffer
+            depthTest: true,
+          });
+        }
+        child.renderOrder = -50; // Render after splats (-100) but before everything else
+      }
+    });
+  }
+
+  /**
+   * Set occluder debug mode on/off for a loaded object
+   * @param {string} id - Object ID
+   * @param {boolean} debugWireframe - If true, show wireframe; if false, invisible occluder
+   */
+  setOccluderDebug(id, debugWireframe) {
+    const object = this.objects.get(id);
+    if (object) {
+      this._applyOccluderMaterial(object, debugWireframe);
+    }
   }
 
   /**

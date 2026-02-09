@@ -1,33 +1,384 @@
 import * as THREE from "three";
 
-function createRadialTexture(size = 64) {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, size, size);
+const textureLoader = new THREE.TextureLoader();
 
-  const g = ctx.createRadialGradient(
-    size / 2,
-    size / 2,
-    0,
-    size / 2,
-    size / 2,
-    size / 2
-  );
-  g.addColorStop(0.0, "rgba(255,255,255,1)");
-  g.addColorStop(0.3, "rgba(255,255,255,0.7)");
-  g.addColorStop(1.0, "rgba(255,255,255,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-
-  const tex = new THREE.CanvasTexture(canvas);
+function loadTexture(path) {
+  const tex = textureLoader.load(path);
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
-  tex.needsUpdate = true;
   return tex;
 }
+
+// ── Emission shape helpers ──
+const _dir = new THREE.Vector3();
+
+function emitSphere(center, radius) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  _dir.set(
+    Math.sin(phi) * Math.cos(theta),
+    Math.sin(phi) * Math.sin(theta),
+    Math.cos(phi)
+  );
+  return {
+    x: center.x + _dir.x * radius,
+    y: center.y + _dir.y * radius,
+    z: center.z + _dir.z * radius,
+    dx: _dir.x, dy: _dir.y, dz: _dir.z,
+  };
+}
+
+function emitHemisphere(center, radius) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(Math.random());
+  _dir.set(
+    Math.sin(phi) * Math.cos(theta),
+    Math.cos(phi),
+    Math.sin(phi) * Math.sin(theta)
+  );
+  return {
+    x: center.x + _dir.x * radius,
+    y: center.y + _dir.y * radius,
+    z: center.z + _dir.z * radius,
+    dx: _dir.x, dy: _dir.y, dz: _dir.z,
+  };
+}
+
+function emitCone(center, radius, angle = 25) {
+  const angleRad = (angle * Math.PI) / 180;
+  const r = Math.sqrt(Math.random()) * radius;
+  const theta = Math.random() * Math.PI * 2;
+  const px = r * Math.cos(theta);
+  const pz = r * Math.sin(theta);
+  const spread = Math.tan(angleRad) * Math.random();
+  _dir.set(
+    px * spread + (Math.random() - 0.5) * 0.2,
+    1,
+    pz * spread + (Math.random() - 0.5) * 0.2
+  ).normalize();
+  return {
+    x: center.x + px, y: center.y, z: center.z + pz,
+    dx: _dir.x, dy: _dir.y, dz: _dir.z,
+  };
+}
+
+export { emitSphere, emitHemisphere, emitCone };
+
+// ── Billboard Quad Pool (instanced, for large particles) ──
+
+class BillboardParticlePool {
+  constructor(scene, max, options) {
+    this.max = max;
+    this.scene = scene;
+    this.tilesX = options.tilesX || 1;
+    this.tilesY = options.tilesY || 1;
+    this.totalFrames = this.tilesX * this.tilesY;
+    this.animated = this.totalFrames > 1;
+
+    this.offsets = new Float32Array(max * 3);
+    this.colors = new Float32Array(max * 3);
+    this.startColors = new Float32Array(max * 3);
+    this.alphas = new Float32Array(max);
+    this.startAlphas = new Float32Array(max);
+    this.scales = new Float32Array(max);
+    this.startScales = new Float32Array(max);
+    this.sizeGrow = new Float32Array(max);
+    this.frames = new Float32Array(max);
+    this.rotations = new Float32Array(max);
+    this.startFrames = new Float32Array(max);
+    this.noiseStrength = new Float32Array(max);
+    this.noiseFreq = new Float32Array(max);
+    this.noiseOffset = new Float32Array(max * 3);
+    this.speedLimit = new Float32Array(max);
+    this.speedDampen = new Float32Array(max);
+    this.velocities = new Float32Array(max * 3);
+    this.velocityOverLifetime = new Float32Array(max * 3);
+    this.ages = new Float32Array(max);
+    this.lifetimes = new Float32Array(max);
+    this.drags = new Float32Array(max);
+    this.rises = new Float32Array(max);
+    this.alphaFadeInOut = new Float32Array(max); // 0 = linear fade, 1 = fade-in-fade-out
+
+    this.free = [];
+    for (let i = max - 1; i >= 0; i--) this.free.push(i);
+    this.active = [];
+
+    const quadGeo = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = quadGeo.index;
+    geo.setAttribute('position', quadGeo.getAttribute('position'));
+    geo.setAttribute('uv', quadGeo.getAttribute('uv'));
+
+    geo.setAttribute('offset', new THREE.InstancedBufferAttribute(this.offsets, 3));
+    geo.setAttribute('aColor', new THREE.InstancedBufferAttribute(this.colors, 3));
+    geo.setAttribute('aAlpha', new THREE.InstancedBufferAttribute(this.alphas, 1));
+    geo.setAttribute('aScale', new THREE.InstancedBufferAttribute(this.scales, 1));
+    geo.setAttribute('aFrame', new THREE.InstancedBufferAttribute(this.frames, 1));
+    geo.setAttribute('aRotation', new THREE.InstancedBufferAttribute(this.rotations, 1));
+
+    geo.instanceCount = 0;
+
+    const material = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      blending: options.blending ?? THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      uniforms: {
+        uMap: { value: options.map },
+        uTilesX: { value: this.tilesX },
+        uTilesY: { value: this.tilesY },
+        uUseLuminanceAlpha: { value: options.luminanceAlpha ? 1.0 : 0.0 },
+        uPremultipliedAlpha: { value: options.premultipliedAlpha ? 1.0 : 0.0 },
+      },
+      vertexShader: `
+        attribute vec3 offset;
+        attribute vec3 aColor;
+        attribute float aAlpha;
+        attribute float aScale;
+        attribute float aFrame;
+        attribute float aRotation;
+
+        varying vec2 vUv;
+        varying vec3 vColor;
+        varying float vAlpha;
+        varying float vFrame;
+
+        void main() {
+          vUv = uv;
+          vColor = aColor;
+          vAlpha = aAlpha;
+          vFrame = aFrame;
+
+          vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+          vec3 camUp    = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+
+          float c = cos(aRotation);
+          float s = sin(aRotation);
+          vec3 rotRight = camRight * c + camUp * s;
+          vec3 rotUp    = -camRight * s + camUp * c;
+
+          vec3 worldPos = offset
+            + rotRight * position.x * aScale
+            + rotUp * position.y * aScale;
+
+          gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uMap;
+        uniform float uTilesX;
+        uniform float uTilesY;
+        uniform float uUseLuminanceAlpha;
+        uniform float uPremultipliedAlpha;
+
+        varying vec2 vUv;
+        varying vec3 vColor;
+        varying float vAlpha;
+        varying float vFrame;
+
+        void main() {
+          float totalFrames = uTilesX * uTilesY;
+          float f = clamp(floor(vFrame), 0.0, totalFrames - 1.0);
+          float col = mod(f, uTilesX);
+          float row = floor(f / uTilesX);
+          vec2 tileSize = vec2(1.0 / uTilesX, 1.0 / uTilesY);
+          vec2 tileUv = vUv * tileSize + vec2(col * tileSize.x, (uTilesY - 1.0 - row) * tileSize.y);
+
+          vec4 tex = texture2D(uMap, tileUv);
+          float texAlpha = uUseLuminanceAlpha > 0.5
+            ? dot(tex.rgb, vec3(0.299, 0.587, 0.114))
+            : tex.a;
+          float a = texAlpha * vAlpha;
+          if (a <= 0.001) discard;
+
+          vec3 rgb = vColor * tex.rgb;
+          if (uPremultipliedAlpha > 0.5) {
+            rgb *= a;
+          }
+          gl_FragColor = vec4(rgb, a);
+        }
+      `,
+    });
+
+    this.mesh = new THREE.Mesh(geo, material);
+    this.mesh.frustumCulled = false;
+    if (options.renderOrder != null) {
+      this.mesh.renderOrder = options.renderOrder;
+    }
+    this.geometry = geo;
+    this.material = material;
+    scene.add(this.mesh);
+  }
+
+  setEnabled(enabled) { this.mesh.visible = !!enabled; }
+
+  emit(params) {
+    if (this.free.length === 0) return;
+    const i = this.free.pop();
+    this.active.push(i);
+    const p3 = i * 3;
+
+    this.offsets[p3] = params.x;
+    this.offsets[p3 + 1] = params.y;
+    this.offsets[p3 + 2] = params.z;
+    this.velocities[p3] = params.vx;
+    this.velocities[p3 + 1] = params.vy;
+    this.velocities[p3 + 2] = params.vz;
+    this.colors[p3] = params.r;
+    this.colors[p3 + 1] = params.g;
+    this.colors[p3 + 2] = params.b;
+    this.startColors[p3] = params.r;
+    this.startColors[p3 + 1] = params.g;
+    this.startColors[p3 + 2] = params.b;
+    this.alphas[i] = params.alpha;
+    this.startAlphas[i] = params.alpha;
+    this.scales[i] = params.size;
+    this.startScales[i] = params.size;
+    this.sizeGrow[i] = params.sizeGrow ?? 1;
+    this.ages[i] = 0;
+    this.lifetimes[i] = params.life;
+    this.drags[i] = params.drag;
+    this.rises[i] = params.rise;
+    this.rotations[i] = params.rotation ?? (Math.random() * Math.PI * 2);
+    this.noiseStrength[i] = params.noise ?? 0;
+    this.noiseFreq[i] = params.noiseFreq ?? 0.2;
+    this.noiseOffset[p3] = Math.random() * 1000;
+    this.noiseOffset[p3 + 1] = Math.random() * 1000;
+    this.noiseOffset[p3 + 2] = Math.random() * 1000;
+    this.speedLimit[i] = params.speedLimit ?? 0;
+    this.speedDampen[i] = params.speedDampen ?? 0;
+    this.velocityOverLifetime[p3] = params.velocityOverLifetimeX ?? 0;
+    this.velocityOverLifetime[p3 + 1] = params.velocityOverLifetimeY ?? 0;
+    this.velocityOverLifetime[p3 + 2] = params.velocityOverLifetimeZ ?? 0;
+    this.alphaFadeInOut[i] = params.alphaFadeInOut ? 1 : 0; // Enable fade-in-fade-out curve
+    const startFrame = params.frame ?? Math.floor(Math.random() * this.totalFrames);
+    this.startFrames[i] = startFrame;
+    this.frames[i] = startFrame;
+  }
+
+  update(dt) {
+    let changed = false;
+
+    for (let a = this.active.length - 1; a >= 0; a--) {
+      const i = this.active[a];
+      this.ages[i] += dt;
+      const t = this.ages[i] / this.lifetimes[i];
+
+      if (t >= 1) {
+        this.alphas[i] = 0;
+        this.scales[i] = 0;
+        this.active[a] = this.active[this.active.length - 1];
+        this.active.pop();
+        this.free.push(i);
+        changed = true;
+        continue;
+      }
+
+      const p3 = i * 3;
+
+      // Velocity over lifetime
+      this.velocities[p3] += this.velocityOverLifetime[p3] * dt;
+      this.velocities[p3 + 1] += this.velocityOverLifetime[p3 + 1] * dt;
+      this.velocities[p3 + 2] += this.velocityOverLifetime[p3 + 2] * dt;
+
+      this.offsets[p3] += this.velocities[p3] * dt;
+      this.offsets[p3 + 1] += this.velocities[p3 + 1] * dt;
+      this.offsets[p3 + 2] += this.velocities[p3 + 2] * dt;
+      this.velocities[p3 + 1] += this.rises[i] * dt;
+
+      const drag = this.drags[i];
+      this.velocities[p3] *= drag;
+      this.velocities[p3 + 1] *= drag;
+      this.velocities[p3 + 2] *= drag;
+
+      // Noise turbulence
+      const ns = this.noiseStrength[i];
+      if (ns > 0) {
+        const freq = this.noiseFreq[i];
+        const time = this.ages[i] * 2;
+        const ox = this.noiseOffset[p3];
+        const oy = this.noiseOffset[p3 + 1];
+        const oz = this.noiseOffset[p3 + 2];
+        this.velocities[p3] += Math.sin(ox + time * freq) * ns * dt;
+        this.velocities[p3 + 1] += Math.sin(oy + time * freq * 1.3) * ns * dt;
+        this.velocities[p3 + 2] += Math.sin(oz + time * freq * 0.7) * ns * dt;
+      }
+
+      // Speed limiting
+      const sl = this.speedLimit[i];
+      if (sl > 0) {
+        const vx = this.velocities[p3];
+        const vy = this.velocities[p3 + 1];
+        const vz = this.velocities[p3 + 2];
+        const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        if (speed > sl) {
+          const dampen = this.speedDampen[i];
+          const factor = 1 - dampen * (1 - sl / speed);
+          this.velocities[p3] *= factor;
+          this.velocities[p3 + 1] *= factor;
+          this.velocities[p3 + 2] *= factor;
+        }
+      }
+
+      // Alpha over lifetime
+      if (this.alphaFadeInOut[i] > 0) {
+        // Fade-in-fade-out curve: 0 -> peak -> 0
+        // Unity dust motes: peak at ~0.48 lifetime, alpha 0.082
+        const peakTime = 0.48; // When alpha peaks
+        let alphaCurve;
+        if (t < peakTime) {
+          // Fade in: 0 to peak
+          alphaCurve = t / peakTime;
+        } else {
+          // Fade out: peak to 0
+          alphaCurve = (1 - t) / (1 - peakTime);
+        }
+        this.alphas[i] = this.startAlphas[i] * alphaCurve;
+      } else {
+        // Linear fade out
+        this.alphas[i] = this.startAlphas[i] * (1 - t);
+      }
+
+      // Size over lifetime
+      const grow = this.sizeGrow[i];
+      if (grow !== 1) {
+        this.scales[i] = this.startScales[i] * (1 + (grow - 1) * t);
+      }
+
+      // Color over lifetime
+      if (t > 0.3) {
+        const ct = (t - 0.3) / 0.7;
+        this.colors[p3] = this.startColors[p3] * (1 - ct * 0.3);
+        this.colors[p3 + 1] = this.startColors[p3 + 1] * (1 - ct * 0.6);
+        this.colors[p3 + 2] = this.startColors[p3 + 2] * (1 - ct * 0.9);
+      }
+
+      this.rotations[i] += dt * 0.5;
+
+      if (this.animated) {
+        const frameOffset = Math.floor(t * this.totalFrames);
+        this.frames[i] = (this.startFrames[i] + frameOffset) % this.totalFrames;
+      }
+
+      changed = true;
+    }
+
+    if (changed) {
+      const geo = this.geometry;
+      geo.instanceCount = this.max;
+      geo.getAttribute('offset').needsUpdate = true;
+      geo.getAttribute('aColor').needsUpdate = true;
+      geo.getAttribute('aAlpha').needsUpdate = true;
+      geo.getAttribute('aScale').needsUpdate = true;
+      geo.getAttribute('aFrame').needsUpdate = true;
+      geo.getAttribute('aRotation').needsUpdate = true;
+    }
+  }
+}
+
+// ── Point Sprite Pool (for small particles like sparks/embers) ──
 
 class PointParticlePool {
   constructor(scene, max, options) {
@@ -36,10 +387,14 @@ class PointParticlePool {
 
     this.positions = new Float32Array(max * 3);
     this.colors = new Float32Array(max * 3);
+    this.startColors = new Float32Array(max * 3);
     this.alphas = new Float32Array(max);
     this.startAlphas = new Float32Array(max);
     this.sizes = new Float32Array(max);
     this.velocities = new Float32Array(max * 3);
+    this.velocityOverLifetime = new Float32Array(max * 3);
+    this.speedLimit = new Float32Array(max);
+    this.speedDampen = new Float32Array(max);
     this.ages = new Float32Array(max);
     this.lifetimes = new Float32Array(max);
     this.drags = new Float32Array(max);
@@ -50,18 +405,15 @@ class PointParticlePool {
     this.active = [];
 
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute(
-      "position",
-      new THREE.BufferAttribute(this.positions, 3)
-    );
+    geometry.setAttribute("position", new THREE.BufferAttribute(this.positions, 3));
     geometry.setAttribute("color", new THREE.BufferAttribute(this.colors, 3));
-    geometry.setAttribute("alpha", new THREE.BufferAttribute(this.alphas, 1));
-    geometry.setAttribute("size", new THREE.BufferAttribute(this.sizes, 1));
+    geometry.setAttribute("aAlpha", new THREE.BufferAttribute(this.alphas, 1));
+    geometry.setAttribute("aSize", new THREE.BufferAttribute(this.sizes, 1));
 
     const material = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
-      depthTest: options.depthTest ?? true,
+      depthTest: true,
       blending: options.blending ?? THREE.AdditiveBlending,
       vertexColors: true,
       uniforms: {
@@ -69,16 +421,16 @@ class PointParticlePool {
         uSizeScale: { value: options.sizeScale ?? 300.0 },
       },
       vertexShader: `
-        attribute float alpha;
-        attribute float size;
+        attribute float aAlpha;
+        attribute float aSize;
         varying float vAlpha;
         varying vec3 vColor;
         uniform float uSizeScale;
         void main() {
-          vAlpha = alpha;
+          vAlpha = aAlpha;
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = size * (uSizeScale / max(1.0, -mvPosition.z));
+          gl_PointSize = aSize * (uSizeScale / max(1.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -90,7 +442,7 @@ class PointParticlePool {
           vec4 tex = texture2D(uMap, gl_PointCoord);
           float a = tex.a * vAlpha;
           if (a <= 0.001) discard;
-          gl_FragColor = vec4(vColor, 1.0) * a;
+          gl_FragColor = vec4(vColor * tex.rgb, 1.0) * a;
         }
       `,
     });
@@ -104,32 +456,26 @@ class PointParticlePool {
     scene.add(this.points);
   }
 
-  setSizeScale(v) {
-    this.material.uniforms.uSizeScale.value = v;
-  }
-
-  setEnabled(enabled) {
-    this.points.visible = !!enabled;
-  }
+  setEnabled(enabled) { this.points.visible = !!enabled; }
 
   emit(params) {
     if (this.free.length === 0) return;
     const i = this.free.pop();
     this.active.push(i);
-
     const p3 = i * 3;
+
     this.positions[p3] = params.x;
     this.positions[p3 + 1] = params.y;
     this.positions[p3 + 2] = params.z;
-
     this.velocities[p3] = params.vx;
     this.velocities[p3 + 1] = params.vy;
     this.velocities[p3 + 2] = params.vz;
-
     this.colors[p3] = params.r;
     this.colors[p3 + 1] = params.g;
     this.colors[p3 + 2] = params.b;
-
+    this.startColors[p3] = params.r;
+    this.startColors[p3 + 1] = params.g;
+    this.startColors[p3 + 2] = params.b;
     this.alphas[i] = params.alpha;
     this.startAlphas[i] = params.alpha;
     this.sizes[i] = params.size;
@@ -137,12 +483,17 @@ class PointParticlePool {
     this.lifetimes[i] = params.life;
     this.drags[i] = params.drag;
     this.rises[i] = params.rise;
+    this.velocityOverLifetime[p3] = params.velocityOverLifetimeX || 0;
+    this.velocityOverLifetime[p3 + 1] = params.velocityOverLifetimeY || 0;
+    this.velocityOverLifetime[p3 + 2] = params.velocityOverLifetimeZ || 0;
+    this.speedLimit[i] = params.speedLimit || 0;
+    this.speedDampen[i] = params.speedDampen || 0;
 
     const geom = this.points.geometry;
     geom.attributes.position.needsUpdate = true;
     geom.attributes.color.needsUpdate = true;
-    geom.attributes.alpha.needsUpdate = true;
-    geom.attributes.size.needsUpdate = true;
+    geom.attributes.aAlpha.needsUpdate = true;
+    geom.attributes.aSize.needsUpdate = true;
   }
 
   update(dt) {
@@ -169,273 +520,291 @@ class PointParticlePool {
       }
 
       const p3 = i * 3;
+
+      // Velocity over lifetime
+      this.velocities[p3] += this.velocityOverLifetime[p3] * dt;
+      this.velocities[p3 + 1] += this.velocityOverLifetime[p3 + 1] * dt;
+      this.velocities[p3 + 2] += this.velocityOverLifetime[p3 + 2] * dt;
+
+      // Speed limiting
+      const limit = this.speedLimit[i];
+      if (limit > 0) {
+        const vx = this.velocities[p3];
+        const vy = this.velocities[p3 + 1];
+        const vz = this.velocities[p3 + 2];
+        const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        if (speed > limit) {
+          const dampen = this.speedDampen[i] || 1.0;
+          const scale = (limit / speed) * (1 - dampen) + dampen;
+          this.velocities[p3] *= scale;
+          this.velocities[p3 + 1] *= scale;
+          this.velocities[p3 + 2] *= scale;
+        }
+      }
+
       this.positions[p3] += this.velocities[p3] * dt;
       this.positions[p3 + 1] += this.velocities[p3 + 1] * dt;
       this.positions[p3 + 2] += this.velocities[p3 + 2] * dt;
-
       this.velocities[p3 + 1] += this.rises[i] * dt;
-
       const drag = this.drags[i];
       this.velocities[p3] *= drag;
       this.velocities[p3 + 1] *= drag;
       this.velocities[p3 + 2] *= drag;
-
       this.alphas[i] = this.startAlphas[i] * (1 - t);
+
+      // Color over lifetime
+      if (t > 0.3) {
+        const ct = (t - 0.3) / 0.7;
+        this.colors[p3] = this.startColors[p3] * (1 - ct * 0.3);
+        this.colors[p3 + 1] = this.startColors[p3 + 1] * (1 - ct * 0.6);
+        this.colors[p3 + 2] = this.startColors[p3 + 2] * (1 - ct * 0.9);
+      }
+
       changed = true;
     }
 
     if (changed) {
       geom.attributes.position.needsUpdate = true;
-      geom.attributes.alpha.needsUpdate = true;
+      geom.attributes.aAlpha.needsUpdate = true;
       geom.attributes.color.needsUpdate = true;
+      geom.attributes.aSize.needsUpdate = true;
     }
   }
 }
 
-const _tmp = new THREE.Vector3();
-const _tmp2 = new THREE.Vector3();
-const _exhaust = new THREE.Vector3();
+// ── Line Spark Pool (velocity-stretched lines for electrical sparks) ──
+
+class LineSparkPool {
+  constructor(scene, max, options = {}) {
+    this.max = max;
+    this.positions = new Float32Array(max * 6); // 2 verts per line (head + tail)
+    this.colors = new Float32Array(max * 6);
+    this.startColors = new Float32Array(max * 3);
+    this.alphas = new Float32Array(max);
+    this.startAlphas = new Float32Array(max);
+    this.headPos = new Float32Array(max * 3);
+    this.velocities = new Float32Array(max * 3);
+    this.velocityOverLifetime = new Float32Array(max * 3);
+    this.speedLimit = new Float32Array(max);
+    this.speedDampen = new Float32Array(max);
+    this.ages = new Float32Array(max);
+    this.lifetimes = new Float32Array(max);
+    this.drags = new Float32Array(max);
+    this.rises = new Float32Array(max);
+    this.trailLength = new Float32Array(max);
+
+    this.free = [];
+    for (let i = max - 1; i >= 0; i--) this.free.push(i);
+    this.active = [];
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(this.positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(this.colors, 3));
+
+    const material = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      blending: options.blending ?? THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: true,
+      linewidth: 1,
+    });
+
+    this.lines = new THREE.LineSegments(geometry, material);
+    this.lines.frustumCulled = false;
+    if (options.renderOrder != null) {
+      this.lines.renderOrder = options.renderOrder;
+    }
+    scene.add(this.lines);
+  }
+
+  setEnabled(enabled) { this.lines.visible = !!enabled; }
+
+  emit(params) {
+    if (this.free.length === 0) return;
+    const i = this.free.pop();
+    this.active.push(i);
+    const p3 = i * 3;
+
+    this.headPos[p3] = params.x;
+    this.headPos[p3 + 1] = params.y;
+    this.headPos[p3 + 2] = params.z;
+    this.velocities[p3] = params.vx;
+    this.velocities[p3 + 1] = params.vy;
+    this.velocities[p3 + 2] = params.vz;
+    this.startColors[p3] = params.r;
+    this.startColors[p3 + 1] = params.g;
+    this.startColors[p3 + 2] = params.b;
+    this.alphas[i] = params.alpha;
+    this.startAlphas[i] = params.alpha;
+    this.ages[i] = 0;
+    this.lifetimes[i] = params.life;
+    this.drags[i] = params.drag;
+    this.rises[i] = params.rise ?? 0;
+    this.trailLength[i] = params.trailLength ?? 0.3;
+    this.velocityOverLifetime[p3] = params.velocityOverLifetimeX ?? 0;
+    this.velocityOverLifetime[p3 + 1] = params.velocityOverLifetimeY ?? 0;
+    this.velocityOverLifetime[p3 + 2] = params.velocityOverLifetimeZ ?? 0;
+    this.speedLimit[i] = params.speedLimit ?? 0;
+    this.speedDampen[i] = params.speedDampen ?? 0;
+
+    // Set initial line segment (head = tail at spawn)
+    const p6 = i * 6;
+    this.positions[p6] = params.x;
+    this.positions[p6 + 1] = params.y;
+    this.positions[p6 + 2] = params.z;
+    this.positions[p6 + 3] = params.x;
+    this.positions[p6 + 4] = params.y;
+    this.positions[p6 + 5] = params.z;
+    this.colors[p6] = params.r;
+    this.colors[p6 + 1] = params.g;
+    this.colors[p6 + 2] = params.b;
+    this.colors[p6 + 3] = params.r * 0.3;
+    this.colors[p6 + 4] = params.g * 0.3;
+    this.colors[p6 + 5] = params.b * 0.3;
+  }
+
+  update(dt) {
+    let changed = false;
+    for (let a = this.active.length - 1; a >= 0; a--) {
+      const i = this.active[a];
+      this.ages[i] += dt;
+      const t = this.ages[i] / this.lifetimes[i];
+
+      if (t >= 1) {
+        const p6 = i * 6;
+        this.positions[p6] = this.positions[p6 + 3] = 0;
+        this.positions[p6 + 1] = this.positions[p6 + 4] = 0;
+        this.positions[p6 + 2] = this.positions[p6 + 5] = 0;
+        this.colors[p6] = this.colors[p6 + 1] = this.colors[p6 + 2] = 0;
+        this.colors[p6 + 3] = this.colors[p6 + 4] = this.colors[p6 + 5] = 0;
+        this.active[a] = this.active[this.active.length - 1];
+        this.active.pop();
+        this.free.push(i);
+        changed = true;
+        continue;
+      }
+
+      const p3 = i * 3;
+      const p6 = i * 6;
+
+      // Velocity over lifetime
+      this.velocities[p3] += this.velocityOverLifetime[p3] * dt;
+      this.velocities[p3 + 1] += this.velocityOverLifetime[p3 + 1] * dt;
+      this.velocities[p3 + 2] += this.velocityOverLifetime[p3 + 2] * dt;
+
+      // Speed limiting
+      const sl = this.speedLimit[i];
+      if (sl > 0) {
+        const vx = this.velocities[p3];
+        const vy = this.velocities[p3 + 1];
+        const vz = this.velocities[p3 + 2];
+        const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        if (speed > sl) {
+          const factor = 1 - this.speedDampen[i] * (1 - sl / speed);
+          this.velocities[p3] *= factor;
+          this.velocities[p3 + 1] *= factor;
+          this.velocities[p3 + 2] *= factor;
+        }
+      }
+
+      // Move head
+      this.headPos[p3] += this.velocities[p3] * dt;
+      this.headPos[p3 + 1] += this.velocities[p3 + 1] * dt;
+      this.headPos[p3 + 2] += this.velocities[p3 + 2] * dt;
+      this.velocities[p3 + 1] += this.rises[i] * dt;
+      const drag = this.drags[i];
+      this.velocities[p3] *= drag;
+      this.velocities[p3 + 1] *= drag;
+      this.velocities[p3 + 2] *= drag;
+
+      // Head vertex = current position
+      this.positions[p6] = this.headPos[p3];
+      this.positions[p6 + 1] = this.headPos[p3 + 1];
+      this.positions[p6 + 2] = this.headPos[p3 + 2];
+
+      // Tail vertex = head - velocity * trailLength (stretched behind)
+      const vx = this.velocities[p3];
+      const vy = this.velocities[p3 + 1];
+      const vz = this.velocities[p3 + 2];
+      const tl = this.trailLength[i];
+      this.positions[p6 + 3] = this.headPos[p3] - vx * tl;
+      this.positions[p6 + 4] = this.headPos[p3 + 1] - vy * tl;
+      this.positions[p6 + 5] = this.headPos[p3 + 2] - vz * tl;
+
+      // Fade colors
+      const alpha = this.startAlphas[i] * (1 - t);
+      this.colors[p6] = this.startColors[p3] * alpha;
+      this.colors[p6 + 1] = this.startColors[p3 + 1] * alpha;
+      this.colors[p6 + 2] = this.startColors[p3 + 2] * alpha;
+      this.colors[p6 + 3] = this.startColors[p3] * alpha * 0.2;
+      this.colors[p6 + 4] = this.startColors[p3 + 1] * alpha * 0.2;
+      this.colors[p6 + 5] = this.startColors[p3 + 2] * alpha * 0.2;
+
+      changed = true;
+    }
+
+    if (changed) {
+      this.lines.geometry.attributes.position.needsUpdate = true;
+      this.lines.geometry.attributes.color.needsUpdate = true;
+    }
+  }
+}
+
+// ── ParticleSystem: owns the pools, effects use them ──
 
 export class ParticleSystem {
-  constructor(scene) {
-    const map = createRadialTexture(64);
+  constructor(scene, perfProfile = null) {
+    const p = perfProfile?.particles || {};
+    const basePath = './vfx/';
+    const fireMap = loadTexture(basePath + 'FlameRoundParticleSheet.png');
+    const debrisFireMap = loadTexture(basePath + 'FlameParticleSheet.png');
+    const smokeMap = loadTexture(basePath + 'SmokePuffParticleSheet.png');
+    const emberMap = loadTexture(basePath + 'RoundSoftParticle.png');
 
-    this.sparks = new PointParticlePool(scene, 500, {
-      map,
+    console.log('[VFX] Initializing ParticleSystem, profile:', perfProfile?.label || 'default');
+
+    this.lineSparks = new LineSparkPool(scene, p.lineSparks || 600, {
+      blending: THREE.AdditiveBlending,
+    });
+
+    this.sparks = new PointParticlePool(scene, p.sparks || 500, {
+      map: emberMap,
       blending: THREE.AdditiveBlending,
       sizeScale: 42,
     });
-    this.fire = new PointParticlePool(scene, 300, {
-      map,
+
+    this.fire = new BillboardParticlePool(scene, p.fire || 300, {
+      map: fireMap,
+      tilesX: 10, tilesY: 5,
       blending: THREE.AdditiveBlending,
-      sizeScale: 26,
-      depthTest: false,
-      renderOrder: 9999,
     });
-    this.smoke = new PointParticlePool(scene, 200, {
-      map,
+
+    this.smoke = new BillboardParticlePool(scene, p.smoke || 200, {
+      map: smokeMap,
+      tilesX: 5, tilesY: 5,
+      blending: THREE.NormalBlending,
+      premultipliedAlpha: true,
+    });
+
+    this.debrisFire = new BillboardParticlePool(scene, p.debrisFire || 200, {
+      map: debrisFireMap,
+      tilesX: 6, tilesY: 6,
       blending: THREE.AdditiveBlending,
-      sizeScale: 36,
     });
   }
 
   update(dt) {
+    this.lineSparks.update(dt);
     this.sparks.update(dt);
     this.fire.update(dt);
     this.smoke.update(dt);
+    this.debrisFire.update(dt);
   }
 
-  setFireSizeScale(v) {
-    this.fire.setSizeScale(v);
-  }
-  setSmokeSizeScale(v) {
-    this.smoke.setSizeScale(v);
-  }
-  setSparksSizeScale(v) {
-    this.sparks.setSizeScale(v);
-  }
-
-  enableFire(enabled) {
-    this.fire.setEnabled(enabled);
-  }
-  enableSmoke(enabled) {
-    this.smoke.setEnabled(enabled);
-  }
-  enableSparks(enabled) {
-    this.sparks.setEnabled(enabled);
-  }
-
-  emitHitSparks(position, color = { r: 1, g: 0.6, b: 0.2 }, count = 20) {
-    for (let i = 0; i < count; i++) {
-      const speed = 8 + Math.random() * 12;
-      const vx = (Math.random() - 0.5) * 2;
-      const vy = (Math.random() - 0.5) * 2;
-      const vz = (Math.random() - 0.5) * 2;
-      const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-      
-      this.sparks.emit({
-        x: position.x + (Math.random() - 0.5) * 0.3,
-        y: position.y + (Math.random() - 0.5) * 0.3,
-        z: position.z + (Math.random() - 0.5) * 0.3,
-        vx: (vx / len) * speed,
-        vy: (vy / len) * speed,
-        vz: (vz / len) * speed,
-        r: color.r,
-        g: color.g + Math.random() * 0.2,
-        b: color.b,
-        alpha: 1.0,
-        size: 6 + Math.random() * 8,
-        life: 0.2 + Math.random() * 0.3,
-        drag: 0.94,
-        rise: -2,
-      });
-    }
-  }
-
-  emitExplosionParticles(position, color = { r: 1, g: 0.5, b: 0.1 }, count = 60) {
-    // Fiery core particles
-    for (let i = 0; i < count; i++) {
-      const speed = 5 + Math.random() * 15;
-      const vx = (Math.random() - 0.5) * 2;
-      const vy = (Math.random() - 0.5) * 2;
-      const vz = (Math.random() - 0.5) * 2;
-      const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-      
-      const hot = Math.random() > 0.4;
-      this.fire.emit({
-        x: position.x + (Math.random() - 0.5) * 0.5,
-        y: position.y + (Math.random() - 0.5) * 0.5,
-        z: position.z + (Math.random() - 0.5) * 0.5,
-        vx: (vx / len) * speed,
-        vy: (vy / len) * speed,
-        vz: (vz / len) * speed,
-        r: hot ? 1.0 : color.r,
-        g: hot ? 0.9 : color.g,
-        b: hot ? 0.6 : color.b,
-        alpha: 1.0,
-        size: 20 + Math.random() * 30,
-        life: 0.3 + Math.random() * 0.4,
-        drag: 0.90,
-        rise: 1,
-      });
-    }
-
-    // Sparks shooting outward
-    for (let i = 0; i < count * 1.5; i++) {
-      const speed = 12 + Math.random() * 25;
-      const vx = (Math.random() - 0.5) * 2;
-      const vy = (Math.random() - 0.5) * 2;
-      const vz = (Math.random() - 0.5) * 2;
-      const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-      
-      this.sparks.emit({
-        x: position.x,
-        y: position.y,
-        z: position.z,
-        vx: (vx / len) * speed,
-        vy: (vy / len) * speed,
-        vz: (vz / len) * speed,
-        r: 1.0,
-        g: 0.7 + Math.random() * 0.3,
-        b: 0.2,
-        alpha: 1.0,
-        size: 4 + Math.random() * 6,
-        life: 0.4 + Math.random() * 0.5,
-        drag: 0.96,
-        rise: -1,
-      });
-    }
-
-    // Smoke trails
-    for (let i = 0; i < count / 2; i++) {
-      const speed = 2 + Math.random() * 5;
-      const vx = (Math.random() - 0.5) * 2;
-      const vy = Math.random() * 0.5 + 0.5;
-      const vz = (Math.random() - 0.5) * 2;
-      
-      this.smoke.emit({
-        x: position.x + (Math.random() - 0.5) * 1,
-        y: position.y + (Math.random() - 0.5) * 1,
-        z: position.z + (Math.random() - 0.5) * 1,
-        vx: vx * speed,
-        vy: vy * speed,
-        vz: vz * speed,
-        r: 0.4,
-        g: 0.4,
-        b: 0.4,
-        alpha: 0.6,
-        size: 30 + Math.random() * 40,
-        life: 1.2 + Math.random() * 0.8,
-        drag: 0.95,
-        rise: 3,
-      });
-    }
-  }
-
-  emitMissileExhaust(worldPos, worldQuat, dir) {
-    // Missile local +Z is forward, so exhaust should be at -Z (behind the missile),
-    // otherwise it spawns in front and can bloom over the whole view.
-    _exhaust.set(0, 0, -0.35).applyQuaternion(worldQuat).add(worldPos);
-    _tmp.copy(dir).negate();
-
-    // Afterburner fire puffs (short-lived, hot core)
-    for (let i = 0; i < 1; i++) {
-      _tmp2.copy(_tmp).multiplyScalar(0.8 + Math.random() * 1.4);
-      _tmp2.x += (Math.random() - 0.5) * 0.8;
-      _tmp2.y += (Math.random() - 0.5) * 0.8;
-      _tmp2.z += (Math.random() - 0.5) * 0.8;
-
-      const hot = Math.random() > 0.5;
-      this.fire.emit({
-        x: _exhaust.x + (Math.random() - 0.5) * 0.12,
-        y: _exhaust.y + (Math.random() - 0.5) * 0.12,
-        z: _exhaust.z + (Math.random() - 0.5) * 0.12,
-        vx: _tmp2.x,
-        vy: _tmp2.y,
-        vz: _tmp2.z,
-        r: 1.0,
-        g: hot ? 0.55 : 0.75,
-        b: hot ? 0.08 : 0.2,
-        alpha: 0.8,
-        size: 18 + Math.random() * 12,
-        life: 0.12 + Math.random() * 0.08,
-        drag: 0.92,
-        rise: 0.1,
-      });
-    }
-
-    for (let i = 0; i < 2; i++) {
-      const s = 0.5 + Math.random() * 0.8;
-      const jx = (Math.random() - 0.5) * 0.12;
-      const jy = (Math.random() - 0.5) * 0.12;
-      const jz = (Math.random() - 0.5) * 0.12;
-
-      _tmp2.copy(_tmp).multiplyScalar(3 + Math.random() * 5);
-      _tmp2.x += (Math.random() - 0.5) * 2.2;
-      _tmp2.y += (Math.random() - 0.5) * 2.2;
-      _tmp2.z += (Math.random() - 0.5) * 2.2;
-
-      const warm = Math.random() > 0.35;
-      this.sparks.emit({
-        x: _exhaust.x + jx,
-        y: _exhaust.y + jy,
-        z: _exhaust.z + jz,
-        vx: _tmp2.x,
-        vy: _tmp2.y,
-        vz: _tmp2.z,
-        r: warm ? 1.0 : 1.0,
-        g: warm ? 0.67 : 1.0,
-        b: warm ? 0.15 : 1.0,
-        alpha: 0.9,
-        size: 8 * s,
-        life: 0.18 + Math.random() * 0.12,
-        drag: 0.93,
-        rise: 0,
-      });
-    }
-
-    if (Math.random() > 0.25) {
-      _tmp2.copy(_tmp).multiplyScalar(1 + Math.random() * 2);
-      _tmp2.x += (Math.random() - 0.5) * 0.6;
-      _tmp2.y += Math.random() * 0.7;
-      _tmp2.z += (Math.random() - 0.5) * 0.6;
-
-      this.smoke.emit({
-        x: _exhaust.x + (Math.random() - 0.5) * 0.2,
-        y: _exhaust.y + (Math.random() - 0.5) * 0.2,
-        z: _exhaust.z + (Math.random() - 0.5) * 0.2,
-        vx: _tmp2.x,
-        vy: _tmp2.y,
-        vz: _tmp2.z,
-        r: 0.5,
-        g: 0.5,
-        b: 0.5,
-        alpha: 0.42,
-        size: 26 + Math.random() * 16,
-        life: 0.9 + Math.random() * 0.6,
-        drag: 0.92,
-        rise: 2.2,
-      });
-    }
-  }
+  enableFire(enabled) { this.fire.setEnabled(enabled); }
+  enableSmoke(enabled) { this.smoke.setEnabled(enabled); }
+  enableSparks(enabled) { this.sparks.setEnabled(enabled); }
 }
+
+export { PointParticlePool, BillboardParticlePool, LineSparkPool };

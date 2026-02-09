@@ -13,12 +13,23 @@ class ProceduralAudio {
     this.masterGain = null;
     this.sfxVolume = 0.5;
     this.initialized = false;
+    
+    // Laser sound files and iterator
+    this.laserSoundFiles = [];
+    this.laserSoundBuffers = []; // Audio buffers for spatial audio
+    this.laserSoundIndex = 0;
+    this.laserSoundsLoaded = false;
+    
+    // Listener position (camera position) for spatial audio
+    this.listenerPosition = { x: 0, y: 0, z: 0 };
+    this.listenerForward = { x: 0, y: 0, z: -1 };
+    this.listenerUp = { x: 0, y: 1, z: 0 };
   }
 
   /**
    * Initialize audio context (must be called after user interaction)
    */
-  init() {
+  async init() {
     if (this.initialized) return;
     
     try {
@@ -28,8 +39,83 @@ class ProceduralAudio {
       this.masterGain.gain.value = this.sfxVolume;
       this.initialized = true;
       console.log("[ProceduralAudio] Initialized");
+      
+      // Load laser sound files (async)
+      await this._loadLaserSounds();
     } catch (e) {
       console.error("[ProceduralAudio] Failed to initialize:", e);
+    }
+  }
+  
+  /**
+   * Load laser sound files as AudioBuffers for spatial audio
+   */
+  async _loadLaserSounds() {
+    if (this.laserSoundsLoaded) return;
+    
+    if (!this.ctx) {
+      console.warn("[ProceduralAudio] Cannot load laser sounds: audio context not initialized");
+      return;
+    }
+    
+    this.laserSoundFiles = [
+      './audio/sfx/laser-01.mp3',
+      './audio/sfx/laser-02.mp3',
+      './audio/sfx/laser-03.mp3',
+      './audio/sfx/laser-04.mp3',
+      './audio/sfx/laser-05.mp3',
+      './audio/sfx/laser-06.mp3',
+      './audio/sfx/laser-07.mp3',
+      './audio/sfx/laser-08.mp3'
+    ];
+    
+    // Load all sounds as AudioBuffers
+    try {
+      const loadPromises = this.laserSoundFiles.map(async (file) => {
+        const response = await fetch(file);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+        return audioBuffer;
+      });
+      
+      this.laserSoundBuffers = await Promise.all(loadPromises);
+      this.laserSoundsLoaded = true;
+      console.log(`[ProceduralAudio] Loaded ${this.laserSoundBuffers.length} laser sounds as AudioBuffers`);
+    } catch (error) {
+      console.error("[ProceduralAudio] Failed to load laser sounds:", error);
+    }
+  }
+  
+  /**
+   * Update listener position (camera position) for spatial audio
+   */
+  setListenerPosition(position, forward, up) {
+    if (!this.ctx || !this.ctx.listener) return;
+    
+    this.listenerPosition = position;
+    this.listenerForward = forward || { x: 0, y: 0, z: -1 };
+    this.listenerUp = up || { x: 0, y: 1, z: 0 };
+    
+    // Update Web Audio API listener
+    const listener = this.ctx.listener;
+    if (listener.positionX) {
+      // New API (Chrome)
+      listener.positionX.value = position.x;
+      listener.positionY.value = position.y;
+      listener.positionZ.value = position.z;
+      listener.forwardX.value = this.listenerForward.x;
+      listener.forwardY.value = this.listenerForward.y;
+      listener.forwardZ.value = this.listenerForward.z;
+      listener.upX.value = this.listenerUp.x;
+      listener.upY.value = this.listenerUp.y;
+      listener.upZ.value = this.listenerUp.z;
+    } else {
+      // Old API (fallback)
+      listener.setPosition(position.x, position.y, position.z);
+      listener.setOrientation(
+        this.listenerForward.x, this.listenerForward.y, this.listenerForward.z,
+        this.listenerUp.x, this.listenerUp.y, this.listenerUp.z
+      );
     }
   }
 
@@ -50,6 +136,10 @@ class ProceduralAudio {
     if (this.masterGain) {
       this.masterGain.gain.value = this.sfxVolume;
     }
+    // Update laser sound volumes
+    this.laserSounds.forEach(sound => {
+      sound.volume = this.sfxVolume;
+    });
   }
 
   // ============================================
@@ -212,9 +302,80 @@ class ProceduralAudio {
   // ============================================
 
   /**
-   * Laser fire sound
+   * Laser fire sound - cycles through laser-01 through laser-08
+   * @param {THREE.Vector3} position - World position of the laser spawn point
    */
-  laserFire() {
+  laserFire(position = null) {
+    if (!this.ctx) {
+      this.resume();
+    }
+    
+    if (!this.laserSoundsLoaded || !this.laserSoundBuffers || this.laserSoundBuffers.length === 0) {
+      // Audio files not loaded yet - skip (procedural fallback disabled)
+      return;
+    }
+    
+    // Get current sound buffer using modulo iterator
+    const audioBuffer = this.laserSoundBuffers[this.laserSoundIndex % this.laserSoundBuffers.length];
+    
+    // Create AudioBufferSourceNode
+    const source = this.ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    
+    // Create gain node for volume control
+    const gainNode = this.ctx.createGain();
+    gainNode.gain.value = this.sfxVolume;
+    
+    if (position && this.ctx.listener) {
+      // Spatial audio with PannerNode
+      const panner = this.ctx.createPanner();
+      panner.panningModel = 'HRTF'; // High-quality 3D audio
+      panner.distanceModel = 'inverse';
+      panner.refDistance = 1;
+      panner.maxDistance = 100;
+      panner.rolloffFactor = 1;
+      panner.coneInnerAngle = 360;
+      panner.coneOuterAngle = 0;
+      panner.coneOuterGain = 0;
+      
+      // Set source position
+      if (panner.positionX) {
+        // New API (Chrome)
+        panner.positionX.value = position.x;
+        panner.positionY.value = position.y;
+        panner.positionZ.value = position.z;
+      } else {
+        // Old API (fallback)
+        panner.setPosition(position.x, position.y, position.z);
+      }
+      
+      // Connect: source -> gain -> panner -> masterGain
+      source.connect(gainNode);
+      gainNode.connect(panner);
+      panner.connect(this.masterGain);
+    } else {
+      // Non-spatial audio (fallback)
+      source.connect(gainNode);
+      gainNode.connect(this.masterGain);
+    }
+    
+    // Play the sound
+    source.start(0);
+    
+    // Clean up after sound finishes
+    source.onended = () => {
+      if (gainNode) gainNode.disconnect();
+      if (source) source.disconnect();
+    };
+    
+    // Increment index for next call
+    this.laserSoundIndex = (this.laserSoundIndex + 1) % this.laserSoundBuffers.length;
+  }
+  
+  /**
+   * Fallback procedural laser fire (if audio files not loaded)
+   */
+  _laserFireProcedural() {
     if (!this.ctx) return;
     this.resume();
     

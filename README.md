@@ -152,6 +152,17 @@ npx @colyseus/cloud deploy
 ```
 Requires Colyseus Cloud account and deploy key configured in GitHub repo.
 
+## Splat LOD Processing
+
+Convert PLY splat files to paged LOD-enabled SPZ format for streaming:
+
+```bash
+# From the spark-lod repo (already cloned at c:/Users/James/work/spark-lod)
+c:/Users/James/work/spark-lod/rust/target/release/build-lod.exe --chunked public/splats/your-file.ply
+```
+
+This generates chunked files `your-file-lod-0.spz`, `your-file-lod-1.spz`, etc. Update `src/data/sceneData.js` with the base path (without extension) and `paged: true`.
+
 ## Configuration
 
 ### Switching between local and cloud server
@@ -165,6 +176,78 @@ const CLOUD_SERVER_URL = "https://us-ord-23ba76a6.colyseus.cloud";
 // Use local server
 const CLOUD_SERVER_URL = null;
 ```
+
+## Performance Profiles
+
+The game supports 4 performance profiles: `low`, `medium`, `high`, `max`. Set via Options → Graphics in-game, persisted to `localStorage`.
+
+Profiles control:
+- **Particle pool sizes** (sparks, fire, smoke, debris, line sparks)
+- **Explosion particle scale and debris count**
+- **Renderer pixel ratio**
+- **Shadow maps on/off**
+
+Defined in `src/data/performanceSettings.js`. Default is `high`.
+
+### Accessing performance settings from code
+
+```javascript
+// Current profile name
+window.gameManager.state.performanceProfile // "low" | "medium" | "high" | "max"
+
+// Full profile object
+const perf = window.gameManager.getPerformanceProfile();
+
+// Specific value
+const count = window.gameManager.getPerformanceSetting("particles", "debrisCount");
+```
+
+### In sceneData criteria
+
+```javascript
+criteria: {
+  performanceProfile: { $in: ["high", "max"] },
+}
+```
+
+## VFX Architecture
+
+Particle effects use a modular composition pattern:
+
+```
+src/vfx/
+├── ParticleSystem.js          # Pool manager (sparks, fire, smoke, debrisFire, lineSparks)
+├── DynamicLightPool.js        # Pooled point light flashes
+└── effects/
+    ├── ExplosionEffect.js     # Big explosions, small explosions (uses pools)
+    ├── SparksEffect.js        # Hit sparks, electrical sparks (uses pools)
+    └── TrailsEffect.js        # Missile exhaust trails (uses pools)
+```
+
+`ParticleSystem` owns the GPU pools (billboard quads, point sprites, line segments). Effect classes are pure logic that emit into the pools. New effects are added by creating a new file in `effects/` and calling `particles.fire.emit(...)` etc.
+
+Pool types:
+- **BillboardParticlePool** — Instanced quads, camera-facing, sprite sheet animation. For fire, smoke, debris fire.
+- **PointParticlePool** — GL point sprites. For tiny sparks and embers.
+- **LineSparkPool** — Velocity-stretched line segments. For electrical sparks and debris streaks.
+
+## Debug Tools
+
+### Solo Debug Mode
+Add `?solo` to URL to skip menus and spawn directly into a single-player match with AI enemies.
+
+### Gizmo Manager
+Add `?gizmo` to URL to enable transform gizmos. Register any Three.js object:
+
+```javascript
+window.gizmoManager.registerObject(someObject, "my-id", "type");
+```
+
+Objects in `sceneData.js` with `gizmo: true` auto-register when loaded.
+
+**Keyboard:** G (translate), R (rotate), X (scale), Space (world/local), H (hide), U (cycle/teleport), P (spawn gizmo).
+
+Transform values log to console on drag release for copy-paste.
 
 ## Game Features
 

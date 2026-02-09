@@ -98,6 +98,9 @@ export const initialState = {
   
   // Current level/environment
   currentLevel: "hangar",
+
+  // Performance
+  performanceProfile: null, // Set on init from saved settings or auto-detected
 };
 
 export default { GAME_STATES, LEVELS, SHIP_CLASSES, initialState };

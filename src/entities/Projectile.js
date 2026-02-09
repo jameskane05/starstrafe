@@ -11,7 +11,7 @@ const playerMaterial = new THREE.MeshBasicMaterial({
   transparent: true,
   opacity: 1.0,
   depthWrite: false,
-  depthTest: false,
+  depthTest: true,
   blending: THREE.AdditiveBlending,
 });
 
@@ -20,7 +20,7 @@ const enemyMaterial = new THREE.MeshBasicMaterial({
   transparent: true,
   opacity: 1.0,
   depthWrite: false,
-  depthTest: false,
+  depthTest: true,
   blending: THREE.AdditiveBlending,
 });
 
@@ -48,6 +48,7 @@ export class Projectile {
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.position.copy(position);
     this.mesh.quaternion.setFromUnitVectors(_forward, this.direction);
+    // Occlusion handled by physics mesh depth buffer
     
     scene.add(this.mesh);
     console.log("[Projectile] Created at", position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1), "dir:", this.direction.x.toFixed(2), this.direction.y.toFixed(2), this.direction.z.toFixed(2), "speed:", this.speed);

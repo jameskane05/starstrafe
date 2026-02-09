@@ -10,6 +10,8 @@ const missileMaterial = new THREE.MeshStandardMaterial({
   emissiveIntensity: 4,
   transparent: true,
   opacity: 0.95,
+  depthWrite: false,
+  depthTest: true,
 });
 
 const trailGeometry = new THREE.CylinderGeometry(0.02, 0.06, 0.4, 6);
@@ -22,6 +24,8 @@ const trailMaterial = new THREE.MeshStandardMaterial({
   emissiveIntensity: 6,
   transparent: true,
   opacity: 0.7,
+  depthWrite: false,
+  depthTest: true,
 });
 
 const _forward = new THREE.Vector3(0, 0, 1);
@@ -42,12 +46,13 @@ export class Missile {
     this.homingRange = 40;
     this.homingStrength = 3;
     this.target = null;
-    this.particles = options.particles || null;
+    this.trailsEffect = options.trailsEffect || null;
     this.spawnTimer = 0;
     this.spawnRate = 0.02;
 
     this.group = new THREE.Group();
     this.group.position.copy(position);
+    // Occlusion handled by physics mesh depth buffer
 
     this.mesh = new THREE.Mesh(missileGeometry, missileMaterial);
     this.group.add(this.mesh);
@@ -82,11 +87,11 @@ export class Missile {
 
     this.trail.material.opacity = 0.6 + Math.random() * 0.25;
 
-    if (this.particles) {
+    if (this.trailsEffect) {
       this.spawnTimer += delta;
       while (this.spawnTimer >= this.spawnRate) {
         this.spawnTimer -= this.spawnRate;
-        this.particles.emitMissileExhaust(
+        this.trailsEffect.emitMissileExhaust(
           this.group.position,
           this.group.quaternion,
           this.direction

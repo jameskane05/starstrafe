@@ -14,6 +14,7 @@
     "deploy:gh": "npm run build:client && gh-pages -d dist"
   },
   "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.1.4",
     "concurrently": "^9.1.2",
     "gh-pages": "^6.3.0",
     "kill-port": "^2.0.1",

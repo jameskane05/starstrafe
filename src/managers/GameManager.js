@@ -10,6 +10,9 @@
 
 import { GAME_STATES, initialState } from "../data/gameData.js";
 import { getSceneObjectsForState } from "../data/sceneData.js";
+import { DEFAULT_PROFILE, getPerformanceProfile } from "../data/performanceSettings.js";
+
+const SETTINGS_KEY = "starstrafe-settings";
 
 class GameManager {
   constructor() {
@@ -24,6 +27,48 @@ class GameManager {
 
     // Track loaded scene objects
     this.loadedScenes = new Set();
+
+    // Load saved settings and apply performance profile to initial state
+    this.savedSettings = this.loadSettings();
+    this.state.performanceProfile = this.savedSettings.performanceProfile || DEFAULT_PROFILE;
+  }
+
+  loadSettings() {
+    try {
+      const saved = localStorage.getItem(SETTINGS_KEY);
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  saveSettings() {
+    try {
+      const settings = {
+        performanceProfile: this.state.performanceProfile,
+        ...(this.savedSettings || {}),
+      };
+      settings.performanceProfile = this.state.performanceProfile;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      this.savedSettings = settings;
+    } catch (e) {
+      console.warn("[GameManager] Failed to save settings:", e);
+    }
+  }
+
+  setPerformanceProfile(profile) {
+    this.setState({ performanceProfile: profile });
+    this.saveSettings();
+    console.log(`[GameManager] Performance profile set to: ${profile}`);
+  }
+
+  getPerformanceProfile() {
+    return getPerformanceProfile(this.state.performanceProfile);
+  }
+
+  getPerformanceSetting(category, key) {
+    const profile = this.getPerformanceProfile();
+    return profile?.[category]?.[key];
   }
 
   /**

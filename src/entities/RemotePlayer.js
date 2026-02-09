@@ -13,20 +13,20 @@ const TEAM_COLORS = {
   2: 0x4488ff,
 };
 
-let cockpitModel = null;
-let cockpitLoading = null;
+let exteriorModel = null;
+let exteriorLoading = null;
 
-async function loadCockpitModel() {
-  if (cockpitModel) return cockpitModel;
-  if (cockpitLoading) return cockpitLoading;
+async function loadExteriorModel() {
+  if (exteriorModel) return exteriorModel;
+  if (exteriorLoading) return exteriorLoading;
   
-  cockpitLoading = new Promise((resolve) => {
+  exteriorLoading = new Promise((resolve) => {
     const loader = new GLTFLoader();
     loader.load(
-      "./cockpit.glb",
+      "./Heavy_EXT_01.glb",
       (gltf) => {
-        cockpitModel = gltf.scene;
-        resolve(cockpitModel);
+        exteriorModel = gltf.scene;
+        resolve(exteriorModel);
       },
       undefined,
       () => {
@@ -35,7 +35,7 @@ async function loadCockpitModel() {
     );
   });
   
-  return cockpitLoading;
+  return exteriorLoading;
 }
 
 export class RemotePlayer {
@@ -71,23 +71,12 @@ export class RemotePlayer {
   }
 
   async createShipMesh() {
-    const model = await loadCockpitModel();
+    const model = await loadExteriorModel();
     
     if (model) {
       const clone = model.clone();
       clone.scale.setScalar(0.5);
-      
-      const color = this.teamMode && this.team > 0
-        ? TEAM_COLORS[this.team]
-        : SHIP_COLORS[this.shipClass] || 0x00f0ff;
-      
-      clone.traverse((child) => {
-        if (child.isMesh) {
-          child.material = child.material.clone();
-          child.material.emissive = new THREE.Color(color);
-          child.material.emissiveIntensity = 0.3;
-        }
-      });
+      clone.rotation.set(Math.PI, Math.PI, 0);  // Flip Y to face -Z, flip X to correct roll
       
       this.shipMesh = clone;
       this.mesh.add(clone);

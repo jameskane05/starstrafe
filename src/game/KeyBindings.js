@@ -17,6 +17,7 @@ export const DEFAULT_BINDINGS = {
   lookRight: 'ArrowRight',
   leaderboard: 'Tab',
   pause: 'Escape',
+  toggleHeadlight: 'KeyL',
 };
 
 export const ACTION_LABELS = {
@@ -35,6 +36,7 @@ export const ACTION_LABELS = {
   lookRight: 'Look Right',
   leaderboard: 'Show Leaderboard',
   pause: 'Escape Menu',
+  toggleHeadlight: 'Toggle Headlight',
 };
 
 export const KEY_DISPLAY_NAMES = {

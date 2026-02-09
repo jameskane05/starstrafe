@@ -22,39 +22,40 @@ export const sceneObjects = {
   level: {
     id: "level",
     type: "splat",
-    path: "https://public-spz.t3.storage.dev/cozyspaceship2/cozy-spaceship_2-lod-0.spz",
+    path: "/starstrafe/splats/scifi-lod/scifi-lod-0.spz",
     description: "Level environment gaussian splat with LOD",
-    position: { x: 0, y: 0, z: 0 },
+    position: { x: 0, y: -90, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
-    scale: 20,
+    scale: 1,
     priority: 100,
-    preload: false,  // Don't preload - load when game starts
-    paged: true,     // Enable streaming for LOD files
+    preload: false,
+    paged: true,
+    gizmo: false,
     criteria: {
       currentLevel: "hangar",
       currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
     },
   },
 
-  // hangarCollider disabled - using new level splat
-  // hangarCollider: {
-  //   id: "hangarCollider",
-  //   type: "gltf",
-  //   path: "/hangar-collider.glb",
-  //   description: "Hangar physics collider mesh",
-  //   position: { x: 0, y: 0, z: 0 },
-  //   rotation: { x: 0, y: 0, z: 0 },
-  //   scale: 20,
-  //   priority: 90,
-  //   preload: true,
-  //   options: {
-  //     visible: false,
-  //     physicsCollider: true,
-  //   },
-  //   criteria: {
-  //     currentLevel: "hangar",
-  //   },
-  // },
+  levelOcclusion: {
+    id: "levelOcclusion",
+    type: "gltf",
+    path: "/starstrafe-level1-phys.glb",
+    position: { x: 0, y: -90, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 1,
+    priority: 95,
+    preload: false,
+    gizmo: true,
+    options: {
+      occluder: true, // Writes to depth buffer for particle/projectile occlusion
+      debugWireframe: true, // Show wireframe for alignment (disable for production)
+    },
+    criteria: {
+      currentLevel: "hangar",
+      currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
+    },
+  },
 };
 
 /**

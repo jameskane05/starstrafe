@@ -1,154 +1,71 @@
 import * as THREE from 'three';
 
-const DEBRIS_COUNT = 16;
-const EXPLOSION_DURATION = 1.2;
-const BIG_DEBRIS_COUNT = 32;
-const BIG_EXPLOSION_DURATION = 2.0;
+/**
+ * Explosion – dynamic light flash + subtle shockwave distortion.
+ * All particle effects come from ParticleSystem.emitBigExplosion().
+ */
 
-const sharedGeometries = {
-  tetra: new THREE.TetrahedronGeometry(1),
-  octa: new THREE.OctahedronGeometry(1),
-  box: new THREE.BoxGeometry(1, 0.5, 0.3),
-  flash: new THREE.SphereGeometry(0.3, 8, 8),
-  glow: new THREE.SphereGeometry(0.6, 8, 8),
-};
+const sharedSphere = new THREE.SphereGeometry(1, 12, 8);
 
 export class Explosion {
   constructor(scene, position, color = 0xff6600, lightPool = null, options = {}) {
     this.scene = scene;
     this.elapsed = 0;
     this.isBig = options.big || false;
-    this.duration = this.isBig ? BIG_EXPLOSION_DURATION : EXPLOSION_DURATION;
+    this.duration = this.isBig ? 0.5 : 0.25;
     this.disposed = false;
 
+    // Dynamic light flash
     if (lightPool) {
       lightPool.flash(position, color, {
-        intensity: this.isBig ? 50 : 22,
-        distance: this.isBig ? 50 : 26,
+        intensity: this.isBig ? 80 : 22,
+        distance: this.isBig ? 60 : 26,
         ttl: this.isBig ? 0.2 : 0.12,
         fade: this.isBig ? 0.4 : 0.22,
       });
     }
-    
-    this.group = new THREE.Group();
-    this.group.position.copy(position);
-    scene.add(this.group);
-    
-    this.debris = [];
-    this.createDebris(color);
-    this.createFlash(color);
-  }
 
-  createDebris(baseColor) {
-    const colors = [
-      baseColor,
-      0xffaa00,
-      0xff3300,
-      0xffffff,
-    ];
-    const geoTypes = [sharedGeometries.tetra, sharedGeometries.octa, sharedGeometries.box];
-    const debrisCount = this.isBig ? BIG_DEBRIS_COUNT : DEBRIS_COUNT;
-    const sizeMultiplier = this.isBig ? 2.5 : 1;
-    const speedMultiplier = this.isBig ? 2.0 : 1;
+    this.shockwave = null;
 
-    for (let i = 0; i < debrisCount; i++) {
-      const size = (0.1 + Math.random() * 0.25) * sizeMultiplier;
-      const geo = geoTypes[Math.floor(Math.random() * 3)];
+    if (this.isBig) {
+      this.group = new THREE.Group();
+      this.group.position.copy(position);
+      scene.add(this.group);
 
-      const color = colors[Math.floor(Math.random() * colors.length)];
+      // Single subtle shockwave sphere (Unity: BackSide mesh, very fast)
       const mat = new THREE.MeshBasicMaterial({
-        color,
+        color: 0xffddaa,
         transparent: true,
-        opacity: 1,
+        opacity: 0.15,
+        side: THREE.BackSide,
+        depthWrite: false,
+        depthTest: true,
+        blending: THREE.AdditiveBlending,
       });
-
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.scale.setScalar(size);
-      
-      const velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 2,
-        (Math.random() - 0.5) * 2,
-        (Math.random() - 0.5) * 2
-      ).normalize().multiplyScalar((5 + Math.random() * 8) * speedMultiplier);
-
-      const rotationSpeed = new THREE.Vector3(
-        (Math.random() - 0.5) * 10,
-        (Math.random() - 0.5) * 10,
-        (Math.random() - 0.5) * 10
-      );
-
-      this.debris.push({
-        mesh,
-        velocity,
-        rotationSpeed,
-        drag: 0.96 + Math.random() * 0.03,
-      });
-
-      this.group.add(mesh);
+      this.shockwave = new THREE.Mesh(sharedSphere, mat);
+      this.shockwave.scale.setScalar(0.5);
+      this.group.add(this.shockwave);
     }
-  }
-
-  createFlash(color) {
-    const flashMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 1,
-    });
-    this.flash = new THREE.Mesh(sharedGeometries.flash, flashMat);
-    if (this.isBig) {
-      this.flash.scale.setScalar(3);
-    }
-    this.group.add(this.flash);
-
-    const glowMat = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: this.isBig ? 0.4 : 0.25,
-    });
-    this.glow = new THREE.Mesh(sharedGeometries.glow, glowMat);
-    if (this.isBig) {
-      this.glow.scale.setScalar(3);
-    }
-    this.group.add(this.glow);
   }
 
   update(delta) {
     if (this.disposed) return false;
 
     this.elapsed += delta;
-    const t = this.elapsed / this.duration;
 
-    if (t >= 1) {
+    if (this.elapsed >= this.duration) {
       this.dispose();
       return false;
     }
 
-    for (const d of this.debris) {
-      d.mesh.position.addScaledVector(d.velocity, delta);
-      d.velocity.multiplyScalar(d.drag);
-      
-      d.mesh.rotation.x += d.rotationSpeed.x * delta;
-      d.mesh.rotation.y += d.rotationSpeed.y * delta;
-      d.mesh.rotation.z += d.rotationSpeed.z * delta;
-
-      const fadeStart = 0.3;
-      if (t > fadeStart) {
-        d.mesh.material.opacity = 1 - (t - fadeStart) / (1 - fadeStart);
-      }
+    // Shockwave: fast expand, very quick fade
+    if (this.shockwave) {
+      const t = Math.min(this.elapsed / 0.12, 1);  // 120ms expand
+      const scale = 0.5 + t * 12;
+      this.shockwave.scale.setScalar(scale);
+      this.shockwave.material.opacity = 0.15 * (1 - t);
     }
 
-    const flashT = Math.min(t * 5, 1);
-    const baseFlashScale = this.isBig ? 3 : 1;
-    const flashExpand = this.isBig ? 6 : 2;
-    this.flash.scale.setScalar(baseFlashScale + flashT * flashExpand);
-    this.flash.material.opacity = 1 - flashT;
-
-    const glowT = Math.min(t * 3, 1);
-    const baseGlowScale = this.isBig ? 3 : 1;
-    const glowExpand = this.isBig ? 8 : 2;
-    this.glow.scale.setScalar(baseGlowScale + glowT * glowExpand);
-    this.glow.material.opacity = (this.isBig ? 0.4 : 0.25) * (1 - glowT);
-    
     return true;
   }
 
@@ -156,14 +73,12 @@ export class Explosion {
     if (this.disposed) return;
     this.disposed = true;
 
-    for (const d of this.debris) {
-      d.mesh.material.dispose();
+    if (this.shockwave) {
+      this.shockwave.material.dispose();
     }
 
-    this.flash.material.dispose();
-    this.glow.material.dispose();
-
-    this.scene.remove(this.group);
+    if (this.group) {
+      this.scene.remove(this.group);
+    }
   }
 }
-

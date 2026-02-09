@@ -9,46 +9,25 @@ const _upVec = new THREE.Vector3(0, 1, 0);
 const _newPos = new THREE.Vector3();
 const _patrolDir = new THREE.Vector3();
 
-const NUM_SHIP_MODELS = 10;
-const shipModels = [];
-let modelsLoaded = false;
+let exteriorModel = null;
 let loadPromise = null;
 
 async function loadShipModels() {
   if (loadPromise) return loadPromise;
-  if (modelsLoaded) return;
+  if (exteriorModel) return;
 
   loadPromise = (async () => {
     const loader = new GLTFLoader();
-    const promises = [];
-
-    for (let i = 0; i < NUM_SHIP_MODELS; i++) {
-      promises.push(
-        loader
-          .loadAsync(`./ships/enemy-ship-${i}.glb`)
-          .then((gltf) => {
-            shipModels[i] = gltf.scene;
-          })
-          .catch((err) => {
-            console.warn(`Failed to load enemy-ship-${i}.glb:`, err);
-          })
-      );
+    try {
+      const gltf = await loader.loadAsync('./Heavy_EXT_01.glb');
+      exteriorModel = gltf.scene;
+      console.log('Loaded exterior ship model for enemies');
+    } catch (err) {
+      console.warn('Failed to load Heavy_EXT_01.glb for enemies:', err);
     }
-
-    await Promise.all(promises);
-    modelsLoaded = true;
-    console.log(
-      `Loaded ${shipModels.filter(Boolean).length} enemy ship models`
-    );
   })();
 
   return loadPromise;
-}
-
-function getRandomShipModel() {
-  const available = shipModels.filter(Boolean);
-  if (available.length === 0) return null;
-  return available[Math.floor(Math.random() * available.length)];
 }
 
 // Export for Game.js to await before spawning
@@ -70,15 +49,13 @@ export class Enemy {
     this.patrolTimer = 0;
     this.glowColor = new THREE.Color().setHSL(Math.random(), 0.8, 0.6).getHex();
 
-    // Create container for the ship
     this.mesh = new THREE.Group();
     this.mesh.position.copy(position);
-    this.mesh.scale.setScalar(3);
 
-    // Try to use loaded GLB model
-    const shipModel = getRandomShipModel();
-    if (shipModel) {
-      const clone = shipModel.clone();
+    if (exteriorModel) {
+      const clone = exteriorModel.clone();
+      clone.scale.setScalar(0.5);
+      clone.rotation.set(0, Math.PI, 0);
       clone.traverse((child) => {
         if (child.isMesh) {
           child.material = child.material.clone();
@@ -86,7 +63,6 @@ export class Enemy {
       });
       this.mesh.add(clone);
     } else {
-      // Fallback to simple geometry if models not loaded yet
       const fallbackGeo = new THREE.OctahedronGeometry(0.8, 0);
       const fallbackMat = new THREE.MeshStandardMaterial({
         color: 0xff3333,

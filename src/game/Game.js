@@ -15,8 +15,14 @@ import GameManager from "../managers/GameManager.js";
 import SceneManager from "../managers/SceneManager.js";
 import LightManager from "../managers/LightManager.js";
 import { GAME_STATES, SHIP_CLASSES } from "../data/gameData.js";
+import { getPerformanceProfile } from "../data/performanceSettings.js";
 import { ParticleSystem } from "../vfx/ParticleSystem.js";
+import { ExplosionEffect } from "../vfx/effects/ExplosionEffect.js";
+import { SparksEffect } from "../vfx/effects/SparksEffect.js";
+import { TrailsEffect } from "../vfx/effects/TrailsEffect.js";
+import { DustMotesEffect } from "../vfx/effects/DustMotesEffect.js";
 import { DynamicLightPool } from "../vfx/DynamicLightPool.js";
+import GizmoManager from "../utils/GizmoManager.js";
 import NetworkManager from "../network/NetworkManager.js";
 import MenuManager from "../ui/MenuManager.js";
 import { Prediction } from "../network/Prediction.js";
@@ -95,16 +101,10 @@ export class Game {
     this.scene.add(this.camera);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.5;
     this.renderer.domElement.id = "game-canvas";
     this.renderer.domElement.style.display = "none"; // Hidden until gameplay starts
     document.body.appendChild(this.renderer.domElement);
-    
+
     // Click canvas to re-acquire pointer lock when playing
     this.renderer.domElement.addEventListener("click", () => {
       if (this.gameManager?.isPlaying() && !this.isEscMenuOpen && !document.pointerLockElement) {
@@ -120,16 +120,36 @@ export class Game {
     this.sparkRenderer.renderOrder = -100;
     this.scene.add(this.sparkRenderer);
 
-    this.particles = new ParticleSystem(this.scene);
+    this.gameManager = new GameManager();
+    window.gameManager = this.gameManager;
+
+    // Apply performance profile to renderer and systems
+    const perfProfile = this.gameManager.getPerformanceProfile();
+    const renderSettings = perfProfile.rendering;
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(renderSettings.pixelRatio);
+    this.renderer.shadowMap.enabled = renderSettings.shadows;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    if (renderSettings.toneMapping) {
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = renderSettings.toneMappingExposure;
+    }
+
+    this.particles = new ParticleSystem(this.scene, perfProfile);
     window.particles = this.particles;
+    this.explosionEffect = new ExplosionEffect(this.particles);
+    this.sparksEffect = new SparksEffect(this.particles);
+    this.trailsEffect = new TrailsEffect(this.particles);
+    this.dustMotesEffect = new DustMotesEffect(this.particles);
     this.dynamicLights = new DynamicLightPool(this.scene, { size: 12 });
+
+    this.gizmoManager = new GizmoManager(this.scene, this.camera, this.renderer);
+    window.gizmoManager = this.gizmoManager;
 
     this.sceneManager = new SceneManager(this.scene, {
       renderer: this.renderer,
       sparkRenderer: this.sparkRenderer,
     });
-
-    this.gameManager = new GameManager();
     await this.gameManager.initialize({
       sceneManager: this.sceneManager,
       scene: this.scene,
@@ -176,7 +196,45 @@ export class Game {
 
     this.gameManager.setState({ currentState: GAME_STATES.MENU });
 
+    // Debug: ?solo to skip menu and start singleplayer with AI enemies
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('solo')) {
+      console.log('[Debug] Auto-starting solo match');
+      this.startSoloDebug();
+    }
+
     this.animate();
+  }
+
+  async startSoloDebug() {
+    this.isMultiplayer = false;
+
+    // Preload and wait for level
+    await this.preloadLevel();
+
+    // Show game canvas
+    this.renderer.domElement.style.display = "block";
+    MenuManager.hide();
+
+    // Create player
+    this.player = new Player(this.camera, this.input, this.level, this.scene);
+    this.player.health = 100;
+    this.player.maxHealth = 100;
+    this.player.missiles = 6;
+    this.player.maxMissiles = 6;
+
+    // Spawn AI enemies
+    this.spawnEnemies();
+
+    // Request pointer lock
+    document.body.requestPointerLock?.()?.catch?.(() => {});
+    document.getElementById("hud").classList.add("active");
+
+    this.gameManager.setState({
+      currentState: GAME_STATES.PLAYING,
+      isRunning: true,
+      isMultiplayer: false,
+    });
   }
 
   setupNetworkListeners() {
@@ -279,7 +337,7 @@ export class Game {
         }
       }
       
-      // Spawn big player death explosion
+      // Spawn big player death explosion (based on Unity BigExplosionEffect)
       if (victimPos) {
         const explosion = new Explosion(
           this.scene,
@@ -291,9 +349,9 @@ export class Game {
         this.explosions.push(explosion);
         proceduralAudio.explosion(true);
         
-        // Add massive particle explosion
+        // Multi-layer particle explosion (fireball + embers + smoke)
         if (this.particles) {
-          this.particles.emitExplosionParticles(victimPos, { r: 1, g: 0.4, b: 0.1 }, 80);
+          this.explosionEffect.emitBigExplosion(victimPos);
         }
       }
     });
@@ -472,7 +530,7 @@ export class Game {
         const color = data.type === "missile" 
           ? { r: 1, g: 0.4, b: 0 }
           : { r: 0, g: 1, b: 0.3 };
-        this.particles.emitHitSparks(pos, color, 30);
+        this.sparksEffect.emitHitSparks(pos, color, 30);
       }
     }
     
@@ -511,13 +569,16 @@ export class Game {
 
     if (data.type === "missile") {
       const missile = new Missile(this.scene, position, direction, {
-        particles: this.particles,
+        trailsEffect: this.trailsEffect,
       });
       this.networkProjectiles.set(id, { type: "missile", obj: missile });
     } else {
       // Other player projectiles should be visible as player (cyan) projectiles, not enemy (orange)
       const projectile = new Projectile(this.scene, position, direction, true, data.speed);
       this.networkProjectiles.set(id, { type: "projectile", obj: projectile });
+      
+      // Play spatial audio for other players' lasers
+      proceduralAudio.laserFire(position);
     }
   }
 
@@ -555,7 +616,10 @@ export class Game {
   handleNetworkHit(data) {
     console.log("[Game] Network hit received:", data);
     const hitPos = new THREE.Vector3(data.x, data.y, data.z);
-    const hitNormal = new THREE.Vector3(0, 1, 0);
+    // Use hit normal from data if available, otherwise default to (0,1,0)
+    const hitNormal = data.nx !== undefined && data.ny !== undefined && data.nz !== undefined
+      ? new THREE.Vector3(data.nx, data.ny, data.nz)
+      : new THREE.Vector3(0, 1, 0);
     
     // Determine hit color based on who shot
     const isOurShot = data.shooterId === NetworkManager.sessionId;
@@ -570,12 +634,9 @@ export class Game {
     );
     this.impacts.push(impact);
 
-    // Add spark effects on hit
+    // Electrical sparks on enemy hit (network hits are typically enemy hits)
     if (this.particles) {
-      const sparkColor = isOurShot 
-        ? { r: 0, g: 0.9, b: 1 }
-        : { r: 1, g: 0.5, b: 0.1 };
-      this.particles.emitHitSparks(hitPos, sparkColor, 25);
+      this.sparksEffect.emitElectricalSparks(hitPos, hitNormal, 100);
     }
 
     // Remove local projectile near hit position (if we fired it)
@@ -753,7 +814,7 @@ export class Game {
   onGameStarted() {
     if (!this.isMultiplayer) {
       document.body.requestPointerLock?.()?.catch?.(() => {});
-      document.getElementById("crosshair").classList.add("active");
+    document.getElementById("crosshair").classList.add("active");
       document.getElementById("hud").classList.add("active");
     }
   }
@@ -980,7 +1041,8 @@ export class Game {
     const projectile = new Projectile(this.scene, spawnPos, _fireDir, true);
     this.projectiles.push(projectile);
 
-    proceduralAudio.laserFire();
+    // Play spatial audio at spawn position
+    proceduralAudio.laserFire(spawnPos);
 
     this.dynamicLights?.flash(spawnPos, 0x00ffff, {
       intensity: 10,
@@ -1004,7 +1066,7 @@ export class Game {
     const spawnPos = this.player.getMissileSpawnPoint();
 
     const missile = new Missile(this.scene, spawnPos, _fireDir, {
-      particles: this.particles,
+      trailsEffect: this.trailsEffect,
     });
     this.missiles.push(missile);
 
@@ -1120,12 +1182,12 @@ export class Game {
 
       // Only update enemies in single player
       if (!this.isMultiplayer) {
-        for (let i = 0; i < this.enemies.length; i++) {
-          this.enemies[i].update(
-            delta,
-            this.camera.position,
-            this.boundFireEnemy
-          );
+      for (let i = 0; i < this.enemies.length; i++) {
+        this.enemies[i].update(
+          delta,
+          this.camera.position,
+          this.boundFireEnemy
+        );
         }
       }
 
@@ -1172,7 +1234,7 @@ export class Game {
             data.obj.spawnTimer += delta;
             while (data.obj.spawnTimer >= data.obj.spawnRate) {
               data.obj.spawnTimer -= data.obj.spawnRate;
-              data.obj.particles.emitMissileExhaust(
+              data.obj.trailsEffect.emitMissileExhaust(
                 data.obj.group.position,
                 data.obj.group.quaternion,
                 data.obj.direction
@@ -1213,8 +1275,25 @@ export class Game {
     }
 
     this.particles?.update(delta);
+    this.dustMotesEffect?.update(delta);
     this.dynamicLights?.update(delta);
     this.musicManager?.update(delta);
+    this.gizmoManager?.update(delta);
+    
+    // Update spatial audio listener position (camera position and orientation)
+    if (this.camera && proceduralAudio) {
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      proceduralAudio.setListenerPosition(
+        this.camera.position,
+        forward,
+        up
+      );
+    }
+    
+    // Dust motes are a global environment effect - fixed in world space
+    // Don't update the emission box, it's set once at initialization
+    
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -1237,50 +1316,62 @@ export class Game {
 
       // In single-player, check entity collisions (multiplayer uses server for this)
       if (!this.isMultiplayer) {
-        if (proj.isPlayerOwned) {
-          for (let j = this.enemies.length - 1; j >= 0; j--) {
-            const enemy = this.enemies[j];
-            const distSq = projPos.distanceToSquared(enemy.mesh.position);
+      if (proj.isPlayerOwned) {
+        for (let j = this.enemies.length - 1; j >= 0; j--) {
+          const enemy = this.enemies[j];
+          const distSq = projPos.distanceToSquared(enemy.mesh.position);
 
-            if (distSq < 2.25) {
-              enemy.takeDamage(25);
+          if (distSq < 2.25) {
+            enemy.takeDamage(25);
 
-              _hitNormal.subVectors(projPos, enemy.mesh.position).normalize();
-              const impact = new LaserImpact(
-                this.scene,
-                projPos,
-                _hitNormal,
-                projColor,
-                this.dynamicLights
-              );
-              this.impacts.push(impact);
+            _hitNormal.subVectors(projPos, enemy.mesh.position).normalize();
+            const impact = new LaserImpact(
+              this.scene,
+              projPos,
+              _hitNormal,
+              projColor,
+              this.dynamicLights
+            );
+            this.impacts.push(impact);
 
-              hitSomething = true;
-
-              if (enemy.health <= 0) {
-                const explosion = new Explosion(
-                  this.scene,
-                  enemy.mesh.position,
-                  enemy.glowColor,
-                  this.dynamicLights
-                );
-                this.explosions.push(explosion);
-                enemy.dispose(this.scene);
-                this.enemies.splice(j, 1);
-                this.gameManager.setState({
-                  enemiesRemaining: this.enemies.length,
-                  enemiesKilled: this.gameManager.getState().enemiesKilled + 1,
-                });
+              // Electrical sparks on enemy hit
+              if (this.particles) {
+                this.sparksEffect.emitElectricalSparks(projPos, _hitNormal, 100);
               }
-              break;
-            }
-          }
-        } else {
-          const distSq = projPos.distanceToSquared(playerPos);
-          if (distSq < playerRadiusSq) {
-            this.player.health -= 10;
-            this.player.lastDamageTime = this.clock.elapsedTime;
+
             hitSomething = true;
+
+            if (enemy.health <= 0) {
+                const deathPos = enemy.mesh.position.clone();
+              const explosion = new Explosion(
+                this.scene,
+                  deathPos,
+                enemy.glowColor,
+                  this.dynamicLights,
+                  { big: true }
+              );
+              this.explosions.push(explosion);
+                if (this.particles) {
+                  this.explosionEffect.emitBigExplosion(deathPos);
+                }
+              enemy.dispose(this.scene);
+              this.enemies.splice(j, 1);
+              this.gameManager.setState({
+                enemiesRemaining: this.enemies.length,
+                enemiesKilled: this.gameManager.getState().enemiesKilled + 1,
+              });
+            }
+            break;
+          }
+        }
+      } else {
+        const distSq = projPos.distanceToSquared(playerPos);
+        if (distSq < playerRadiusSq) {
+          this.player.health -= 10;
+            this.player.lastDamageTime = this.clock.elapsedTime;
+            this.showDamageIndicator(projPos);
+            proceduralAudio.shieldHit();
+          hitSomething = true;
           }
         }
       }
@@ -1348,13 +1439,18 @@ export class Game {
           exploded = true;
 
           if (enemy.health <= 0) {
+            const deathPos = enemy.mesh.position.clone();
             const explosion = new Explosion(
               this.scene,
-              enemy.mesh.position,
+              deathPos,
               enemy.glowColor,
-              this.dynamicLights
+              this.dynamicLights,
+              { big: true }
             );
             this.explosions.push(explosion);
+            if (this.particles) {
+              this.explosionEffect.emitBigExplosion(deathPos);
+            }
             enemy.dispose(this.scene);
             this.enemies.splice(j, 1);
             this.gameManager.setState({
@@ -1391,6 +1487,9 @@ export class Game {
           this.dynamicLights
         );
         this.explosions.push(explosion);
+        if (this.particles) {
+          this.explosionEffect.emitExplosionParticles(missilePos, { r: 1, g: 0.4, b: 0.1 }, 30);
+        }
         missile.dispose(this.scene);
         this.missiles.splice(i, 1);
       }

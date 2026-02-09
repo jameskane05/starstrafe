@@ -28,6 +28,8 @@ export class Input {
       lookDown: false,
       lookLeft: false,
       lookRight: false,
+      toggleHeadlight: false,
+      toggleHeadlightJustPressed: false,
     };
     
     this.gamepad = {
@@ -133,6 +135,11 @@ export class Input {
     if (KeyBindings.isKeyBound('lookDown', code)) this.keys.lookDown = value;
     if (KeyBindings.isKeyBound('lookLeft', code)) this.keys.lookLeft = value;
     if (KeyBindings.isKeyBound('lookRight', code)) this.keys.lookRight = value;
+    
+    if (KeyBindings.isKeyBound('toggleHeadlight', code)) {
+      this.keys.toggleHeadlight = value;
+      this.keys.toggleHeadlightJustPressed = value;
+    }
     
     if (KeyBindings.isKeyBound('leaderboard', code) && this.game.gameManager?.isPlaying()) {
       if (value) this.game.showLeaderboard();

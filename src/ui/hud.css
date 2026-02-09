@@ -37,44 +37,7 @@ canvas {
 }
 
 #crosshair {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 20px;
-  height: 20px;
-  border: 2px solid #0ff;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 50;
-  opacity: 0;
-}
-
-#crosshair.active {
-  opacity: 1;
-}
-
-#crosshair::before,
-#crosshair::after {
-  content: "";
-  position: absolute;
-  background: #0ff;
-}
-
-#crosshair::before {
-  width: 8px;
-  height: 2px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-#crosshair::after {
-  width: 2px;
-  height: 8px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  display: none;
 }
 
 #kill-feed {

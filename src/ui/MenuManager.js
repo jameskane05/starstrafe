@@ -379,6 +379,7 @@ class MenuManager {
                 <input type="text" id="player-name" value="${this.playerName}" maxlength="16" />
               </div>
               <div class="menu-buttons">
+                <label>MULTIPLAYER</label>
                 <button class="menu-btn" id="btn-quick">QUICKMATCH</button>
                 <button class="menu-btn" id="btn-join">JOIN MATCH</button>
                 <button class="menu-btn" id="btn-create">CREATE MATCH</button>
@@ -969,6 +970,9 @@ class MenuManager {
             <button class="sidebar-btn ${this.optionsSection === 'sound' ? 'active' : ''}" data-section="sound">
               <span class="sidebar-icon">🔊</span> SOUND
             </button>
+            <button class="sidebar-btn ${this.optionsSection === 'graphics' ? 'active' : ''}" data-section="graphics">
+              <span class="sidebar-icon">🖥</span> GRAPHICS
+            </button>
           </div>
           <div class="options-main">
             ${this.renderOptionsSection()}
@@ -1005,8 +1009,31 @@ class MenuManager {
       return this.renderControlsSection();
     } else if (this.optionsSection === 'sound') {
       return this.renderSoundSection();
+    } else if (this.optionsSection === 'graphics') {
+      return this.renderGraphicsSection();
     }
     return '';
+  }
+
+  renderGraphicsSection() {
+    const gm = window.gameManager;
+    const currentProfile = gm?.state?.performanceProfile || 'high';
+    const profiles = ['low', 'medium', 'high', 'max'];
+
+    return `
+      <div class="options-section graphics-section">
+        <h3>GRAPHICS</h3>
+        <div class="keybind-row" style="grid-template-columns: 1fr 1fr;">
+          <span class="keybind-action">Performance Mode</span>
+          <select id="perf-profile-select" class="preset-select">
+            ${profiles.map(p => `<option value="${p}" ${p === currentProfile ? 'selected' : ''}>${p.toUpperCase()}</option>`).join('')}
+          </select>
+        </div>
+        <p class="options-hint" style="margin-top: 12px; opacity: 0.5; font-size: 12px;">
+          Changes particle counts, shadow quality, and render resolution. Takes effect on next match.
+        </p>
+      </div>
+    `;
   }
 
   renderControlsSection() {
@@ -1206,11 +1233,24 @@ class MenuManager {
     `;
   }
 
+  setupGraphicsListeners() {
+    const select = document.getElementById('perf-profile-select');
+    if (select) {
+      select.addEventListener('change', () => {
+        if (window.gameManager) {
+          window.gameManager.setPerformanceProfile(select.value);
+        }
+      });
+    }
+  }
+
   setupOptionsSectionListeners() {
     if (this.optionsSection === 'controls') {
       this.setupControlsListeners();
     } else if (this.optionsSection === 'sound') {
       this.setupSoundListeners();
+    } else if (this.optionsSection === 'graphics') {
+      this.setupGraphicsListeners();
     }
   }
 
@@ -1379,6 +1419,9 @@ class MenuManager {
             <button class="sidebar-btn ${this.optionsSection === 'sound' ? 'active' : ''}" data-section="sound">
               <span class="sidebar-icon">🔊</span> SOUND
             </button>
+            <button class="sidebar-btn ${this.optionsSection === 'graphics' ? 'active' : ''}" data-section="graphics">
+              <span class="sidebar-icon">🖥</span> GRAPHICS
+            </button>
           </div>
           <div class="options-main">
             ${this.renderOptionsSection()}
@@ -1415,6 +1458,8 @@ class MenuManager {
       this.setupControlsListenersInGame();
     } else if (this.optionsSection === 'sound') {
       this.setupSoundListeners();
+    } else if (this.optionsSection === 'graphics') {
+      this.setupGraphicsListeners();
     }
   }
 

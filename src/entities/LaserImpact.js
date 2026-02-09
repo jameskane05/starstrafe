@@ -55,7 +55,7 @@ export class LaserImpact {
       opacity: 0.9,
       side: THREE.DoubleSide,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true,
       blending: THREE.AdditiveBlending,
     });
     

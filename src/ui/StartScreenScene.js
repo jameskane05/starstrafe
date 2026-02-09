@@ -47,6 +47,16 @@ export class StartScreenScene {
     this.shipBaseZ = 5;  // In front of camera (camera is at z=15)
     this.rollPhase = 0;
     this.strafePhase = 0;
+
+    // Mouse orbit
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.orbitX = 0;
+    this.orbitY = 0;
+    this.orbitRange = 0.06; // ~3.5 degrees max
+    this.orbitSmoothing = 3;
+    this.cameraBasePos = new THREE.Vector3(0, 1, 15);
+    this.cameraLookTarget = new THREE.Vector3(0, 0, -100);
   }
 
   async init(container) {
@@ -76,7 +86,10 @@ export class StartScreenScene {
     this.createAmbientLighting();
     await this.loadShip();
 
-    window.addEventListener("resize", this.onResize.bind(this));
+    this._onResize = this.onResize.bind(this);
+    this._onMouseMove = this.onMouseMove.bind(this);
+    window.addEventListener("resize", this._onResize);
+    window.addEventListener("mousemove", this._onMouseMove);
     
     this.animate();
   }
@@ -216,15 +229,17 @@ export class StartScreenScene {
     
     return new Promise((resolve) => {
       loader.load(
-        "./cockpit.glb",
+        "./Heavy_EXT_01.glb",
         (gltf) => {
           this.ship = gltf.scene;
-          this.ship.scale.setScalar(1.6);
+          this.ship.scale.setScalar(.8);
           this.ship.position.set(this.shipBaseX, this.shipBaseY, this.shipBaseZ);
-          // Keep default orientation - cockpit facing camera looks good
-          this.ship.rotation.set(0, 0, 0);
+          // Rotate to face camera - adjust as needed for new model
+          this.ship.rotation.set(0, Math.PI, 0);
           
-          // Keep original materials - they have nice chrome/metallic look
+          // Debug: log bounding box
+          const box = new THREE.Box3().setFromObject(this.ship);
+          console.log("[StartScreen] Ship bounds:", box.min, box.max);
           
           this.scene.add(this.ship);
           console.log("[StartScreen] Ship loaded successfully");
@@ -338,8 +353,28 @@ export class StartScreenScene {
     
     this.updateStarfield(delta);
     this.updateShip(delta);
+    this.updateOrbit(delta);
     
     this.renderer.render(this.scene, this.camera);
+  }
+
+  updateOrbit(delta) {
+    const targetX = -this.mouseX * this.orbitRange;
+    const targetY = -this.mouseY * this.orbitRange;
+
+    const t = 1 - Math.exp(-this.orbitSmoothing * delta);
+    this.orbitX += (targetX - this.orbitX) * t;
+    this.orbitY += (targetY - this.orbitY) * t;
+
+    this.camera.position.copy(this.cameraBasePos);
+    this.camera.lookAt(this.cameraLookTarget);
+    this.camera.rotateY(this.orbitX);
+    this.camera.rotateX(this.orbitY);
+  }
+
+  onMouseMove(e) {
+    this.mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+    this.mouseY = (e.clientY / window.innerHeight) * 2 - 1;
   }
 
   onResize() {
@@ -357,7 +392,8 @@ export class StartScreenScene {
       cancelAnimationFrame(this.animationId);
     }
     
-    window.removeEventListener("resize", this.onResize.bind(this));
+    window.removeEventListener("resize", this._onResize);
+    window.removeEventListener("mousemove", this._onMouseMove);
     
     if (this.starfield) {
       this.starfield.geometry.dispose();
