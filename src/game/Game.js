@@ -272,8 +272,9 @@ export class Game {
     // Spawn AI enemies
     this.spawnEnemies();
 
-    // Request pointer lock
-    document.body.requestPointerLock?.()?.catch?.(() => {});
+    if (!this.input.mobile.shouldSkipPointerLock()) {
+      document.body.requestPointerLock?.()?.catch?.(() => {});
+    }
     document.getElementById("hud").classList.add("active");
 
     this.gameManager.setState({
@@ -515,9 +516,11 @@ export class Game {
       }
     });
 
-    document.body.requestPointerLock?.()?.catch?.(() => {
-      console.warn("[Game] Pointer lock failed - click to capture");
-    });
+    if (!this.input.mobile.shouldSkipPointerLock()) {
+      document.body.requestPointerLock?.()?.catch?.(() => {
+        console.warn("[Game] Pointer lock failed - click to capture");
+      });
+    }
     document.getElementById("crosshair").classList.add("active");
     document.getElementById("hud").classList.add("active");
     MenuManager.hide();
@@ -860,7 +863,7 @@ export class Game {
   onStateChanged(newState, oldState) {}
 
   onGameStarted() {
-    if (!this.isMultiplayer) {
+    if (!this.isMultiplayer && !this.input.mobile.shouldSkipPointerLock()) {
       document.body.requestPointerLock?.()?.catch?.(() => {});
     document.getElementById("crosshair").classList.add("active");
       document.getElementById("hud").classList.add("active");
@@ -1003,10 +1006,10 @@ export class Game {
     }
     
     document.getElementById("crosshair").classList.add("active");
-    
-    // Request pointer lock on the canvas
-    const canvas = this.renderer.domElement;
-    canvas.requestPointerLock?.()?.catch?.(() => {
+
+    if (!this.input.mobile.shouldSkipPointerLock()) {
+      const canvas = this.renderer.domElement;
+      canvas.requestPointerLock?.()?.catch?.(() => {
       // Pointer lock requires user gesture - add click listener
       const clickToLock = () => {
         canvas.requestPointerLock?.();
@@ -1014,6 +1017,7 @@ export class Game {
       };
       canvas.addEventListener("click", clickToLock);
     });
+    }
   }
 
   leaveMatch() {
@@ -1212,9 +1216,9 @@ export class Game {
     this.input.pollGamepad();
 
     if (isPlaying) {
-      // Handle gamepad fire inputs
+      this.input.update(delta);
       this.handleGamepadFire();
-      
+
       if (this.player) {
         this.player.update(delta, this.clock.elapsedTime);
         engineAudio.update(delta, this.player);

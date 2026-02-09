@@ -1,5 +1,6 @@
 import { KeyBindings } from './KeyBindings.js';
 import { GamepadInput } from './Gamepad.js';
+import { MobileControls } from './MobileControls.js';
 
 export const INPUT_MODE = {
   KEYBOARD: 'keyboard',
@@ -58,7 +59,10 @@ export class Input {
       if (document.pointerLockElement) e.preventDefault();
     });
     document.addEventListener('pointerlockchange', () => this.onPointerLockChange());
-    
+
+    this.mobile = new MobileControls(game);
+    this.mobile.init();
+
     GamepadInput.onConnect = (gp) => {
       console.log('[Input] Gamepad connected:', gp.id);
     };
@@ -176,6 +180,20 @@ export class Input {
   onPointerLockChange() {
     // Don't auto-show menu - let user press Escape twice intentionally
     // This handler now just tracks state changes
+  }
+
+  update(delta) {
+    if (this.mobile.active) {
+      const move = this.mobile.getMoveInput();
+      this.keys.forward = move.forward;
+      this.keys.backward = move.backward;
+      this.keys.left = move.left;
+      this.keys.right = move.right;
+
+      const look = this.mobile.getLookDelta();
+      this.mouse.x += look.x;
+      this.mouse.y += look.y;
+    }
   }
 
   pollGamepad() {

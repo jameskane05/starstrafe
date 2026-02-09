@@ -3,13 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#050510" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
     <title>STARSTRAFE</title>
     <link rel="stylesheet" href="/src/ui/hud.css" />
   </head>
   <body>
     <div id="menu-container"></div>
     <div id="crosshair"></div>
+    <div id="mobile-controls">
+      <div class="joystick joystick-move">
+        <div class="thumb"></div>
+      </div>
+      <div class="joystick joystick-look">
+        <div class="thumb"></div>
+      </div>
+      <div class="action-buttons">
+        <button data-action="strafe-up" type="button">⬆️</button>
+        <button data-action="strafe-down" type="button">⬇️</button>
+        <button data-action="roll-left" type="button">↺</button>
+        <button data-action="roll-right" type="button">↻</button>
+        <button data-action="boost" type="button">⏩</button>
+        <button data-action="fire-weapon" type="button">⚡</button>
+        <button data-action="fire-missile" type="button">🚀</button>
+        <button data-action="headlight" type="button">💡</button>
+        <button data-action="pause" type="button">⏸️</button>
+      </div>
+    </div>
     <div id="damage-vignette">
       <div class="damage-indicator damage-indicator-top"></div>
       <div class="damage-indicator damage-indicator-bottom"></div>
