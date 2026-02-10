@@ -22,7 +22,7 @@ export const sceneObjects = {
   level: {
     id: "level",
     type: "splat",
-    path: "/starstrafe/splats/scifi-lod/scifi-lod-0.spz",
+    path: "./splats/scifi-lod/scifi-lod-0.spz",
     description: "Level environment gaussian splat with LOD",
     position: { x: 0, y: -90, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
@@ -40,7 +40,7 @@ export const sceneObjects = {
   levelOcclusion: {
     id: "levelOcclusion",
     type: "gltf",
-    path: "/starstrafe-level1-phys.glb",
+    path: "./starstrafe-level1-phys.glb",
     position: { x: 0, y: -90, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
     scale: 1,
