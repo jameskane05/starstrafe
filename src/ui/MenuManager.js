@@ -466,7 +466,7 @@ class MenuManager {
             <label>MAP</label>
             <select id="level-select" class="menu-select">
               ${Object.values(LEVELS).map(level => `
-                <option value="${level.id}">${level.name}</option>
+                <option value="${level.id}" ${level.id === "newworld" ? "selected" : ""}>${level.name}</option>
               `).join('')}
             </select>
           </div>
@@ -510,7 +510,7 @@ class MenuManager {
     `;
 
     let selectedMode = "ffa";
-    let selectedLevel = "hangar";
+    let selectedLevel = "newworld";
     let isPublic = true;
     let killLimit = 20;
     let maxPlayers = 8;
@@ -1836,7 +1836,7 @@ class MenuManager {
     this.container.classList.add("hidden");
   }
 
-  async createGame(roomName, mode, isPublic, killLimit, maxPlayers = 8, level = "hangar", roomCode = null) {
+  async createGame(roomName, mode, isPublic, killLimit, maxPlayers = 8, level = "newworld", roomCode = null) {
     this.emit("levelSelected", level);
     this.showLoading("Creating arena...");
     await NetworkManager.connect();

@@ -85,6 +85,7 @@ export class GameState extends Schema {
   @type("string") mode: string = "ffa"; // "ffa" | "team"
   @type("boolean") isPublic: boolean = true;
   @type("string") roomName: string = "";
+  @type("string") level: string = "newworld";
   @type("string") hostId: string = "";
   @type("number") countdown: number = 0;
   @type("number") matchTime: number = 0;

@@ -58,6 +58,7 @@ export class GameRoom extends Room {
     this.state.mode = options.mode || "ffa";
     this.state.isPublic = options.isPublic !== false;
     this.state.roomName = options.roomName || "Game Room";
+    this.state.level = options.level || "newworld";
     this.state.killLimit = options.killLimit || 20;
     this.state.maxMatchTime = options.maxMatchTime || 300;
     this.state.maxPlayers = this.maxClients;

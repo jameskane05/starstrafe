@@ -4,6 +4,8 @@ import * as Colyseus from "@colyseus/sdk";
 const CLOUD_SERVER_URL = "https://us-ord-23ba76a6.colyseus.cloud";
 const LOCAL_SERVER_URL = "ws://localhost:2567";
 
+const isLocalDev = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
 class NetworkManager {
   constructor() {
     this.client = null;
@@ -11,7 +13,7 @@ class NetworkManager {
     this.sessionId = null;
     this.eventListeners = {};
     this.connected = false;
-    this.serverUrl = CLOUD_SERVER_URL || LOCAL_SERVER_URL;
+    this.serverUrl = isLocalDev ? LOCAL_SERVER_URL : (CLOUD_SERVER_URL || LOCAL_SERVER_URL);
     
     this.inputSequence = 0;
     this.pendingInputs = [];
@@ -44,6 +46,7 @@ class NetworkManager {
         isPublic: options.isPublic !== false,
         roomName: options.roomName || "Game Room",
         name: options.playerName || "Player",
+        level: options.level || "newworld",
         killLimit: options.killLimit || 20,
         maxMatchTime: options.maxMatchTime || 300,
         maxPlayers: options.maxPlayers || 8,
