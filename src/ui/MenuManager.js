@@ -975,7 +975,7 @@ class MenuManager {
 
   renderOptions(returnScreen = null) {
     this.optionsReturnScreen = returnScreen || this.lastScreen || SCREENS.MAIN_MENU;
-    this.optionsSection = this.optionsSection || 'controls';
+    this.optionsSection = this.optionsSection || 'gameplay';
     
     this.container.innerHTML = `
       <div class="menu-screen options-menu">
@@ -985,6 +985,9 @@ class MenuManager {
         </div>
         <div class="options-layout">
           <div class="options-sidebar">
+            <button class="sidebar-btn ${this.optionsSection === 'gameplay' ? 'active' : ''}" data-section="gameplay">
+              <span class="sidebar-icon">🎮</span> GAMEPLAY
+            </button>
             <button class="sidebar-btn ${this.optionsSection === 'controls' ? 'active' : ''}" data-section="controls">
               <span class="sidebar-icon">⌨</span> CONTROLS
             </button>
@@ -1026,7 +1029,9 @@ class MenuManager {
   }
 
   renderOptionsSection() {
-    if (this.optionsSection === 'controls') {
+    if (this.optionsSection === 'gameplay') {
+      return this.renderGameplaySection();
+    } else if (this.optionsSection === 'controls') {
       return this.renderControlsSection();
     } else if (this.optionsSection === 'sound') {
       return this.renderSoundSection();
@@ -1034,6 +1039,24 @@ class MenuManager {
       return this.renderGraphicsSection();
     }
     return '';
+  }
+
+  renderGameplaySection() {
+    const gm = window.gameManager;
+    const lookSensitivity = gm?.getLookSensitivity?.() ?? 0.8;
+
+    return `
+      <div class="options-section gameplay-section">
+        <h3>GAMEPLAY</h3>
+        <div class="keybind-row" style="grid-template-columns: 1fr 1fr;">
+          <span class="keybind-action">Look Sensitivity <span id="look-sensitivity-val" style="opacity:0.5">${lookSensitivity.toFixed(2)}</span></span>
+          <input type="range" id="look-sensitivity" class="options-slider" min="0" max="1" step="0.05" value="${lookSensitivity}">
+        </div>
+        <p class="options-hint" style="margin-top: 8px; opacity: 0.5; font-size: 12px;">
+          Affects mouse, gamepad, keyboard, and mobile look. 0.8 = normal. 1.0 = 100% (ship max turn rate).
+        </p>
+      </div>
+    `;
   }
 
   renderGraphicsSection() {
@@ -1388,13 +1411,26 @@ class MenuManager {
   }
 
   setupOptionsSectionListeners() {
-    if (this.optionsSection === 'controls') {
+    if (this.optionsSection === 'gameplay') {
+      this.setupGameplayListeners();
+    } else if (this.optionsSection === 'controls') {
       this.setupControlsListeners();
     } else if (this.optionsSection === 'sound') {
       this.setupSoundListeners();
     } else if (this.optionsSection === 'graphics') {
       this.setupGraphicsListeners();
     }
+  }
+
+  setupGameplayListeners() {
+    const slider = document.getElementById("look-sensitivity");
+    const valSpan = document.getElementById("look-sensitivity-val");
+    if (!slider) return;
+    slider.addEventListener("input", () => {
+      const val = parseFloat(slider.value);
+      if (valSpan) valSpan.textContent = val.toFixed(2);
+      window.gameManager?.setSetting("lookSensitivity", val);
+    });
   }
 
   setupControlsListeners() {
@@ -1546,7 +1582,7 @@ class MenuManager {
   }
 
   renderOptionsInGame() {
-    this.optionsSection = this.optionsSection || 'controls';
+    this.optionsSection = this.optionsSection || 'gameplay';
     
     this.container.innerHTML = `
       <div class="menu-screen options-menu in-game">
@@ -1556,6 +1592,9 @@ class MenuManager {
         </div>
         <div class="options-layout">
           <div class="options-sidebar">
+            <button class="sidebar-btn ${this.optionsSection === 'gameplay' ? 'active' : ''}" data-section="gameplay">
+              <span class="sidebar-icon">🎮</span> GAMEPLAY
+            </button>
             <button class="sidebar-btn ${this.optionsSection === 'controls' ? 'active' : ''}" data-section="controls">
               <span class="sidebar-icon">⌨</span> CONTROLS
             </button>
@@ -1597,7 +1636,9 @@ class MenuManager {
   }
 
   setupOptionsSectionListenersInGame() {
-    if (this.optionsSection === 'controls') {
+    if (this.optionsSection === 'gameplay') {
+      this.setupGameplayListeners();
+    } else if (this.optionsSection === 'controls') {
       this.setupControlsListenersInGame();
     } else if (this.optionsSection === 'sound') {
       this.setupSoundListeners();

@@ -30,9 +30,9 @@ export class Player {
 
     this.boostFuel = 100;
     this.maxBoostFuel = 100;
-    this.boostDrainRate = 20; // depletes in 5 seconds (100 / 20 = 5)
-    this.boostRegenRate = 100; // refills in 1 second
-    this.boostRegenDelay = 1;
+    this.boostDrainRate = 20;
+    this.boostRegenRate = 33;
+    this.boostRegenDelay = 3;
     this.lastBoostTime = 0;
     this.boostMultiplier = 2.5;
     this.isBoosting = false;
@@ -52,7 +52,7 @@ export class Player {
     this.pitchVelocity = 0;
     this.yawVelocity = 0;
     this.lookAccel = 0.1;
-    this.lookMaxSpeed = 2.5;
+    this.lookMaxSpeed = 3.0;
     this.lookDrag = 0.93;
 
     this.fireFromLeft = true;
@@ -284,8 +284,9 @@ export class Player {
     _up.set(0, 1, 0).applyQuaternion(rig.quaternion);
     _forward.set(0, 0, -1).applyQuaternion(rig.quaternion);
 
-    // Right hand transient-pointer: look (yaw + pitch)
-    const lookSpeed = 2.5;
+    const lookSens =
+      (window.gameManager?.getLookSensitivity?.() ?? 0.8) / 0.8;
+    const lookSpeed = 2.5 * lookSens;
     if (Math.abs(xr.lookInput.x) > 0.02 || Math.abs(xr.lookInput.y) > 0.02) {
       _yawQuat.setFromAxisAngle(_up, xr.lookInput.x * lookSpeed * delta);
       _pitchQuat.setFromAxisAngle(_right, xr.lookInput.y * lookSpeed * delta);
@@ -456,6 +457,8 @@ export class Player {
     }
 
     const controlDelta = Math.min(delta, 0.05);
+    const lookSens =
+      (window.gameManager?.getLookSensitivity?.() ?? 0.8) / 0.8;
 
     _right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     _up.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
@@ -463,17 +466,14 @@ export class Player {
 
     // Look input
     if (useGamepad) {
-      // Gamepad look (right stick)
-      const gpLookSpeed = 4.0;
+      const gpLookSpeed = 4.0 * lookSens;
       this.pitchVelocity += -gp.lookY * gpLookSpeed * controlDelta;
       this.yawVelocity += -gp.lookX * gpLookSpeed * controlDelta;
     } else {
-      // Mouse look with acceleration/easing
-      this.pitchVelocity += -mouse.y * this.lookAccel;
-      this.yawVelocity += -mouse.x * this.lookAccel;
+      this.pitchVelocity += -mouse.y * this.lookAccel * lookSens;
+      this.yawVelocity += -mouse.x * this.lookAccel * lookSens;
 
-      // Keyboard look (arrow keys)
-      const keyLookSpeed = 3.0;
+      const keyLookSpeed = 3.0 * lookSens;
       if (keys.lookUp) this.pitchVelocity += keyLookSpeed * controlDelta;
       if (keys.lookDown) this.pitchVelocity -= keyLookSpeed * controlDelta;
       if (keys.lookLeft) this.yawVelocity += keyLookSpeed * controlDelta;

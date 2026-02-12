@@ -17,7 +17,7 @@ class EngineAudio {
 
     // Master
     this.masterGain = null;
-    this.volume = 0.5;
+    this.volume = 0.75;
 
     // Smoothed values
     this.currentEngineVolume = 0;
@@ -28,11 +28,11 @@ class EngineAudio {
     this.targetAfterburnerVolume = 0;
 
     // Tuning
-    this.idleVolume = 0.03;
-    this.maxVolume = 0.35;
+    this.idleVolume = 0.08;
+    this.maxVolume = 0.6;
     this.idlePitch = 0.8;
     this.maxPitch = 1.4;
-    this.afterburnerMaxVolume = 0.15;
+    this.afterburnerMaxVolume = 0.3;
     this.smoothUp = 4.0;   // speed to ramp up
     this.smoothDown = 2.0; // speed to ramp down
   }
@@ -41,6 +41,7 @@ class EngineAudio {
     if (this.initialized) return;
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (this.ctx.state === "suspended") this.ctx.resume();
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = this.volume;
       this.masterGain.connect(this.ctx.destination);

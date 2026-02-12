@@ -52,9 +52,9 @@ class SFXManager {
     }
   }
 
-  play(id, position = null) {
+  play(id, position = null, volumeScale = 1) {
     if (!this.ctx || !this.masterGain) return;
-    if (this.ctx.state === "suspended") proceduralAudio.resume();
+    if (this.ctx.state === "suspended") return;
     this._ensureLoaded();
 
     const entry = this.buffers.get(id);
@@ -83,7 +83,7 @@ class SFXManager {
     }
 
     const gain = this.ctx.createGain();
-    gain.gain.value = this.sfxVolume * resolvedVol;
+    gain.gain.value = this.sfxVolume * resolvedVol * volumeScale;
 
     if (position && def?.spatial) {
       const panner = this.ctx.createStereoPanner

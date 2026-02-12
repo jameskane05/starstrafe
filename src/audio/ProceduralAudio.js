@@ -253,8 +253,7 @@ class ProceduralAudio {
    * Missile fire sound
    */
   missileFire() {
-    if (!this.ctx) return;
-    this.resume();
+    if (!this.ctx || this.ctx.state === "suspended") return;
     
     const now = this.ctx.currentTime;
     
@@ -300,8 +299,7 @@ class ProceduralAudio {
    * Shield hit sound (when player takes damage)
    */
   shieldHit() {
-    if (!this.ctx) return;
-    this.resume();
+    if (!this.ctx || this.ctx.state === "suspended") return;
     
     const now = this.ctx.currentTime;
     
@@ -345,8 +343,7 @@ class ProceduralAudio {
    * Explosion sound
    */
   explosion(big = false) {
-    if (!this.ctx) return;
-    this.resume();
+    if (!this.ctx || this.ctx.state === "suspended") return;
     
     const now = this.ctx.currentTime;
     const duration = big ? 0.8 : 0.4;
@@ -392,8 +389,7 @@ class ProceduralAudio {
    * Collectible pickup sound
    */
   collectPickup() {
-    if (!this.ctx) return;
-    this.resume();
+    if (!this.ctx || this.ctx.state === "suspended") return;
     
     const now = this.ctx.currentTime;
     
@@ -427,8 +423,7 @@ class ProceduralAudio {
    * Boost activate sound
    */
   boostStart() {
-    if (!this.ctx) return;
-    this.resume();
+    if (!this.ctx || this.ctx.state === "suspended") return;
     
     const now = this.ctx.currentTime;
     
@@ -458,8 +453,7 @@ class ProceduralAudio {
    * Low health warning beep
    */
   lowHealthWarning() {
-    if (!this.ctx) return;
-    this.resume();
+    if (!this.ctx || this.ctx.state === "suspended") return;
     
     const now = this.ctx.currentTime;
     
@@ -486,9 +480,8 @@ class ProceduralAudio {
    * Respawn sound
    */
   respawn() {
-    if (!this.ctx) return;
-    this.resume();
-    
+    if (!this.ctx || this.ctx.state === "suspended") return;
+
     const now = this.ctx.currentTime;
     
     // Shimmering rebuild sound
@@ -518,8 +511,7 @@ class ProceduralAudio {
    * Kill confirmed sound
    */
   killConfirm() {
-    if (!this.ctx) return;
-    this.resume();
+    if (!this.ctx || this.ctx.state === "suspended") return;
     
     const now = this.ctx.currentTime;
     
@@ -542,6 +534,51 @@ class ProceduralAudio {
       osc.start(now);
       osc.stop(now + 0.4);
     });
+  }
+
+  /**
+   * Shield recharge tone – pitch rises 3 octaves (C2 to C5) as shield refills
+   */
+  shieldRechargeUpdate(rechargePct) {
+    if (!this.ctx || this.ctx.state === "suspended") return;
+    if (rechargePct >= 1) {
+      this.shieldRechargeStop();
+      return;
+    }
+    if (!this._shieldRechargeOsc) {
+      this._shieldRechargeOsc = this.ctx.createOscillator();
+      this._shieldRechargeGain = this.ctx.createGain();
+      this._shieldRechargeOsc.type = "sine";
+      this._shieldRechargeOsc.connect(this._shieldRechargeGain);
+      this._shieldRechargeGain.connect(this.masterGain);
+      this._shieldRechargeGain.gain.value = 0;
+      this._shieldRechargeOsc.start(0);
+    }
+    const C2 = 65.41;
+    const freq = C2 * Math.pow(2, 3 * rechargePct);
+    this._shieldRechargeOsc.frequency.setTargetAtTime(
+      freq,
+      this.ctx.currentTime,
+      0.05,
+    );
+    this._shieldRechargeGain.gain.setTargetAtTime(
+      0.08,
+      this.ctx.currentTime,
+      0.03,
+    );
+  }
+
+  shieldRechargeStop() {
+    if (!this._shieldRechargeOsc) return;
+    try {
+      this._shieldRechargeGain.gain.exponentialRampToValueAtTime(
+        0.001,
+        this.ctx.currentTime + 0.1,
+      );
+      this._shieldRechargeOsc.stop(this.ctx.currentTime + 0.1);
+    } catch (e) {}
+    this._shieldRechargeOsc = null;
+    this._shieldRechargeGain = null;
   }
 
   // ============================================

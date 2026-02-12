@@ -265,6 +265,13 @@ export class Game {
 
     window.addEventListener("resize", () => this.onResize());
 
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        proceduralAudio.resume();
+        engineAudio.resume();
+      }
+    });
+
     // Initialize menu and network listeners
     await MenuManager.init();
     MenuManager.on("gameStart", () => this.startMultiplayerGame());
@@ -300,6 +307,8 @@ export class Game {
   async startSoloDebug() {
     this.isMultiplayer = false;
 
+    engineAudio.init();
+
     // Request XR session before any async work (needs user activation from click)
     const xrActive = this.xrManager?.supported
       ? await this.xrManager.enterVR(this.scene, this.camera)
@@ -326,8 +335,6 @@ export class Game {
     if (xrActive) {
       this.player.setXRMode(this.xrManager);
     }
-
-    engineAudio.init();
 
     this._extractSpawnPoints();
     this.dynamicLights?.warmupShaders(
@@ -610,6 +617,12 @@ export class Game {
 
     // Remove spawn cubes from level (no AI enemies in multiplayer)
     this._extractSpawnPoints();
+    if (
+      NetworkManager.isHost() &&
+      this.spawnPoints.length > 0
+    ) {
+      NetworkManager.sendSpawnPoints(this.spawnPoints);
+    }
 
     this.camera.position.set(localPlayer.x, localPlayer.y, localPlayer.z);
     this.camera.quaternion.set(
@@ -936,6 +949,8 @@ export class Game {
   }
 
   handleLocalPlayerDeath() {
+    if (this.player?.cockpit) this.player.cockpit.visible = false;
+
     const overlay = document.getElementById("respawn-overlay");
     overlay.classList.add("active");
 
@@ -995,6 +1010,7 @@ export class Game {
   handleLocalPlayerRespawn() {
     const overlay = document.getElementById("respawn-overlay");
     overlay.classList.remove("active");
+    if (this.player?.cockpit) this.player.cockpit.visible = true;
 
     const localPlayer = NetworkManager.getLocalPlayer();
     if (localPlayer && this.player) {
@@ -1618,6 +1634,34 @@ export class Game {
         if (this.player) {
           this.player.update(delta, this.clock.elapsedTime);
           engineAudio.update(delta, this.player);
+          if (!this.isMultiplayer) {
+            const p = this.player;
+            const elapsed = this.clock.elapsedTime;
+            if (
+              p.health < p.maxHealth &&
+              elapsed - p.lastDamageTime >= p.shieldRegenDelay
+            ) {
+              p.health = Math.min(
+                p.maxHealth,
+                p.health + p.shieldRegenRate * delta,
+              );
+            }
+            const isShieldRecharging =
+              p.health < p.maxHealth &&
+              elapsed - p.lastDamageTime >= p.shieldRegenDelay;
+            if (isShieldRecharging) {
+              proceduralAudio.shieldRechargeUpdate(p.health / p.maxHealth);
+            } else {
+              proceduralAudio.shieldRechargeStop();
+            }
+          } else {
+            const p = this.player;
+            if (p.health < p.maxHealth) {
+              proceduralAudio.shieldRechargeUpdate(p.health / p.maxHealth);
+            } else {
+              proceduralAudio.shieldRechargeStop();
+            }
+          }
         }
       }
 
@@ -1832,7 +1876,7 @@ export class Game {
                   { big: true },
                 );
                 this.explosions.push(explosion);
-                sfxManager.play("ship-explosion", deathPos);
+                sfxManager.play("ship-explosion", deathPos, 0.6);
                 if (this.particles) {
                   this.explosionEffect.emitBigExplosion(deathPos);
                 }
@@ -1965,7 +2009,7 @@ export class Game {
               { big: true },
             );
             this.explosions.push(explosion);
-            sfxManager.play("ship-explosion", deathPos);
+            sfxManager.play("ship-explosion", deathPos, 0.6);
             if (this.particles) {
               this.explosionEffect.emitBigExplosion(deathPos);
             }

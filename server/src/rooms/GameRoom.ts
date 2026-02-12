@@ -76,14 +76,31 @@ export class GameRoom extends Room {
     console.log(`[GameRoom] Created: ${this.roomId} (${this.state.mode}, public: ${this.state.isPublic})`);
   }
 
+  private levelSpawnPoints: { x: number; y: number; z: number }[] = [];
+
   private registerMessageHandlers() {
     this.onMessage("input", (client, data) => this.handleInput(client, data));
     this.onMessage("fire", (client, data) => this.handleFire(client, data));
+    this.onMessage("setSpawnPoints", (client, data) => this.handleSetSpawnPoints(client, data));
     this.onMessage("missileUpdate", (client, data) => this.handleMissileUpdate(client, data));
     this.onMessage("classSelect", (client, data) => this.handleClassSelect(client, data));
     this.onMessage("ready", (client) => this.handleReady(client));
     this.onMessage("startGame", (client) => this.handleStartGame(client));
     this.onMessage("chat", (client, data) => this.handleChat(client, data));
+  }
+
+  private handleSetSpawnPoints(client: Client, data: any) {
+    if (client.sessionId !== this.state.hostId) return;
+    if (this.state.phase !== "playing") return;
+    const points = Array.isArray(data?.points) ? data.points : [];
+    const valid = points
+      .slice(0, 128)
+      .filter((p: any) => typeof p?.x === "number" && typeof p?.y === "number" && typeof p?.z === "number")
+      .map((p: any) => ({ x: p.x, y: p.y, z: p.z }));
+    if (valid.length > 0) {
+      this.levelSpawnPoints = valid;
+      console.log(`[GameRoom] Received ${valid.length} level spawn points from host`);
+    }
   }
 
   private handleChat(client: Client, data: any) {
@@ -420,16 +437,35 @@ export class GameRoom extends Room {
   }
 
   private spawnPlayer(player: Player, spawnIndex: number) {
-    const spawn = SPAWN_POINTS[spawnIndex % SPAWN_POINTS.length];
     const classStats = SHIP_CLASSES[player.shipClass as keyof typeof SHIP_CLASSES];
-    
-    player.x = spawn.x;
-    player.y = spawn.y;
-    player.z = spawn.z;
+    let x: number, y: number, z: number, qy: number, qw: number;
+
+    if (this.levelSpawnPoints.length > 0) {
+      const pt = this.levelSpawnPoints[spawnIndex % this.levelSpawnPoints.length];
+      x = pt.x;
+      y = pt.y;
+      z = pt.z;
+      const dx = -x;
+      const dz = -z;
+      const angle = Math.atan2(dx, dz);
+      qy = Math.sin(angle / 2);
+      qw = Math.cos(angle / 2);
+    } else {
+      const spawn = SPAWN_POINTS[spawnIndex % SPAWN_POINTS.length];
+      x = spawn.x;
+      y = spawn.y;
+      z = spawn.z;
+      qy = spawn.qy;
+      qw = spawn.qw;
+    }
+
+    player.x = x;
+    player.y = y;
+    player.z = z;
     player.qx = 0;
-    player.qy = spawn.qy;
+    player.qy = qy;
     player.qz = 0;
-    player.qw = spawn.qw;
+    player.qw = qw;
     player.vx = 0;
     player.vy = 0;
     player.vz = 0;
@@ -749,6 +785,7 @@ export class GameRoom extends Room {
     // Return to lobby after delay
     setTimeout(() => {
       this.state.phase = "lobby";
+      this.levelSpawnPoints = [];
       this.state.players.forEach((p: Player) => {
         p.ready = false;
         p.kills = 0;

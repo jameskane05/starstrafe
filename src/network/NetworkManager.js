@@ -368,6 +368,13 @@ class NetworkManager {
     this.room.send("chat", { text });
   }
 
+  sendSpawnPoints(points) {
+    if (!this.room) return;
+    this.room.send("setSpawnPoints", {
+      points: points.map((p) => ({ x: p.x, y: p.y, z: p.z })),
+    });
+  }
+
   leaveRoom() {
     if (this.room) {
       this.room.leave();

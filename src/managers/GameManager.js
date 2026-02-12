@@ -61,8 +61,16 @@ class GameManager {
 
   setSetting(key, value) {
     if (!this.savedSettings) this.savedSettings = {};
+    if (key === "lookSensitivity") {
+      value = Math.max(0, Math.min(1, Number(value)));
+    }
     this.savedSettings[key] = value;
     this.saveSettings();
+  }
+
+  getLookSensitivity() {
+    const v = this.savedSettings?.lookSensitivity;
+    return v != null ? Math.max(0, Math.min(1, Number(v))) : 0.8;
   }
 
   setPerformanceProfile(profile) {

@@ -35,7 +35,7 @@ const _exhaustOffset = new THREE.Vector3();
 export class Missile {
   constructor(scene, position, direction, options = {}) {
     this.direction = direction.clone().normalize();
-    this.speed = 20;
+    this.speed = options.speed ?? 168;
     this.lifetime = 5;
     this.disposed = false;
     this.damage = 50;
