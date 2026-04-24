@@ -17,9 +17,15 @@
  */
 
 import * as THREE from "three";
+import {
+  cloneMissileModel,
+  preloadMissileModel,
+} from "../cache/missileModelCache.js";
 
 const MISSILE_COLOR = 0xff6600;
 const LASER_UPGRADE_COLOR = 0x00ff44;
+const PICKUP_MISSILE_LENGTH = 1.8;
+const GLOW_MIN_SCALE = 0.001;
 
 export class Collectible {
   constructor(scene, data, lightPool = null) {
@@ -43,47 +49,32 @@ export class Collectible {
   }
 
   createMissilePickup() {
-    // Oversized missile shape
-    const bodyGeo = new THREE.CylinderGeometry(0.3, 0.2, 1.8, 8);
-    bodyGeo.rotateX(Math.PI / 2);
-    
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: MISSILE_COLOR,
-      emissive: MISSILE_COLOR,
-      emissiveIntensity: 0.8,
-      metalness: 0.6,
-      roughness: 0.3,
-    });
-    
-    this.body = new THREE.Mesh(bodyGeo, bodyMat);
-    this.group.add(this.body);
-    
-    // Fins
-    const finGeo = new THREE.BoxGeometry(0.6, 0.05, 0.4);
-    const finMat = new THREE.MeshStandardMaterial({
-      color: 0xff4400,
-      emissive: 0xff4400,
-      emissiveIntensity: 0.5,
-    });
-    
-    for (let i = 0; i < 4; i++) {
-      const fin = new THREE.Mesh(finGeo, finMat);
-      fin.position.z = -0.7;
-      fin.rotation.z = (Math.PI / 2) * i;
-      this.group.add(fin);
+    this.body = cloneMissileModel(PICKUP_MISSILE_LENGTH);
+    if (this.body) {
+      this.group.add(this.body);
+    } else {
+      preloadMissileModel().then(() => {
+        if (this.disposed) return;
+        const m = cloneMissileModel(PICKUP_MISSILE_LENGTH);
+        if (m) {
+          this.body = m;
+          this.group.add(m);
+        }
+      });
     }
-    
-    // Glowing orb around it
+
     const glowGeo = new THREE.SphereGeometry(1.2, 16, 16);
     const glowMat = new THREE.MeshBasicMaterial({
       color: MISSILE_COLOR,
       transparent: true,
-      opacity: 0.15,
+      opacity: 0.35,
       side: THREE.BackSide,
     });
     this.glow = new THREE.Mesh(glowGeo, glowMat);
+    this.glowBaseScale = 1;
+    this.glow.scale.setScalar(GLOW_MIN_SCALE);
     this.group.add(this.glow);
-    
+
     this.floatOffset = Math.random() * Math.PI * 2;
   }
 
@@ -120,8 +111,10 @@ export class Collectible {
       side: THREE.BackSide,
     });
     this.glow = new THREE.Mesh(glowGeo, glowMat);
+    this.glowBaseScale = 1;
+    this.glow.scale.setScalar(GLOW_MIN_SCALE);
     this.group.add(this.glow);
-    
+
     this.floatOffset = Math.random() * Math.PI * 2;
   }
 
@@ -135,14 +128,14 @@ export class Collectible {
       this.group.rotation.y += delta * 2;
     }
     
-    // Floating bob effect
     const time = performance.now() * 0.001 + this.floatOffset;
     this.group.position.y = this.baseY + Math.sin(time * 2) * 0.3;
-    
-    // Pulse the glow
+
     if (this.glow) {
-      const pulse = 0.15 + Math.sin(time * 3) * 0.05;
-      this.glow.material.opacity = pulse;
+      const t = 0.5 + 0.5 * Math.sin(time * 3);
+      const base = this.glowBaseScale ?? 1;
+      const s = GLOW_MIN_SCALE + (base - GLOW_MIN_SCALE) * t;
+      this.glow.scale.setScalar(s);
     }
   }
 

@@ -160,7 +160,15 @@ export function castSphere(fromX, fromY, fromZ, toX, toY, toZ, radius) {
   _position.z = fromZ;
 
   const shape = getBall(radius);
-  return world.castShape(_position, _rotation, _direction, shape, length, true);
+  return world.castShape(
+    _position,
+    _rotation,
+    _direction,
+    shape,
+    0,
+    length,
+    true,
+  );
 }
 
 const _rayOrigin = { x: 0, y: 0, z: 0 };

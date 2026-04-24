@@ -66,6 +66,90 @@ const IDLE_BOB_POS_AMP = 0.0005;
 const IDLE_BOB_ANGLE_AMP = 0.00005;
 const IDLE_VELOCITY_THRESHOLD = 0.08;
 const COCKPIT_STATUS_CANVAS_SIZE = 1024;
+/** Reference framerate that velocity/drag values are tuned for. */
+const MOVEMENT_REFERENCE_HZ = 60;
+/** Cap on how many reference frames a single real frame represents (limits collision tunneling). */
+const MOVEMENT_FRAME_SCALE_MAX = 4;
+/** Cap on integration timestep for input accumulation and rotation; 100ms = 10fps tolerance. */
+const CONTROL_DELTA_MAX = 0.1;
+
+const COLLISION_SKIN = 0.005;
+const COLLISION_MAX_ITERS = 4;
+
+function _moveAndSlide(pos, velocity, frameScale, collisionRadius) {
+  let remaining = frameScale;
+
+  for (let iter = 0; iter < COLLISION_MAX_ITERS; iter++) {
+    const stepX = velocity.x * remaining;
+    const stepY = velocity.y * remaining;
+    const stepZ = velocity.z * remaining;
+    const stepLen = Math.hypot(stepX, stepY, stepZ);
+    if (stepLen < 1e-6) return;
+
+    const hit = castSphere(
+      pos.x,
+      pos.y,
+      pos.z,
+      pos.x + stepX,
+      pos.y + stepY,
+      pos.z + stepZ,
+      collisionRadius,
+    );
+
+    if (!hit) {
+      pos.x += stepX;
+      pos.y += stepY;
+      pos.z += stepZ;
+      return;
+    }
+
+    const n = hit.normal1;
+    let nx = n.x;
+    let ny = n.y;
+    let nz = n.z;
+    const nLen = Math.hypot(nx, ny, nz);
+    if (nLen < 1e-6) {
+      pos.x += stepX;
+      pos.y += stepY;
+      pos.z += stepZ;
+      return;
+    }
+    nx /= nLen;
+    ny /= nLen;
+    nz /= nLen;
+
+    const vDotN = velocity.x * nx + velocity.y * ny + velocity.z * nz;
+    const toi = hit.time_of_impact;
+
+    if (toi < COLLISION_SKIN) {
+      // Already in contact. Push off along the outward normal so the next cast
+      // starts clear of this surface, then project out any into-wall velocity.
+      pos.x += nx * COLLISION_SKIN * 2;
+      pos.y += ny * COLLISION_SKIN * 2;
+      pos.z += nz * COLLISION_SKIN * 2;
+      if (vDotN < 0) {
+        velocity.x -= vDotN * nx;
+        velocity.y -= vDotN * ny;
+        velocity.z -= vDotN * nz;
+      }
+      continue;
+    }
+
+    const advance = toi - COLLISION_SKIN;
+    const advFrac = advance / stepLen;
+    pos.x += stepX * advFrac;
+    pos.y += stepY * advFrac;
+    pos.z += stepZ * advFrac;
+
+    if (vDotN < 0) {
+      velocity.x -= vDotN * nx;
+      velocity.y -= vDotN * ny;
+      velocity.z -= vDotN * nz;
+    }
+
+    remaining *= 1 - advFrac;
+  }
+}
 
 function findCockpitScreenMesh(root, targetName) {
   let match = null;
@@ -1123,60 +1207,13 @@ export class Player {
     if (this.velocity.lengthSq() > this.maxSpeed * this.maxSpeed) {
       this.velocity.normalize().multiplyScalar(this.maxSpeed);
     }
-    this.velocity.multiplyScalar(this.drag);
-
-    // Collision detection against rig position
-    const pos = rig.position;
-    const vel = this.velocity;
-
-    const hit = castSphere(
-      pos.x,
-      pos.y,
-      pos.z,
-      pos.x + vel.x,
-      pos.y + vel.y,
-      pos.z + vel.z,
-      this.collisionRadius,
+    const frameScale = Math.min(
+      delta * MOVEMENT_REFERENCE_HZ,
+      MOVEMENT_FRAME_SCALE_MAX,
     );
+    this.velocity.multiplyScalar(Math.pow(this.drag, frameScale));
 
-    if (!hit) {
-      rig.position.add(vel);
-    } else {
-      const hitX = castSphere(
-        pos.x,
-        pos.y,
-        pos.z,
-        pos.x + vel.x,
-        pos.y,
-        pos.z,
-        this.collisionRadius,
-      );
-      const hitY = castSphere(
-        pos.x,
-        pos.y,
-        pos.z,
-        pos.x,
-        pos.y + vel.y,
-        pos.z,
-        this.collisionRadius,
-      );
-      const hitZ = castSphere(
-        pos.x,
-        pos.y,
-        pos.z,
-        pos.x,
-        pos.y,
-        pos.z + vel.z,
-        this.collisionRadius,
-      );
-
-      if (!hitX) rig.position.x += vel.x;
-      else this.velocity.x = 0;
-      if (!hitY) rig.position.y += vel.y;
-      else this.velocity.y = 0;
-      if (!hitZ) rig.position.z += vel.z;
-      else this.velocity.z = 0;
-    }
+    _moveAndSlide(rig.position, this.velocity, frameScale, this.collisionRadius);
 
     const speed = this.velocity.length();
     const idle = Math.max(0, 1 - speed / IDLE_VELOCITY_THRESHOLD);
@@ -1421,7 +1458,11 @@ export class Player {
       keys.toggleHeadlightJustPressed = false;
     }
 
-    const controlDelta = Math.min(delta, 0.05);
+    const controlDelta = Math.min(delta, CONTROL_DELTA_MAX);
+    const frameScale = Math.min(
+      delta * MOVEMENT_REFERENCE_HZ,
+      MOVEMENT_FRAME_SCALE_MAX,
+    );
     const lookSens = (window.gameManager?.getLookSensitivity?.() ?? 0.65) / 0.8;
 
     _up.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
@@ -1578,73 +1619,14 @@ export class Player {
       this.velocity.normalize().multiplyScalar(this.maxSpeed);
     }
 
-    this.velocity.multiplyScalar(this.drag);
+    this.velocity.multiplyScalar(Math.pow(this.drag, frameScale));
 
-    // Collision detection with Rapier
-    const pos = this.camera.position;
-    const vel = this.velocity;
-
-    // Try full movement
-    const hit = castSphere(
-      pos.x,
-      pos.y,
-      pos.z,
-      pos.x + vel.x,
-      pos.y + vel.y,
-      pos.z + vel.z,
+    _moveAndSlide(
+      this.camera.position,
+      this.velocity,
+      frameScale,
       this.collisionRadius,
     );
-
-    if (!hit) {
-      this.camera.position.add(vel);
-    } else {
-      // Slide along walls - try each axis
-      const hitX = castSphere(
-        pos.x,
-        pos.y,
-        pos.z,
-        pos.x + vel.x,
-        pos.y,
-        pos.z,
-        this.collisionRadius,
-      );
-      const hitY = castSphere(
-        pos.x,
-        pos.y,
-        pos.z,
-        pos.x,
-        pos.y + vel.y,
-        pos.z,
-        this.collisionRadius,
-      );
-      const hitZ = castSphere(
-        pos.x,
-        pos.y,
-        pos.z,
-        pos.x,
-        pos.y,
-        pos.z + vel.z,
-        this.collisionRadius,
-      );
-
-      if (!hitX) {
-        this.camera.position.x += vel.x;
-      } else {
-        this.velocity.x = 0;
-      }
-
-      if (!hitY) {
-        this.camera.position.y += vel.y;
-      } else {
-        this.velocity.y = 0;
-      }
-
-      if (!hitZ) {
-        this.camera.position.z += vel.z;
-      } else {
-        this.velocity.z = 0;
-      }
-    }
 
     const speed = this.velocity.length();
     const idle = Math.max(0, 1 - speed / IDLE_VELOCITY_THRESHOLD);

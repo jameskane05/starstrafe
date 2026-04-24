@@ -17,19 +17,12 @@
 
 import * as THREE from "three";
 import { checkSphereCollision } from "../physics/Physics.js";
+import {
+  cloneMissileModel,
+  preloadMissileModel,
+} from "../cache/missileModelCache.js";
 
-const missileGeometry = new THREE.CylinderGeometry(0.08, 0.04, 0.6, 8);
-missileGeometry.rotateX(Math.PI / 2);
-
-const missileMaterial = new THREE.MeshStandardMaterial({
-  color: 0xff4400,
-  emissive: 0xff4400,
-  emissiveIntensity: 4,
-  transparent: true,
-  opacity: 0.95,
-  depthWrite: false,
-  depthTest: true,
-});
+const MISSILE_BODY_LENGTH = 0.6;
 
 const trailGeometry = new THREE.CylinderGeometry(0.02, 0.06, 0.4, 6);
 trailGeometry.rotateX(Math.PI / 2);
@@ -73,8 +66,19 @@ export class Missile {
     this.group.position.copy(position);
     // Occlusion handled by physics mesh depth buffer
 
-    this.mesh = new THREE.Mesh(missileGeometry, missileMaterial);
-    this.group.add(this.mesh);
+    this.mesh = cloneMissileModel(MISSILE_BODY_LENGTH);
+    if (this.mesh) {
+      this.group.add(this.mesh);
+    } else {
+      preloadMissileModel().then(() => {
+        if (this.disposed) return;
+        const m = cloneMissileModel(MISSILE_BODY_LENGTH);
+        if (m) {
+          this.mesh = m;
+          this.group.add(m);
+        }
+      });
+    }
 
     this.trail = new THREE.Mesh(trailGeometry, trailMaterial);
     this.group.add(this.trail);

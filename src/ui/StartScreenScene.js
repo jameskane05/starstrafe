@@ -31,6 +31,7 @@ import sfxManager from "../audio/sfxManager.js";
 import proceduralAudio from "../audio/ProceduralAudio.js";
 import LightManager from "../managers/LightManager.js";
 import { setCachedExteriorShip } from "../cache/exteriorShipCache.js";
+import { preloadMissileModel } from "../cache/missileModelCache.js";
 
 const STAR_COUNT = 1500;
 const SPARKLE_COUNT = 250;
@@ -626,6 +627,7 @@ export class StartScreenScene {
   }
 
   async loadShip(onProgress) {
+    preloadMissileModel().catch(() => {});
     const loader = new GLTFLoader();
     const ESTIMATED_SHIP_BYTES = 38 * 1024 * 1024;
 
