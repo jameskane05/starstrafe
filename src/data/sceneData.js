@@ -103,6 +103,24 @@ export const sceneObjects = {
     },
   },
 
+  saturnaliaLevel: {
+    id: "saturnaliaLevel",
+    type: "splat",
+    path: "./splats/project-futuristic-interstellar-hub.spz",
+    description: "Saturnalia interstellar hub gaussian splat",
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 5,
+    priority: 100,
+    preload: false,
+    paged: false,
+    gizmo: false,
+    criteria: {
+      currentLevel: "saturnalia",
+      currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
+    },
+  },
+
   redarenaLevel: {
     id: "redarenaLevel",
     type: "splat",
@@ -208,6 +226,26 @@ export const sceneObjects = {
       currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
     },
   },
+
+  earthdefenseLevel: {
+    id: "earthdefenseLevel",
+    type: "splat",
+    path: "./splats/earth/EarthDefenseTest2-lod.rad",
+    description: "Earth Defense environment gaussian splat with LOD",
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 12,
+    priority: 100,
+    preload: false,
+    paged: true,
+    lod: true,
+    extSplats: true,
+    gizmo: false,
+    criteria: {
+      currentLevel: "earthdefense",
+      currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
+    },
+  },
 };
 
 /**
@@ -254,10 +292,12 @@ export const LEVEL_OBJECT_IDS = [
   "charonLevelData",
   "newworldLevel",
   "newworldLevelData",
+  "saturnaliaLevel",
   "redarenaLevel",
   "redarenaLevelData",
   "arenatechLevel",
   "arenatechLevelData",
+  "earthdefenseLevel",
 ];
 
 /**

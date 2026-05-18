@@ -170,6 +170,46 @@ export class Game {
     return this.startSoloDebug();
   }
 
+  async startSaturnaliaCampaign() {
+    const levelId = "saturnalia";
+    const levelDataId = `${levelId}LevelData`;
+    if (this.sceneManager?.hasObject?.(levelDataId)) {
+      this.sceneManager.removeObject(levelDataId);
+    }
+    this._levelSpawnCache = null;
+    this.trainingGoalPoints = [];
+    this.trainingGoalQuaternions = [];
+    this.pendingMissionConfig = {
+      missionId: "saturnalia-rhea",
+      levelId,
+    };
+    this.gameManager.setState({
+      currentLevel: levelId,
+      missionLevelId: levelId,
+    });
+    return this.startSoloDebug();
+  }
+
+  async startEarthDefenseCampaign() {
+    const levelId = "earthdefense";
+    const levelDataId = `${levelId}LevelData`;
+    if (this.sceneManager?.hasObject?.(levelDataId)) {
+      this.sceneManager.removeObject(levelDataId);
+    }
+    this._levelSpawnCache = null;
+    this.trainingGoalPoints = [];
+    this.trainingGoalQuaternions = [];
+    this.pendingMissionConfig = {
+      missionId: "capital-ship-earth-defense",
+      levelId,
+    };
+    this.gameManager.setState({
+      currentLevel: levelId,
+      missionLevelId: levelId,
+    });
+    return this.startSoloDebug();
+  }
+
   async ensureEnemyShipAssetsLoaded() {
     return gameSolo.ensureEnemyShipAssetsLoaded(this);
   }

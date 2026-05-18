@@ -144,7 +144,8 @@ export async function startSoloDebug(game) {
 
   if (
     missionConfig?.missionId === "trainingGrounds" ||
-    missionConfig?.missionId === "charon"
+    missionConfig?.missionId === "charon" ||
+    missionConfig?.missionId === "saturnalia-rhea"
   ) {
     if (!applyAuthoredPlayerSpawn(game, debugSpawnIdx ?? 0)) {
       game.camera.position.set(0, 0, 0);

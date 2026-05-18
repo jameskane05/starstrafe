@@ -21,6 +21,7 @@
 export const SCREENS = {
   INITIAL_LOADING: "initialLoading",
   MAIN_MENU: "mainMenu",
+  CAMPAIGN_MISSIONS: "campaignMissions",
   CREATE_GAME: "createGame",
   JOIN_GAME: "joinGame",
   LOBBY: "lobby",
@@ -278,6 +279,7 @@ class MenuManager {
     const showScene =
       this.currentScreen === SCREENS.INITIAL_LOADING ||
       this.currentScreen === SCREENS.MAIN_MENU ||
+      this.currentScreen === SCREENS.CAMPAIGN_MISSIONS ||
       this.currentScreen === SCREENS.CREATE_GAME ||
       this.currentScreen === SCREENS.JOIN_GAME ||
       this.currentScreen === SCREENS.LOADING ||
@@ -428,6 +430,9 @@ class MenuManager {
       case SCREENS.MAIN_MENU:
         this.renderMainMenu();
         break;
+      case SCREENS.CAMPAIGN_MISSIONS:
+        this.renderCampaignMissions();
+        break;
       case SCREENS.CREATE_GAME:
         this.renderCreateGame();
         break;
@@ -454,6 +459,10 @@ class MenuManager {
 
   renderMainMenu() {
     mainMenuScreen.renderMainMenu(this);
+  }
+
+  renderCampaignMissions() {
+    mainMenuScreen.renderCampaignMissions(this);
   }
 
   showFeedbackModal(options = {}) {

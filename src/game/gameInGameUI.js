@@ -247,6 +247,11 @@ export function setup(game) {
 export function toggleEscMenu(game) {
   if (!game.gameManager?.isPlaying()) return;
 
+  if (game.inOptions) {
+    MenuManager.closeOptionsInGame();
+    return;
+  }
+
   if (game.isEscMenuOpen) {
     resumeGame(game);
   } else if (document.getElementById("mission-complete-overlay")) {
@@ -321,9 +326,7 @@ export function showOptionsMenu(game) {
   game.inOptions = true;
   MenuManager.showOptionsFromGame(() => {
     game.inOptions = false;
-    if (game.isEscMenuOpen && game.escMenu) {
-      game.escMenu.style.display = "flex";
-    }
+    resumeGame(game);
   });
 }
 

@@ -295,7 +295,15 @@ export async function init(game) {
 
   await MenuManager.init();
   MenuManager.on("gameStart", async () => await game.startMultiplayerGame());
-  MenuManager.on("campaignStart", () => game.startCharonCampaign());
+  MenuManager.on("campaignStart", (missionId) => {
+    if (missionId === "saturnalia-rhea") {
+      return game.startSaturnaliaCampaign();
+    }
+    if (missionId === "capital-ship-earth-defense") {
+      return game.startEarthDefenseCampaign();
+    }
+    return game.startCharonCampaign();
+  });
   MenuManager.on("trainingGroundsStart", (levelId) =>
     game.startTrainingGrounds(levelId || "newworld"),
   );

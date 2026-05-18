@@ -32,6 +32,12 @@ export const LEVELS = {
     description: "Open planetary environment",
     preview: "/images/NewWorld-preview.png",
   },
+  saturnalia: {
+    id: "saturnalia",
+    name: "Saturnalia",
+    description: "Futuristic interstellar hub",
+    preview: "/images/NewWorld-preview.png",
+  },
   redarena: {
     id: "redarena",
     name: "Red Arena",
@@ -54,6 +60,13 @@ export const LEVELS = {
     name: "Charon",
     description: "Charon environment",
     preview: "/images/charon-final.png",
+  },
+  earthdefense: {
+    id: "earthdefense",
+    name: "Earth Defense",
+    description: "Capital ship engagement above Earth",
+    preview: "/images/arena-preview.png",
+    multiplayerSelectable: false,
   },
 };
 

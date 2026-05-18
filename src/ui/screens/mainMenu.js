@@ -12,7 +12,35 @@
  */
 
 import { GamepadInput } from "../../game/Gamepad.js";
+import { LEVELS } from "../../data/gameData.js";
 import { SCREENS } from "../MenuManager.js";
+
+const CAMPAIGN_MISSIONS = [
+  {
+    id: "charon",
+    title: "#1: Charon",
+    description:
+      "Discover what dangers lie kilometers below the surface of the ice moon mine.",
+    preview: LEVELS.charon.preview,
+    enabled: true,
+  },
+  {
+    id: "saturnalia-rhea",
+    title: "#2: Saturnalia",
+    description:
+      "With the AI swarm bound for Earth, race through a posh ring world resort with a warning.",
+    preview: LEVELS.saturnalia.preview,
+    enabled: true,
+  },
+  {
+    id: "capital-ship-earth-defense",
+    title: "#3: Earth Defense",
+    description:
+      "Earth's fleet is compromised. Only you and Alcair can stop them.",
+    preview: LEVELS.earthdefense.preview,
+    enabled: true,
+  },
+];
 
 function isVideoMainMenu() {
   return (
@@ -33,6 +61,53 @@ function updateGamepadIndicator() {
       indicator.classList.remove("active");
     }
   }
+}
+
+function renderTitle() {
+  return `
+    <div class="menu-title">
+      <p class="subtitle"><a href="https://jamesckane.com" target="_blank" rel="noopener noreferrer" class="subtitle-link">JAMES C. KANE</a>'S</p>
+      <img class="menu-title-logo" src="/images/ui/Starspeed_WordMark.png" alt="Starspeed game title: metallic silver wordmark with stylized wing on the S and a glowing orange line through the text ending in a starburst." />
+      <p class="subtitle">ZERO-G AERIAL COMBAT</p>
+    </div>
+  `;
+}
+
+function renderMainMenuSidebar(manager, { inert = false } = {}) {
+  return `
+    ${renderTitle()}
+    ${renderMainMenuPanel(manager, { inert })}
+  `;
+}
+
+function renderMainMenuPanel(manager, { inert = false } = {}) {
+  const matchmakingActive = Boolean(manager.matchmakingMessage);
+  const disabledAttr = matchmakingActive || inert ? "disabled" : "";
+
+  return `
+    <div class="menu-panel">
+      <div class="menu-content">
+        <div class="menu-buttons">
+          <label>CALLSIGN</label>
+          <div class="name-input-group">
+            <input type="text" id="${inert ? "player-name-exit" : "player-name"}" value="${manager.playerName}" maxlength="16" ${disabledAttr} />
+          </div>
+          <label>SINGLE-PLAYER</label>
+          <button class="menu-btn" id="${inert ? "btn-training-exit" : "btn-training"}" ${disabledAttr}>TRAINING GROUNDS</button>
+          <button class="menu-btn" id="${inert ? "btn-campaign-exit" : "btn-campaign"}" ${disabledAttr}>CAMPAIGN</button>
+          <label>MULTI-PLAYER</label>
+          <button class="menu-btn" id="${inert ? "btn-quick-exit" : "btn-quick"}" ${disabledAttr}>QUICKMATCH</button>
+          <button class="menu-btn" id="${inert ? "btn-join-exit" : "btn-join"}" ${disabledAttr}>JOIN MATCH</button>
+          <button class="menu-btn" id="${inert ? "btn-create-exit" : "btn-create"}" ${disabledAttr}>CREATE MATCH</button>
+          <label>MISC</label>
+          <div class="menu-buttons-row">
+            <button class="menu-btn" id="${inert ? "btn-feedback-exit" : "btn-feedback"}" ${disabledAttr}>FEEDBACK</button>
+            <button class="menu-btn" id="${inert ? "btn-options-exit" : "btn-options"}" ${disabledAttr}>OPTIONS</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 export function renderMainMenu(manager) {
@@ -62,33 +137,7 @@ export function renderMainMenu(manager) {
   manager.menuContent.innerHTML = `
     <div class="menu-screen main-menu">
       <div class="main-menu-right">
-        <div class="menu-title">
-          <p class="subtitle"><a href="https://jamesckane.com" target="_blank" rel="noopener noreferrer" class="subtitle-link">JAMES C. KANE</a>'S</p>
-          <img class="menu-title-logo" src="/images/ui/Starspeed_WordMark.png" alt="Starspeed game title: metallic silver wordmark with stylized wing on the S and a glowing orange line through the text ending in a starburst." />
-          <p class="subtitle">ZERO-G AERIAL COMBAT</p>
-        </div>
-        <div class="menu-panel">
-          <div class="menu-content">
-            <div class="menu-buttons">
-              <label>CALLSIGN</label>
-              <div class="name-input-group">
-                <input type="text" id="player-name" value="${manager.playerName}" maxlength="16" ${matchmakingActive ? "disabled" : ""} />
-              </div>
-              <label>SINGLE-PLAYER</label>
-              <button class="menu-btn" id="btn-training" ${matchmakingActive ? "disabled" : ""}>TRAINING GROUNDS</button>
-              <button class="menu-btn" id="btn-campaign" ${matchmakingActive ? "disabled" : ""}>CAMPAIGN</button>
-              <label>MULTI-PLAYER</label>
-              <button class="menu-btn" id="btn-quick" ${matchmakingActive ? "disabled" : ""}>QUICKMATCH</button>
-              <button class="menu-btn" id="btn-join" ${matchmakingActive ? "disabled" : ""}>JOIN MATCH</button>
-              <button class="menu-btn" id="btn-create" ${matchmakingActive ? "disabled" : ""}>CREATE MATCH</button>
-              <label>MISC</label>
-              <div class="menu-buttons-row">
-                <button class="menu-btn" id="btn-feedback" ${matchmakingActive ? "disabled" : ""}>FEEDBACK</button>
-                <button class="menu-btn" id="btn-options" ${matchmakingActive ? "disabled" : ""}>OPTIONS</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        ${renderMainMenuSidebar(manager)}
       </div>
       ${
         matchmakingActive
@@ -114,7 +163,7 @@ export function renderMainMenu(manager) {
   });
 
   document.getElementById("btn-campaign").addEventListener("click", () => {
-    manager.emit("campaignStart");
+    manager.showScreen(SCREENS.CAMPAIGN_MISSIONS);
   });
 
   document.getElementById("btn-create").addEventListener("click", () => {
@@ -135,6 +184,81 @@ export function renderMainMenu(manager) {
 
   document.getElementById("btn-feedback").addEventListener("click", () => {
     manager.showFeedbackModal({});
+  });
+
+  updateGamepadIndicator();
+}
+
+export function renderCampaignMissions(manager) {
+  if (manager.startScene && manager.startScene.renderer) {
+    manager.startScene.renderer.domElement.style.display = "block";
+  }
+
+  manager.selectedCampaignMissionId ||= "charon";
+
+  manager.menuContent.innerHTML = `
+    <div class="menu-screen main-menu main-menu-campaign">
+      <div class="main-menu-right campaign-menu-right">
+        ${renderTitle()}
+        <div class="main-menu-transition-stage">
+          <div class="main-menu-slide-exit" aria-hidden="true">
+            ${renderMainMenuPanel(manager, { inert: true })}
+          </div>
+          <div class="menu-panel campaign-menu-panel campaign-menu-slide-enter">
+            <div class="menu-content campaign-menu-content">
+              <div class="campaign-heading">
+                <button class="menu-btn campaign-back-arrow" id="btn-campaign-back" aria-label="Back to main menu">&larr;</button>
+                <span class="campaign-heading-copy">
+                  <label>CAMPAIGN</label>
+                  <h2>MISSION SELECT</h2>
+                </span>
+              </div>
+              <div class="campaign-mission-list">
+                ${CAMPAIGN_MISSIONS.map(
+                  (mission) => `
+                    <button class="campaign-mission-card ${mission.enabled ? "" : "disabled"} ${mission.id === manager.selectedCampaignMissionId ? "selected" : ""}" data-mission-id="${mission.id}" ${mission.enabled ? "" : "disabled"}>
+                      <img class="map-preview campaign-mission-preview" src="${mission.preview}" alt="" />
+                      <span class="campaign-mission-copy">
+                        <span class="campaign-mission-title">${mission.title}</span>
+                        <span class="campaign-mission-description">${mission.description}</span>
+                      </span>
+                    </button>
+                  `,
+                ).join("")}
+              </div>
+              <button class="menu-btn primary campaign-start-btn" id="btn-campaign-start">START</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document
+    .querySelectorAll(".campaign-mission-card:not(:disabled)")
+    .forEach((card) => {
+      card.addEventListener("click", () => {
+        manager.selectedCampaignMissionId = card.dataset.missionId;
+        document
+          .querySelectorAll(".campaign-mission-card")
+          .forEach((el) => el.classList.toggle("selected", el === card));
+      });
+    });
+
+  document.getElementById("btn-campaign-back").addEventListener("click", () => {
+    const stage = document.querySelector(".main-menu-transition-stage");
+    if (!stage || stage.classList.contains("campaign-menu-reversing")) {
+      return;
+    }
+
+    stage.classList.add("campaign-menu-reversing");
+    window.setTimeout(() => {
+      manager.showScreen(SCREENS.MAIN_MENU);
+    }, 370);
+  });
+
+  document.getElementById("btn-campaign-start").addEventListener("click", () => {
+    manager.emit("campaignStart", manager.selectedCampaignMissionId);
   });
 
   updateGamepadIndicator();
