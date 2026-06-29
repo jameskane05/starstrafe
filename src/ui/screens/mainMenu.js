@@ -25,7 +25,7 @@ const CAMPAIGN_MISSIONS = [
     enabled: true,
   },
   {
-    id: "saturnalia-rhea",
+    id: "saturnalia",
     title: "#2: Saturnalia",
     description:
       "With the AI swarm bound for Earth, race through a posh ring world resort with a warning.",

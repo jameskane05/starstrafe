@@ -73,6 +73,12 @@ function shouldQueueSoloEnemyRespawn(game) {
   );
 }
 
+function getSoloDifficultySetting(game, category, key, fallback) {
+  if (game.isMultiplayer) return fallback;
+  const value = game.gameManager?.getDifficultySetting?.(category, key);
+  return value ?? fallback;
+}
+
 function destroyTrainingPoolEnemy(game, enemy, index, weaponType = "laser") {
   const deathPos = enemy.mesh.position.clone();
   const deathQuat = enemy.mesh.quaternion.clone();
@@ -114,7 +120,7 @@ function destroyTrainingPoolEnemy(game, enemy, index, weaponType = "laser") {
   game.enemies.splice(index, 1);
   if (shouldQueueSoloEnemyRespawn(game)) {
     game.enemyRespawnQueue.push({
-      timer: 20,
+      timer: getSoloDifficultySetting(game, "enemy", "respawnDelay", 20),
       pos: enemy.spawnPoint.clone(),
       ...(enemy.missionPoolSlot != null
         ? { missionPoolSlot: enemy.missionPoolSlot }
@@ -160,7 +166,7 @@ function destroyEnemy(game, enemy, index, weaponType = "laser") {
   game.enemies.splice(index, 1);
   if (shouldQueueSoloEnemyRespawn(game)) {
     game.enemyRespawnQueue.push({
-      timer: 20,
+      timer: getSoloDifficultySetting(game, "enemy", "respawnDelay", 20),
       pos: respawnPos,
       ...(enemy.missionPoolSlot != null
         ? { missionPoolSlot: enemy.missionPoolSlot }
@@ -488,6 +494,31 @@ export function fireEnemyWeapon(game, position, direction, style = null) {
   }
 }
 
+export function fireAllyWeapon(game, position, direction, style = null) {
+  const allyStyle = {
+    ...(style || {}),
+    team: "ally",
+  };
+  const splatLight = createProjectileSplatLight(game, true, allyStyle);
+  const projectile = new Projectile(
+    game.scene,
+    position.clone(),
+    direction,
+    true,
+    style?.projectileSpeed ?? null,
+    allyStyle,
+    splatLight,
+  );
+  game.projectiles.push(projectile);
+  sfxManager.play("laser", position);
+  game.dynamicLights?.flash(position, allyStyle.color ?? 0x66ccff, {
+    intensity: 8,
+    distance: 12,
+    ttl: 0.05,
+    fade: 0.1,
+  });
+}
+
 function fireEnemyHomingMissile(game, position, direction, style) {
   if (game.isMultiplayer) return;
   maybeCharonHeavyMissileIntro(game);
@@ -542,11 +573,14 @@ export function checkCollisions(game) {
     const projColor = proj.impactColor;
 
     if (!game.isMultiplayer) {
-      if (proj.isPlayerOwned) {
+      if (proj.team !== "enemy") {
         for (let j = game.enemies.length - 1; j >= 0; j--) {
           const enemy = game.enemies[j];
           if (enemy.pointInHitbox(projPos)) {
-            enemy.takeDamage(25);
+            const damage =
+              proj.damage ??
+              getSoloDifficultySetting(game, "player", "laserDamage", 25);
+            enemy.takeDamage(damage);
 
             _hitNormal.subVectors(projPos, enemy.mesh.position).normalize();
             const impact = new LaserImpact(
@@ -578,7 +612,8 @@ export function checkCollisions(game) {
       } else {
         const distSq = projPos.distanceToSquared(playerPos);
         if (distSq < playerRadiusSq) {
-          game.player.health -= 10;
+          const damage = getSoloDifficultySetting(game, "enemy", "damage", 10);
+          game.player.health -= damage;
           game.player.lastDamageTime = game.clock.elapsedTime;
           game.showDamageIndicator(projPos);
           proceduralAudio.shieldHit();

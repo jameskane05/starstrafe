@@ -25,6 +25,7 @@ import {
   ENEMY_SPAWN_DISSOLVE_DURATION,
 } from "../vfx/checkpointDissolveWarp.js";
 import { beginSpawnWarp } from "../vfx/spawnWarp.js";
+import { applyEnvironmentMapToObject } from "../utils/envMapAssets.js";
 
 const _direction = new THREE.Vector3();
 const _targetQuat = new THREE.Quaternion();
@@ -36,6 +37,8 @@ const _toWaypoint = new THREE.Vector3();
 const _shipForward = new THREE.Vector3();
 const _muzzlePos = new THREE.Vector3();
 const _thrusterPos = new THREE.Vector3();
+const _strafeDir = new THREE.Vector3();
+const _combatMoveDir = new THREE.Vector3();
 const _textureLoader = new THREE.TextureLoader();
 
 let shipModels = [];
@@ -51,7 +54,10 @@ export function flushRetainedEnemyMeshes(game) {
       const mats = Array.isArray(child.material)
         ? child.material
         : [child.material];
-      for (const m of mats) m?.dispose?.();
+      for (const m of mats) {
+        if (m?.userData?.enemySharedTemplateMaterial) continue;
+        m?.dispose?.();
+      }
     });
   }
   game._retainedEnemyRootMeshes.length = 0;
@@ -255,6 +261,16 @@ function applyRuntimeShipMaterials(root, mats, index) {
   });
 }
 
+export function applyEnemyShipEnvironmentMap(root, envMap, intensity = 1) {
+  applyEnvironmentMapToObject(root, envMap, intensity);
+}
+
+export function applyEnemyShipEnvironmentMapToModels(envMap, intensity = 1) {
+  for (const model of shipModels) {
+    applyEnemyShipEnvironmentMap(model, envMap, intensity);
+  }
+}
+
 async function loadManifestPaths() {
   try {
     const res = await fetch("./ships/shipData.json", { cache: "no-cache" });
@@ -378,11 +394,15 @@ function biasedWaypoint(currentPos, center, size, centroidBias = 0.35) {
 export class Enemy {
   constructor(scene, position, level, bounds, options = {}) {
     this.level = level;
-    this.health = options.isHeavy ? 300 : 100;
-    this.speed = (3 + Math.random() * 3) * 1.25;
+    this.isHeavy = !!options.isHeavy;
+    const enemyHealthMultiplier = options.healthMultiplier ?? 1;
+    this.baseHealth = Math.round((options.isHeavy ? 300 : 100) * enemyHealthMultiplier);
+    this.health = this.baseHealth;
+    this.invulnerable = options.invulnerable === true;
+    this.speed = (3 + Math.random() * 3) * 1.25 * (options.speedMultiplier ?? 1);
     this.detectionRange = 100;
     this.detectionRangeSq = 10000;
-    this.fireRate = 2;
+    this.fireRate = 2 * (options.fireRateMultiplier ?? 1);
     this.fireCooldown = 0;
     this.collisionRadius = 3;
     this.hitExtents = { x: 8, y: 4, z: 8 };
@@ -409,6 +429,11 @@ export class Enemy {
     this.velocity = new THREE.Vector3();
     this.steerStrength = 1.5 + Math.random() * 1.0;
     this.stuckTimer = 0;
+    this.evadeTimer = 0;
+    this.combatStrafeTimer = 1 + Math.random() * 2;
+    this.orbitSide = Math.random() < 0.5 ? -1 : 1;
+    this.idealAttackRange = this.isHeavy ? 42 : 24 + Math.random() * 10;
+    this.attackRangeBand = this.isHeavy ? 10 : 7;
     this.physicsFrame = Math.floor(Math.random() * 3);
     this._physicsSlot =
       Math.abs(Math.floor(position.x * 31 + position.y * 17 + position.z * 7)) %
@@ -422,7 +447,6 @@ export class Enemy {
     this.weaponMarkerIndex = 0;
     this.engineMarkers = [];
     this.weaponMarkers = [];
-    this.isHeavy = !!options.isHeavy;
     this.heavyMissileInterval = 10;
     // Start ready so first heavy missile can fire immediately on LOS.
     this.heavyMissileTimer = this.heavyMissileInterval;
@@ -431,6 +455,7 @@ export class Enemy {
     this.usesSharedTemplateModel = false;
     this.spawnWarp = null;
     this.missionPoolSlot = options.missionPoolSlot ?? null;
+    this.disableRevealWarp = options.disableRevealWarp === true;
 
     this.modelIndex =
       options.modelIndex != null &&
@@ -446,7 +471,7 @@ export class Enemy {
     if (shipTemplate) {
       const clone = shipTemplate.clone();
       this.usesSharedTemplateModel = true;
-      const shipScale = this.isHeavy ? 4.0 : 2.0;
+      const shipScale = options.shipScale ?? (this.isHeavy ? 4.0 : 2.0);
       clone.scale.setScalar(shipScale);
       clone.rotation.set(0, Math.PI, 0);
       if (this.isHeavy) {
@@ -454,6 +479,14 @@ export class Enemy {
         this.hitExtents.x *= 2;
         this.hitExtents.y *= 2;
         this.hitExtents.z *= 2;
+      }
+      if (options.shipScale != null) {
+        const normalScale = 2.0;
+        const hitScale = Math.max(0.1, options.shipScale / normalScale);
+        this.collisionRadius *= hitScale;
+        this.hitExtents.x *= hitScale;
+        this.hitExtents.y *= hitScale;
+        this.hitExtents.z *= hitScale;
       }
       this.laserColor = shipTemplate.userData?.enemyLaserColor ?? this.laserColor;
       this.laserIntensity = shipTemplate.userData?.enemyLaserIntensity ?? this.laserIntensity;
@@ -467,13 +500,20 @@ export class Enemy {
           child.visible = false;
           this.weaponMarkers.push(child);
         }
-        if (child.material) {
+        if (child.material && options.cloneMaterials !== false) {
           if (Array.isArray(child.material)) {
             child.material = child.material.map((m) =>
               m?.clone ? m.clone() : m,
             );
           } else if (child.material.clone) {
             child.material = child.material.clone();
+          }
+        } else if (child.material) {
+          const mats = Array.isArray(child.material)
+            ? child.material
+            : [child.material];
+          for (const m of mats) {
+            if (m?.userData) m.userData.enemySharedTemplateMaterial = true;
           }
         }
       });
@@ -621,7 +661,7 @@ export class Enemy {
       if (this.shipLight) {
         this.shipLight.intensity = culled ? 0 : this.shipLightIntensity;
       }
-      if (!culled && wasCulled) {
+      if (!this.disableRevealWarp && !culled && wasCulled) {
         if (this.spawnWarp && !this.spawnWarp.disposed) {
           this.spawnWarp.restart({ color: this.laserColor });
         } else if (game) {
@@ -691,13 +731,50 @@ export class Enemy {
       _targetQuat.setFromRotationMatrix(_lookMatrix);
       this.mesh.quaternion.slerp(_targetQuat, delta * 2);
 
-      if (distToPlayerSq > 64) {
+      const distToPlayer = Math.sqrt(distToPlayerSq);
+      this.evadeTimer = Math.max(0, this.evadeTimer - delta);
+      this.combatStrafeTimer -= delta;
+      if (this.combatStrafeTimer <= 0) {
+        this.combatStrafeTimer = 1.6 + Math.random() * 2.4;
+        if (Math.random() < 0.55) this.orbitSide *= -1;
+      }
+
+      _strafeDir.crossVectors(_direction, _upVec);
+      if (_strafeDir.lengthSq() < 0.0001) {
+        _strafeDir.set(this.orbitSide, 0, 0);
+      } else {
+        _strafeDir.normalize().multiplyScalar(this.orbitSide);
+      }
+
+      _combatMoveDir.set(0, 0, 0);
+      const tooFar = distToPlayer > this.idealAttackRange + this.attackRangeBand;
+      const tooClose = distToPlayer < this.idealAttackRange - this.attackRangeBand;
+      if (tooFar) {
+        _combatMoveDir.addScaledVector(_direction, this.isHeavy ? 0.75 : 0.95);
+      } else if (tooClose) {
+        _combatMoveDir.addScaledVector(_direction, this.isHeavy ? -0.25 : -0.65);
+      }
+      _combatMoveDir.addScaledVector(_strafeDir, this.isHeavy ? 0.45 : 0.85);
+      if (this.evadeTimer > 0) {
+        _combatMoveDir.addScaledVector(_strafeDir, 0.8);
+        _combatMoveDir.addScaledVector(_direction, -0.35);
+      }
+
+      if (_combatMoveDir.lengthSq() > 0.001) {
+        _combatMoveDir.normalize();
         _newPos.copy(this.mesh.position);
-        _newPos.x += _direction.x * this.speed * delta;
-        _newPos.y += _direction.y * this.speed * delta;
-        _newPos.z += _direction.z * this.speed * delta;
+        const combatSpeed = this.speed * (this.isHeavy ? 0.75 : 1.0) * delta;
+        _newPos.addScaledVector(_combatMoveDir, combatSpeed);
         if (physicsFrame ? this.canMoveTo(this.mesh.position, _newPos) : true) {
           this.mesh.position.copy(_newPos);
+          this.stuckTimer = 0;
+        } else {
+          this.stuckTimer += delta;
+          if (this.stuckTimer > 0.35) {
+            this.orbitSide *= -1;
+            this.evadeTimer = Math.max(this.evadeTimer, 0.45);
+            this.stuckTimer = 0;
+          }
         }
       }
 
@@ -821,9 +898,12 @@ export class Enemy {
   }
 
   takeDamage(amount) {
+    if (this.invulnerable) return;
     this.health -= amount;
     this.state = "attack";
     this.hasLOS = true;
+    this.evadeTimer = Math.max(this.evadeTimer, 0.7);
+    if (Math.random() < 0.5) this.orbitSide *= -1;
   }
 
   dispose(scene, game = null) {
@@ -855,7 +935,10 @@ export class Enemy {
         const mats = Array.isArray(child.material)
           ? child.material
           : [child.material];
-        for (const m of mats) m?.dispose?.();
+        for (const m of mats) {
+          if (m?.userData?.enemySharedTemplateMaterial) continue;
+          m?.dispose?.();
+        }
       }
     });
   }

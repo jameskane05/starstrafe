@@ -172,7 +172,7 @@ Pre-build LoD scenes for better performance: run `npm run build-lod -- <args...>
 Convert PLY or SPZ to paged LOD .RAD (see [Spark LOD docs](https://sparkjs.dev/2.0.0-preview/docs/lod-getting-started/)). Run from starspeed so paths to `public/splats/` resolve:
 
 ```bash
-npm run build-lod -- public/splats/spaceship/spaceship.spz --chunked --quality
+npm run build-lod -- public/splats/spaceship/spaceship.spz --rad-chunked --quality
 ```
 
 Build the binary once: `cd ../spark-lod/rust/build-lod && cargo build --release` (or set BUILD_LOD_PATH). Output is written next to the input (e.g. `spaceship-lod.rad`). Point `sceneData.js` at the resulting .rad paths.

@@ -27,6 +27,11 @@ import {
   DEFAULT_PROFILE,
   getPerformanceProfile,
 } from "../data/performanceSettings.js";
+import {
+  DEFAULT_DIFFICULTY,
+  DIFFICULTY_PRESETS,
+  getDifficultyPreset,
+} from "../data/difficultySettings.js";
 
 const SETTINGS_KEY = "starspeed-settings";
 
@@ -48,6 +53,8 @@ class GameManager {
     this.savedSettings = this.loadSettings();
     this.state.performanceProfile =
       this.savedSettings.performanceProfile || DEFAULT_PROFILE;
+    this.state.difficulty =
+      this.savedSettings.difficulty || DEFAULT_DIFFICULTY;
     if (this.savedSettings.shipAutoLeveling !== undefined) {
       this.state.shipAutoLeveling = !!this.savedSettings.shipAutoLeveling;
     }
@@ -70,6 +77,7 @@ class GameManager {
       const settings = {
         ...(this.savedSettings || {}),
         performanceProfile: this.state.performanceProfile,
+        difficulty: this.state.difficulty || DEFAULT_DIFFICULTY,
       };
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
       this.savedSettings = settings;
@@ -129,6 +137,27 @@ class GameManager {
   getPerformanceSetting(category, key) {
     const profile = this.getPerformanceProfile();
     return profile?.[category]?.[key];
+  }
+
+  setDifficulty(difficulty) {
+    const key = DIFFICULTY_PRESETS[difficulty]
+      ? difficulty
+      : DEFAULT_DIFFICULTY;
+    this.setState({ difficulty: key });
+    this.saveSettings();
+    console.log(`[GameManager] Difficulty set to: ${key}`);
+  }
+
+  getDifficultyKey() {
+    return this.state.difficulty || DEFAULT_DIFFICULTY;
+  }
+
+  getDifficultyPreset() {
+    return getDifficultyPreset(this.getDifficultyKey());
+  }
+
+  getDifficultySetting(category, key) {
+    return this.getDifficultyPreset()?.[category]?.[key];
   }
 
   /**

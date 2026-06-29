@@ -115,8 +115,25 @@ export const charonLevelTriggerBindings = [
   },
 ];
 
+/** @type {LevelTriggerBinding[]} */
+export const saturnaliaLevelTriggerBindings = [
+  {
+    objectName: "Trigger.001",
+    id: "saturnalia-trigger-001-chase",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      emitMissionEvent: "saturnaliaChaseStart",
+    },
+  },
+];
+
 const byLevel = {
   charon: charonLevelTriggerBindings,
+  saturnalia: saturnaliaLevelTriggerBindings,
 };
 
 /**

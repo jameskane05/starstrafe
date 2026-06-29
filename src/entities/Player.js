@@ -692,7 +692,7 @@ export class Player {
   loadCockpit(scene) {
     const loader = new GLTFLoader();
     loader.load(
-      "./Heavy_INT_04.glb",
+      "./Heavy_INT_05.glb",
       (gltf) => {
         this.cockpit = gltf.scene;
         this.cockpit.scale.setScalar(1.0);

@@ -55,7 +55,15 @@ import {
 function enemySpawnOptions(game) {
   const enableLights =
     game.gameManager.getPerformanceSetting("rendering", "enemyLights") ?? true;
-  return { enableLights, trailsEffect: game.trailsEffect, game };
+  const enemyDifficulty = game.gameManager.getDifficultyPreset?.()?.enemy || {};
+  return {
+    enableLights,
+    trailsEffect: game.trailsEffect,
+    game,
+    healthMultiplier: enemyDifficulty.healthMultiplier ?? 1,
+    speedMultiplier: enemyDifficulty.speedMultiplier ?? 1,
+    fireRateMultiplier: enemyDifficulty.fireRateMultiplier ?? 1,
+  };
 }
 
 export function spawnEnemies(game) {
@@ -334,14 +342,55 @@ export function spawnAtPoint(game, pos, spawnOpts = {}) {
     {
       ...enemySpawnOptions(game),
       ...(lite ? { deferSpawnWarp: true } : {}),
+      ...(spawnOpts.cloneMaterials === false ? { cloneMaterials: false } : {}),
     },
   );
   game.enemies.push(enemy);
   game.gameManager.setState({ enemiesRemaining: game.enemies.length });
 }
 
+export async function spawnAuthoredEnemiesFast(game, positions, options = {}) {
+  if (!positions?.length) return;
+  const compile = options.compile !== false;
+  const opts = {
+    ...enemySpawnOptions(game),
+    deferSpawnWarp: true,
+    cloneMaterials: false,
+    disableRevealWarp: true,
+  };
+  const nModels = shipModels.length;
+
+  for (let i = 0; i < positions.length; i++) {
+    const enemy = new Enemy(
+      game.scene,
+      positions[i].clone(),
+      game.level,
+      game._levelBounds,
+      {
+        ...opts,
+        ...(nModels > 0 ? { modelIndex: i % nModels } : {}),
+      },
+    );
+    game.enemies.push(enemy);
+    if (i % ENEMY_CONSTRUCT_RAF_CHUNK === ENEMY_CONSTRUCT_RAF_CHUNK - 1) {
+      await nextAnimationFrame();
+    }
+  }
+
+  if (compile && game.renderer && game.camera) {
+    if (game.renderer.compileAsync) {
+      await game.renderer.compileAsync(game.scene, game.camera);
+    } else {
+      game.renderer.compile(game.scene, game.camera);
+    }
+  }
+
+  game.gameManager.setState({ enemiesRemaining: game.enemies.length });
+  game.updateHUD?.();
+}
+
 function activateEnemyAtSpawn(game, enemy, position, { skipHud = false } = {}) {
-  enemy.health = enemy.isHeavy ? 300 : 100;
+  enemy.health = enemy.baseHealth ?? (enemy.isHeavy ? 300 : 100);
   enemy.state = "wander";
   enemy.fireCooldown = 0;
   if (enemy.isHeavy) enemy.heavyMissileTimer = enemy.heavyMissileInterval;

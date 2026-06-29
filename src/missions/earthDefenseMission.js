@@ -1,9 +1,11 @@
+import { spawnAuthoredEnemiesFast } from "../game/gameEnemies.js";
+
 export const earthDefenseMission = {
   id: "capital-ship-earth-defense",
   defaultLevelId: "earthdefense",
   startStepId: "arrival",
 
-  start(manager) {
+  async start(manager) {
     const game = manager.game;
     game.enemyRespawnQueue.length = 0;
     game.gameManager.setState({
@@ -11,6 +13,10 @@ export const earthDefenseMission = {
       playerLaserEnabled: true,
       playerMissilesEnabled: true,
     });
+    const positions = game.spawnPoints?.map((p) => p.clone()) ?? [];
+    if (positions.length) {
+      await spawnAuthoredEnemiesFast(game, positions);
+    }
   },
 
   steps: {

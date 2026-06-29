@@ -5,7 +5,8 @@ import { earthDefenseMission } from "./earthDefenseMission.js";
 
 export const MISSIONS = {
   charon: charonMission,
-  "saturnalia-rhea": saturnaliaMission,
+  saturnalia: saturnaliaMission,
   trainingGrounds: trainingGroundsMission,
+  earthdefense: earthDefenseMission,
   "capital-ship-earth-defense": earthDefenseMission,
 };

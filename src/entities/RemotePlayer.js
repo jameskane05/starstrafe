@@ -65,7 +65,7 @@ function nameLabelColorFromPlayerData(playerData, teamMode, team) {
 let exteriorModel = null;
 let exteriorLoading = null;
 
-async function loadExteriorModel() {
+export async function loadMultiplayerShipModel() {
   if (exteriorModel) return exteriorModel;
   if (exteriorLoading) return exteriorLoading;
 
@@ -163,7 +163,7 @@ export class RemotePlayer {
   }
 
   async createShipMesh() {
-    const model = await loadExteriorModel();
+    const model = await loadMultiplayerShipModel();
 
     if (model) {
       const clone = model.clone();

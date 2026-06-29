@@ -53,6 +53,7 @@ export class Game {
     this.player = null;
     this.level = null;
     this.enemies = [];
+    this.alliedShips = [];
     this.spawnPoints = [];
     /** Parallel to spawnPoints: true for `Enemy.* - Heavy` authored spawns. */
     this.enemySpawnHeavyFlags = null;
@@ -72,6 +73,8 @@ export class Game {
     this.clock = new THREE.Clock();
     this.boundFireEnemy = (pos, dir, style) =>
       gameCombat.fireEnemyWeapon(this, pos, dir, style);
+    this.boundFireAlly = (pos, dir, style) =>
+      gameCombat.fireAllyWeapon(this, pos, dir, style);
 
     this.hud = null;
     this._hudLast = {
@@ -180,7 +183,7 @@ export class Game {
     this.trainingGoalPoints = [];
     this.trainingGoalQuaternions = [];
     this.pendingMissionConfig = {
-      missionId: "saturnalia-rhea",
+      missionId: "saturnalia",
       levelId,
     };
     this.gameManager.setState({

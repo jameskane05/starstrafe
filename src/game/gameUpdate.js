@@ -34,6 +34,7 @@ import {
   applyCharonEscapeShakeStartFrame,
   updateCharonReactorEscapeSequence,
 } from "./charonEscapeSequence.js";
+import { updateCockpitEnvZones } from "../utils/cockpitEnvZones.js";
 
 const _audioForward = new THREE.Vector3();
 const _audioUp = new THREE.Vector3();
@@ -183,6 +184,7 @@ export function tick(game, delta, timestamp, frame) {
       if (game.player) {
         applyCharonEscapeShakeStartFrame(game);
         game.player.update(delta, game.clock.elapsedTime);
+        updateCockpitEnvZones(game, delta);
         game.dialogManager?.update(delta);
         updateCharonReactorExplosionFlash(game, delta);
         updateCoreSplatFx(game, delta);
@@ -295,6 +297,14 @@ export function tick(game, delta, timestamp, frame) {
     if (!game.isMultiplayer) {
       const cullDist =
         game.gameManager.getPerformanceProfile().enemyCullDistance ?? 200;
+      for (let i = 0; i < game.alliedShips.length; i++) {
+        game.alliedShips[i].update(
+          delta,
+          game,
+          game.boundFireAlly,
+          game._frameCount,
+        );
+      }
       for (let i = 0; i < game.enemies.length; i++) {
         game.enemies[i].update(
           delta,

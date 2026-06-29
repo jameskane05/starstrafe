@@ -60,6 +60,7 @@ import sfxSounds from "../audio/sfxData.js";
 import engineAudio from "../audio/EngineAudio.js";
 import { XRManager } from "../xr/XRManager.js";
 import { getDebugMissionSpawn } from "../utils/debugSpawner.js";
+import { installEnvMapCapture } from "../utils/envMapCapture.js";
 import { initCheckpointVisualPool } from "../missions/MissionManager.js";
 import { LevelTriggerManager } from "./levelTriggerManager.js";
 
@@ -234,6 +235,7 @@ export async function init(game) {
     renderer: game.renderer,
     sparkRenderer: game.sparkRenderer,
   });
+  installEnvMapCapture(game);
   await game.gameManager.initialize({
     sceneManager: game.sceneManager,
     scene: game.scene,
@@ -296,7 +298,7 @@ export async function init(game) {
   await MenuManager.init();
   MenuManager.on("gameStart", async () => await game.startMultiplayerGame());
   MenuManager.on("campaignStart", (missionId) => {
-    if (missionId === "saturnalia-rhea") {
+    if (missionId === "saturnalia") {
       return game.startSaturnaliaCampaign();
     }
     if (missionId === "capital-ship-earth-defense") {

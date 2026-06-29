@@ -26,6 +26,14 @@ import {
 } from "../physics/Physics.js";
 import { loadSharedShipMaterials } from "../entities/Enemy.js";
 
+function applyRotationDegrees(target, rotation) {
+  target.rotation.set(
+    THREE.MathUtils.degToRad(rotation.x || 0),
+    THREE.MathUtils.degToRad(rotation.y || 0),
+    THREE.MathUtils.degToRad(rotation.z || 0),
+  );
+}
+
 /**
  * Strip optional authoring label after first "-", e.g. Trigger-Main → Trigger,
  * Trigger.003-Cold → Trigger.003. Bindings still use ordinal ids (Trigger, Trigger.001, …).
@@ -42,6 +50,35 @@ function isLevelTriggerMeshName(raw) {
   if (name === "Trigger") return true;
   if (name.startsWith("Trigger.")) return true;
   return /^Trigger\d+$/.test(name);
+}
+
+function isEnvMapZoneMeshName(raw) {
+  return (raw || "").startsWith("EnvMap-");
+}
+
+function isEnvMapZoneObject(object) {
+  let current = object;
+  while (current) {
+    if (isEnvMapZoneMeshName(current.name)) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+function isMetadataVolumeObject(object) {
+  let current = object;
+  while (current) {
+    const name = current.name || "";
+    if (
+      name.startsWith("EnvMap-") ||
+      name.startsWith("ChaseEnemy") ||
+      name.startsWith("ChasePath")
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
 }
 
 /** Map base / GLTFLoader names to binding ids: Trigger, Trigger.001, Trigger.002, … */
@@ -198,7 +235,7 @@ class SceneManager {
         quaternion.w,
       );
     } else if (rotation) {
-      splatMesh.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
+      applyRotationDegrees(splatMesh, rotation);
     }
 
     if (position) {
@@ -264,7 +301,6 @@ class SceneManager {
               return;
             }
 
-            const spawnPoints = this._extractSpawnPointsFromModel(model);
             const markerGroup = this._extractMarkerGroupFromModel(model);
 
             let dynamicElements = [];
@@ -287,9 +323,6 @@ class SceneManager {
               container.add(model.children[0]);
             }
 
-            if (markerGroup) {
-              container.add(markerGroup);
-            }
             if (dynamicElements.length > 0) {
               const dynGroup = new THREE.Group();
               for (const { mesh } of dynamicElements) {
@@ -308,7 +341,23 @@ class SceneManager {
               return;
             }
 
-            container.userData.extractedSpawnPoints = spawnPoints;
+            if (position) {
+              container.position.set(position.x || 0, position.y || 0, position.z || 0);
+            }
+            if (rotation) {
+              applyRotationDegrees(container, rotation);
+            }
+            if (scale !== undefined) {
+              if (typeof scale === "number") {
+                container.scale.setScalar(scale);
+              } else if (typeof scale === "object") {
+                container.scale.set(scale.x || 1, scale.y || 1, scale.z || 1);
+              }
+            }
+
+            container.updateMatrixWorld(true);
+            container.userData.extractedSpawnPoints =
+              this._extractSpawnPointsFromModel(container);
             if (dynamicElements.length > 0) container.userData.dynamicSceneElements = dynamicElements;
 
             const spawnMeshesToRemove = [];
@@ -332,21 +381,9 @@ class SceneManager {
                 else obj.material.dispose();
               }
             }
-
-            if (position) {
-              container.position.set(position.x || 0, position.y || 0, position.z || 0);
+            if (markerGroup) {
+              container.add(markerGroup);
             }
-            if (rotation) {
-              container.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
-            }
-            if (scale !== undefined) {
-              if (typeof scale === "number") {
-                container.scale.setScalar(scale);
-              } else if (typeof scale === "object") {
-                container.scale.set(scale.x || 1, scale.y || 1, scale.z || 1);
-              }
-            }
-
             container.updateMatrixWorld(true);
             container.userData.levelTriggerVolumes =
               this._extractTriggerVolumesFromPlacedRoot(container);
@@ -368,7 +405,7 @@ class SceneManager {
               );
             }
             if (options.physicsCollider) {
-              const skipPrefixes = ["Cube", "Trigger"];
+              const skipPrefixes = ["Trigger", "EnvMap-", "ChaseEnemy", "ChasePath"];
               if (pillarPrefix && animateDynamicMeshes) {
                 skipPrefixes.push(pillarPrefix);
               }
@@ -407,11 +444,7 @@ class SceneManager {
             );
           }
           if (rotation) {
-            model.rotation.set(
-              rotation.x || 0,
-              rotation.y || 0,
-              rotation.z || 0,
-            );
+            applyRotationDegrees(model, rotation);
           }
           if (scale !== undefined) {
             if (typeof scale === "number") {
@@ -738,6 +771,12 @@ class SceneManager {
     model.traverse((child) => {
       if (child.isMesh) {
         if (isLevelTriggerMeshName(child.name)) return;
+        if (isMetadataVolumeObject(child)) {
+          child.visible = false;
+          child.castShadow = false;
+          child.receiveShadow = false;
+          return;
+        }
         if (Array.isArray(child.material)) {
           child.material.forEach((m) => m.dispose());
         } else if (child.material) {
@@ -802,12 +841,22 @@ class SceneManager {
     const vertices = [];
     const indices = [];
     let indexOffset = 0;
+    const bodyPos = new THREE.Vector3();
 
-    const skips = (name) => skipPrefixes.some((p) => name?.startsWith(p));
+    const skips = (object) =>
+      skipPrefixes.some((p) => object.name?.startsWith(p)) ||
+      isMetadataVolumeObject(object);
+
+    model.updateMatrixWorld(true);
+    if (model.getWorldPosition) {
+      model.getWorldPosition(bodyPos);
+    } else {
+      bodyPos.set(position?.x || 0, position?.y || 0, position?.z || 0);
+    }
 
     model.traverse((child) => {
       if (!child.isMesh) return;
-      if (skips(child.name)) return;
+      if (skips(child)) return;
 
       const geo = child.geometry;
       const pos = geo.attributes.position;
@@ -815,11 +864,10 @@ class SceneManager {
 
       child.updateWorldMatrix(true, false);
       const matrix = child.matrixWorld;
-      const modelPos = model.position;
       const localMatrix = matrix.clone();
-      localMatrix.elements[12] -= modelPos.x;
-      localMatrix.elements[13] -= modelPos.y;
-      localMatrix.elements[14] -= modelPos.z;
+      localMatrix.elements[12] -= bodyPos.x;
+      localMatrix.elements[13] -= bodyPos.y;
+      localMatrix.elements[14] -= bodyPos.z;
 
       const v = new THREE.Vector3();
       for (let i = 0; i < pos.count; i++) {
@@ -846,10 +894,13 @@ class SceneManager {
       return;
     }
 
-    const px = position?.x || 0;
-    const py = position?.y || 0;
-    const pz = position?.z || 0;
-    const body = createTrimeshCollider(vertices, indices, px, py, pz);
+    const body = createTrimeshCollider(
+      vertices,
+      indices,
+      bodyPos.x,
+      bodyPos.y,
+      bodyPos.z,
+    );
     const bodies = existingBodies ?? this._physicsBodies.get(id) ?? [];
     bodies.push(body);
     this._physicsBodies.set(id, bodies);

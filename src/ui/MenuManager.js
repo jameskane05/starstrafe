@@ -51,6 +51,7 @@ import proceduralAudio from "../audio/ProceduralAudio.js";
 import sfxManager from "../audio/sfxManager.js";
 import sfxSounds from "../audio/sfxData.js";
 import { getPerformanceProfile } from "../data/performanceSettings.js";
+import { DIFFICULTY_PRESETS } from "../data/difficultySettings.js";
 import { getSystemInfo } from "../utils/systemInfo.js";
 import * as menuFocus from "./menuFocus.js";
 import * as menuNetwork from "./menuNetwork.js";
@@ -599,10 +600,21 @@ class MenuManager {
     const lookSensitivity = gm?.getLookSensitivity?.() ?? 0.65;
     const shipAutoLevel = gm?.getShipAutoLeveling?.() !== false;
     const captionsEnabled = gm?.getCaptionsEnabled?.() !== false;
+    const currentDifficulty = gm?.getDifficultyKey?.() || "normal";
+    const difficulties = Object.keys(DIFFICULTY_PRESETS);
 
     return `
       <div class="options-section gameplay-section">
         <h3>GAMEPLAY</h3>
+        <div class="keybind-row" style="grid-template-columns: 1fr 1fr;">
+          <span class="keybind-action">Difficulty</span>
+          <select id="difficulty-select" class="preset-select">
+            ${difficulties.map((d) => `<option value="${d}" ${d === currentDifficulty ? "selected" : ""}>${DIFFICULTY_PRESETS[d].label.toUpperCase()}</option>`).join("")}
+          </select>
+        </div>
+        <p class="options-hint" style="margin-top: 8px; opacity: 0.5; font-size: 12px;">
+          Changes player survivability, enemy pressure, and allied wingman support. Takes effect on next mission.
+        </p>
         <div class="keybind-row" style="grid-template-columns: 1fr 1fr;">
           <span class="keybind-action">Look Sensitivity <span id="look-sensitivity-val" style="opacity:0.5">${lookSensitivity.toFixed(2)}</span></span>
           <input type="range" id="look-sensitivity" class="options-slider" min="0" max="1" step="0.05" value="${lookSensitivity}">
@@ -955,6 +967,13 @@ class MenuManager {
   }
 
   setupGameplayListeners() {
+    const difficultySelect = document.getElementById("difficulty-select");
+    if (difficultySelect) {
+      difficultySelect.addEventListener("change", () => {
+        window.gameManager?.setDifficulty?.(difficultySelect.value);
+      });
+    }
+
     const slider = document.getElementById("look-sensitivity");
     const valSpan = document.getElementById("look-sensitivity-val");
     if (slider) {

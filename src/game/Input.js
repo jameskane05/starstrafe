@@ -165,6 +165,19 @@ export class Input {
       this.game.toggleHidePilotChrome?.();
       return;
     }
+    if (
+      e.code === 'KeyE' &&
+      e.altKey &&
+      e.shiftKey &&
+      !e.repeat &&
+      this.game.gameManager?.isPlaying()
+    ) {
+      e.preventDefault();
+      this.game.captureEnvMap?.().catch((err) =>
+        console.error('[EnvMapCapture] Failed:', err),
+      );
+      return;
+    }
     this.setKey(e.code, true);
     if (!e.repeat && this.game.gameManager?.isPlaying()) {
       if (KeyBindings.isKeyBound('switchMissileMode', e.code)) {
