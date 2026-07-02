@@ -138,6 +138,7 @@ export const initialState = {
   missionStepId: null,
   missionStepTitle: "",
   currentObjectives: [],
+  selectedPrimaryWeapon: "laser",
   selectedMissileMode: "homing",
   playerLaserEnabled: true,
   playerMissilesEnabled: true,
@@ -180,6 +181,9 @@ export const initialState = {
 
   /** Charon: opening typewriter on black finished — unlocks `charonIntroEntering` autoplay. */
   charonIntroTextDone: false,
+
+  /** Saturnalia: chase drone escaped — station collapse VFX/shake active. */
+  saturnaliaCollapseActive: false,
 
   debugSpawnActive: false,
 

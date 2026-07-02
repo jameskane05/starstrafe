@@ -17,7 +17,9 @@ const TAU = Math.PI * 2;
 const _point = new THREE.Vector3();
 const _box = new THREE.Box3();
 const _objectPoint = new THREE.Vector3();
+const _closestPoint = new THREE.Vector3();
 const _lastDelta = new THREE.Vector3();
+const _boxSize = new THREE.Vector3();
 const _cameraForward = new THREE.Vector3();
 const _cameraRight = new THREE.Vector3();
 
@@ -45,15 +47,20 @@ function findEnvMapZones(game) {
 
     _box.setFromObject(object);
     if (_box.isEmpty()) return;
+    _box.getSize(_boxSize);
     zones.push({
       id: envMapId,
       name: object.name,
       bounds: _box.clone(),
+      volume: _boxSize.x * _boxSize.y * _boxSize.z,
       config,
     });
     object.visible = false;
   });
 
+  console.log(
+    `[CockpitEnvZones] zones: ${zones.map((zone) => zone.name).join(", ")}`,
+  );
   return zones;
 }
 
@@ -78,7 +85,26 @@ function applyAmbientBlend(game, fromEnv, toEnv, factor) {
 }
 
 function findZoneAtPoint(state, point) {
-  return state.zones.find((entry) => entry.bounds.containsPoint(point)) ?? null;
+  let best = null;
+  for (const zone of state.zones) {
+    if (!zone.bounds.containsPoint(point)) continue;
+    if (!best || zone.volume < best.volume) best = zone;
+  }
+  return best;
+}
+
+function findNearestZone(state, point) {
+  let nearest = null;
+  let nearestDistSq = Infinity;
+  for (const zone of state.zones) {
+    zone.bounds.clampPoint(point, _closestPoint);
+    const distSq = _closestPoint.distanceToSquared(point);
+    if (distSq < nearestDistSq) {
+      nearest = zone;
+      nearestDistSq = distSq;
+    }
+  }
+  return nearest;
 }
 
 async function loadZoneEnv(game, zone) {
@@ -188,11 +214,13 @@ function updateObjectZoneBlend(object, state, delta) {
   if (!object?.visible) return;
 
   object.getWorldPosition(_objectPoint);
-  const zone = findZoneAtPoint(state, _objectPoint);
-  if (!zone) return;
-
   let objectState = state.objectStates.get(object);
+  const zone =
+    findZoneAtPoint(state, _objectPoint) ??
+    (objectState ? null : findNearestZone(state, _objectPoint));
+
   if (!objectState) {
+    if (!zone) return;
     const env = state.loadedById.get(zone.id);
     if (!env) return;
     objectState = {
@@ -203,7 +231,7 @@ function updateObjectZoneBlend(object, state, delta) {
       transitionElapsed: TRANSITION_SECONDS,
     };
     state.objectStates.set(object, objectState);
-  } else if (zone.id !== objectState.currentZoneId) {
+  } else if (zone && zone.id !== objectState.currentZoneId) {
     const nextEnv = state.loadedById.get(zone.id);
     if (nextEnv) {
       objectState.fromEnv = objectState.toEnv;
@@ -232,15 +260,28 @@ function updateObjectZoneBlend(object, state, delta) {
   );
 }
 
+export function updateObjectEnvZoneBlend(object, game, delta = TRANSITION_SECONDS) {
+  const state = game?.cockpitEnvZones;
+  if (!state) return;
+  updateObjectZoneBlend(object, state, delta);
+}
+
 function updateBotEnvZones(game, state, delta) {
   for (const enemy of game.enemies ?? []) {
     updateObjectZoneBlend(enemy.mesh, state, delta);
+  }
+  for (const ally of game.alliedShips ?? []) {
+    updateObjectZoneBlend(ally.mesh, state, delta);
   }
   for (const enemy of game._missionEnemyPool ?? []) {
     updateObjectZoneBlend(enemy.mesh, state, delta);
   }
   for (const entry of game._networkBotPool ?? []) {
     updateObjectZoneBlend(entry.mesh, state, delta);
+  }
+  const chaseEnemy = game._saturnaliaChase?.enemy;
+  if (chaseEnemy && !chaseEnemy.disposed) {
+    updateObjectZoneBlend(chaseEnemy.mesh, state, delta);
   }
 }
 

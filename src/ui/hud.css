@@ -307,6 +307,16 @@ canvas {
   text-transform: uppercase;
 }
 
+#mission-panel .mission-panel-distance {
+  color: #8affff;
+  font-family: "Orbitron", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: -0.15rem 0 0.5rem;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.45);
+}
+
 #mission-panel .mission-panel-list {
   display: flex;
   flex-direction: column;
@@ -576,6 +586,72 @@ canvas {
   font-size: 1.35rem;
   letter-spacing: 0.06em;
   top: 26%;
+}
+
+/* Screen-space secondary objective tracker (e.g. Saturnalia charging cannon). */
+.objective-tracker {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) scale(0.72);
+  z-index: 90;
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: "Orbitron", sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: #ffb36a;
+  text-shadow:
+    0 0 10px #ff7a1a,
+    0 0 22px #ff4a12;
+  opacity: 0;
+  transition:
+    opacity 0.3s ease-in,
+    transform 0.3s ease-in;
+}
+
+.objective-tracker.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  transition: none;
+  animation: objective-tracker-in 0.45s cubic-bezier(0.25, 1.5, 0.4, 1);
+}
+
+@keyframes objective-tracker-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.2);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+  75% {
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.objective-tracker-diamond {
+  display: inline-block;
+  margin-right: 0.4em;
+  animation: objective-tracker-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes objective-tracker-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+body.pilot-chrome-hidden .objective-tracker {
+  visibility: hidden !important;
 }
 
 #mobile-controls {

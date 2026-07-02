@@ -29,6 +29,12 @@ const ENV_MAPS_BY_ID = {
     intensity: 4,
     ambientIntensityScale: 1,
   },
+  red: {
+    id: "red",
+    path: "envmaps/red",
+    intensity: 4,
+    ambientIntensityScale: 1,
+  },
 };
 
 const _cubeLoader = new THREE.CubeTextureLoader();
@@ -128,7 +134,10 @@ export function applyBlendedEnvironmentMapToObject(
     for (const material of materials) {
       if (!material || !("envMap" in material)) continue;
       const blendState = patchMaterialForEnvMapBlend(material);
-      if (!material.envMap) material.envMap = fromEnv.texture;
+      if (material.envMap !== fromEnv.texture) {
+        material.envMap = fromEnv.texture;
+        material.needsUpdate = true;
+      }
       material.envMapIntensity = intensity;
       blendState.fromTexture = fromEnv.texture;
       blendState.toTexture = toTexture;
@@ -138,7 +147,7 @@ export function applyBlendedEnvironmentMapToObject(
         blendState.uniforms.envMapBlendToMap.value = toTexture;
         blendState.uniforms.envMapBlendFactor.value = factor;
       }
-      material.needsUpdate = !blendState.uniforms;
+      material.needsUpdate = material.needsUpdate || !blendState.uniforms;
     }
   });
 }

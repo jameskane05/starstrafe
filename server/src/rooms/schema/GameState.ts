@@ -30,6 +30,8 @@ export class Player extends Schema {
 
   // Weapon upgrades
   @type("boolean") hasLaserUpgrade: boolean = false;
+  @type("boolean") hasChargingLaser: boolean = false;
+  @type("boolean") hasGatling: boolean = false;
 
   // Class and team
   @type("string") shipClass: string = "fighter"; // "fighter" | "tank" | "rogue"
@@ -70,14 +72,15 @@ export class Projectile extends Schema {
 
   @type("number") speed: number = 60;
   @type("number") damage: number = 25;
-  @type("string") type: string = "laser"; // "laser" | "missile"
+  @type("string") type: string = "laser"; // "laser" | "missile" | "gatling" | "chargingLaser"
   @type("string") variant: string = "homing"; // "homing" | "kinetic"
   @type("number") lifetime: number = 3;
+  @type("number") length: number = 0;
 }
 
 export class Collectible extends Schema {
   @type("string") id: string = "";
-  @type("string") type: string = "missile"; // "missile" | "laser_upgrade"
+  @type("string") type: string = "missile"; // "missile" | "laser_upgrade" | "charging_laser" | "gatling"
 
   // Position
   @type("number") x: number = 0;

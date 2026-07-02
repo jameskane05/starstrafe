@@ -126,7 +126,93 @@ export const saturnaliaLevelTriggerBindings = [
       currentState: GAME_STATES.PLAYING,
     },
     onEnter: {
+      playDialog: "saturnaliaPilotHelpUs",
       emitMissionEvent: "saturnaliaChaseStart",
+    },
+  },
+  {
+    objectName: "Trigger.002",
+    id: "saturnalia-trigger-002-booster-gates",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "saturnaliaFlyThroughBoosterGates",
+    },
+  },
+  {
+    objectName: "Trigger.003",
+    id: "saturnalia-trigger-003-getting-hairy",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "saturnaliaGettingHairy",
+    },
+  },
+  {
+    objectName: "Trigger.004",
+    id: "saturnalia-trigger-004-keep-going",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "saturnaliaKeepGoing",
+    },
+  },
+  {
+    objectName: "Trigger.005",
+    id: "saturnalia-trigger-005-spooky",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "saturnaliaSpooky",
+    },
+  },
+  {
+    objectName: "Trigger.006",
+    id: "saturnalia-trigger-006-charging-cannon-upgrade",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "saturnaliaChargingCannonUpgrade",
+      emitMissionEvent: "saturnaliaTrackChargingCannon",
+    },
+  },
+  {
+    objectName: "Trigger.007",
+    id: "saturnalia-trigger-007-just-a-little-farther",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "saturnaliaComeOnJustALittleFurther",
+    },
+  },
+  {
+    objectName: "Trigger.008",
+    id: "saturnalia-trigger-008-i-dont-like-this",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "saturnaliaIDontLikeThis",
     },
   },
 ];

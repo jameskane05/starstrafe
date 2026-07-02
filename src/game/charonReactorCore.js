@@ -370,8 +370,8 @@ export function updateCoreSplatFx(game, delta) {
   fx.splatMesh.updateVersion();
 }
 
-export function applySplatShockwave(game) {
-  const splatMesh = game.sceneManager?.getObject?.("charonLevel");
+export function applySplatShockwave(game, splatObjectId = "charonLevel") {
+  const splatMesh = game.sceneManager?.getObject?.(splatObjectId);
   if (!splatMesh) return null;
 
   const intensityDyno = dyno.dynoFloat(0);

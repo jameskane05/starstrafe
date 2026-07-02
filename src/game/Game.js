@@ -33,6 +33,12 @@ import * as gameSolo from "./gameSolo.js";
 import * as gameMultiplayer from "./gameMultiplayer.js";
 import * as gameUpdate from "./gameUpdate.js";
 import { Prediction } from "../network/Prediction.js";
+import {
+  getUnlockedPrimaryWeaponList,
+  isPrimaryWeaponUnlocked,
+  PRIMARY_WEAPONS,
+  PRIMARY_WEAPON_LABELS,
+} from "./weaponUnlocks.js";
 
 
 export class Game {
@@ -62,6 +68,7 @@ export class Game {
     this.enemyRespawnQueue = [];
     this.trainingGoalPoints = [];
     this.trainingGoalQuaternions = [];
+    this.weaponPickupPoints = [];
     this.projectiles = [];
     this.missiles = [];
     this.explosions = [];
@@ -70,6 +77,11 @@ export class Game {
     this.missileCooldown = 0.4;
     this.lastLaserTime = 0;
     this.laserCooldown = 0.1;
+    this.lastGatlingTime = 0;
+    this.gatlingCooldown = 0.045;
+    this.lastChargingLaserTime = -Infinity;
+    this.chargingLaserCooldown = 1.6;
+    this._primaryFireHeld = false;
     this.clock = new THREE.Clock();
     this.boundFireEnemy = (pos, dir, style) =>
       gameCombat.fireEnemyWeapon(this, pos, dir, style);
@@ -432,9 +444,7 @@ export class Game {
     if (!this.input.isGamepadMode()) return;
 
     const gp = this.input.gamepad;
-    if (gp.fire) {
-      this.firePlayerWeapon();
-    }
+    this.setPrimaryFireHeld(gp.fire);
     if (gp.missileJustPressed) this.fireSelectedMissile();
     if (gp.kineticMissileJustPressed) {
       this.setMissileMode("kinetic");
@@ -452,7 +462,45 @@ export class Game {
 
   firePlayerWeapon() {
     if (!this.canFireLasers()) return false;
-    return gameCombat.firePlayerWeapon(this);
+    return gameCombat.firePlayerWeapon(this, this.getSelectedPrimaryWeapon());
+  }
+
+  setPrimaryFireHeld(held) {
+    const nextHeld = held === true;
+    this._primaryFireHeld = nextHeld;
+    if (!nextHeld) {
+      gameCombat.cancelChargingLaser(this);
+    }
+  }
+
+  updatePrimaryFire(delta) {
+    gameCombat.updatePrimaryWeaponState(this, delta);
+    if (this._primaryFireHeld) this.firePlayerWeapon();
+  }
+
+  getSelectedPrimaryWeapon() {
+    const selected =
+      this.gameManager?.getState?.()?.selectedPrimaryWeapon ??
+      PRIMARY_WEAPONS.LASER;
+    return isPrimaryWeaponUnlocked(selected) ? selected : PRIMARY_WEAPONS.LASER;
+  }
+
+  setPrimaryWeapon(mode) {
+    const nextMode = isPrimaryWeaponUnlocked(mode) ? mode : PRIMARY_WEAPONS.LASER;
+    const prevMode = this.getSelectedPrimaryWeapon();
+    if (prevMode === nextMode) return false;
+    this.gameManager?.setState({ selectedPrimaryWeapon: nextMode });
+    this.player?.updateCockpitStatusDisplay?.({ primaryWeapon: nextMode });
+    this.showPickupMessage?.(`PRIMARY: ${PRIMARY_WEAPON_LABELS[nextMode]}`);
+    return true;
+  }
+
+  cyclePrimaryWeapon() {
+    const unlocked = getUnlockedPrimaryWeaponList();
+    const current = this.getSelectedPrimaryWeapon();
+    const idx = unlocked.indexOf(current);
+    const next = unlocked[(idx + 1) % unlocked.length] ?? PRIMARY_WEAPONS.LASER;
+    return this.setPrimaryWeapon(next);
   }
 
   getSelectedMissileMode() {

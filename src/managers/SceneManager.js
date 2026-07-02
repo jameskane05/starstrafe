@@ -72,7 +72,8 @@ function isMetadataVolumeObject(object) {
     if (
       name.startsWith("EnvMap-") ||
       name.startsWith("ChaseEnemy") ||
-      name.startsWith("ChasePath")
+      name.startsWith("ChasePath") ||
+      name.startsWith("Boost")
     ) {
       return true;
     }
@@ -367,6 +368,7 @@ class SceneManager {
                 n.startsWith("Enemy") ||
                 n.startsWith("Spawn") ||
                 n.startsWith("Missile") ||
+                n.startsWith("Boost") ||
                 n === "Goal" ||
                 n.startsWith("Goal.")
               ) {
@@ -405,7 +407,7 @@ class SceneManager {
               );
             }
             if (options.physicsCollider) {
-              const skipPrefixes = ["Trigger", "EnvMap-", "ChaseEnemy", "ChasePath"];
+              const skipPrefixes = ["Trigger", "EnvMap-", "ChaseEnemy", "ChasePath", "Boost"];
               if (pillarPrefix && animateDynamicMeshes) {
                 skipPrefixes.push(pillarPrefix);
               }
@@ -484,7 +486,9 @@ class SceneManager {
     const enemyEntries = [];
     const playerEntries = [];
     const missile = [];
+    const weaponPickups = [];
     const goals = [];
+    const boosts = [];
     const goalOrder = { Goal: 0, "Goal.001": 1, "Goal.002": 2 };
     model.updateMatrixWorld(true);
     model.traverse((child) => {
@@ -507,12 +511,29 @@ class SceneManager {
         const pos = new THREE.Vector3();
         child.getWorldPosition(pos);
         missile.push(pos.clone());
+      } else if (name.startsWith("ChargingLaser") || name.startsWith("Gatling")) {
+        const pos = new THREE.Vector3();
+        child.getWorldPosition(pos);
+        weaponPickups.push({
+          type: name.startsWith("ChargingLaser") ? "charging_laser" : "gatling",
+          position: pos.clone(),
+        });
       } else if (name === "Goal" || name.startsWith("Goal.")) {
         const pos = new THREE.Vector3();
         child.getWorldPosition(pos);
         const quat = new THREE.Quaternion();
         child.getWorldQuaternion(quat);
         goals.push({
+          name,
+          position: pos.clone(),
+          quaternion: quat.clone(),
+        });
+      } else if (name.startsWith("Boost")) {
+        const pos = new THREE.Vector3();
+        child.getWorldPosition(pos);
+        const quat = new THREE.Quaternion();
+        child.getWorldQuaternion(quat);
+        boosts.push({
           name,
           position: pos.clone(),
           quaternion: quat.clone(),
@@ -537,14 +558,20 @@ class SceneManager {
       if (aOrder !== bOrder) return aOrder - bOrder;
       return a.name.localeCompare(b.name, undefined, { numeric: true });
     });
+    boosts.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true }),
+    );
     return {
       enemy,
       enemyIsHeavy,
       player,
       playerMarkerQuaternions,
       missile,
+      weaponPickups,
       goals: goals.map((entry) => entry.position.clone()),
       goalQuaternions: goals.map((entry) => entry.quaternion.clone()),
+      boosts: boosts.map((entry) => entry.position.clone()),
+      boostQuaternions: boosts.map((entry) => entry.quaternion.clone()),
     };
   }
 
@@ -584,6 +611,7 @@ class SceneManager {
       const name = child.name || "";
       if (
         !keepNames.has(name) &&
+        !name.startsWith("Boost") &&
         !name.startsWith("Enemy") &&
         !name.startsWith("Spawn") &&
         !name.startsWith("Missile")

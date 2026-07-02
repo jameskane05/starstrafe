@@ -51,6 +51,11 @@ import {
   getAllLevelEnemySpawnPositions,
   TRAINING_MISSION_WAVE_SIZE,
 } from "../missions/trainingGroundsMission.js";
+import {
+  isPrimaryWeaponUnlocked,
+  PRIMARY_WEAPONS,
+  unlockPrimaryWeapon,
+} from "./weaponUnlocks.js";
 
 function enemySpawnOptions(game) {
   const enableLights =
@@ -246,6 +251,52 @@ export function spawnMissilePickups(game) {
   );
 }
 
+function pickupTypeToWeapon(type) {
+  if (type === "charging_laser") return PRIMARY_WEAPONS.CHARGING_LASER;
+  if (type === "gatling") return PRIMARY_WEAPONS.GATLING;
+  return null;
+}
+
+function pickupMessageForWeapon(weapon) {
+  if (weapon === PRIMARY_WEAPONS.CHARGING_LASER) return "CHARGING LASER ACQUIRED";
+  if (weapon === PRIMARY_WEAPONS.GATLING) return "GATLING ACQUIRED";
+  return "WEAPON ACQUIRED";
+}
+
+export function spawnWeaponPickups(game) {
+  if (game._weaponPickups) {
+    for (const pickup of game._weaponPickups) {
+      pickup.collectible?.dispose?.();
+    }
+  }
+  game._weaponPickups = [];
+  if (!game.weaponPickupPoints?.length) return;
+  for (let i = 0; i < game.weaponPickupPoints.length; i++) {
+    const entry = game.weaponPickupPoints[i];
+    const weapon = pickupTypeToWeapon(entry.type);
+    if (!weapon || isPrimaryWeaponUnlocked(weapon)) continue;
+    const pos = entry.position;
+    const id = `weapon_solo_${entry.type}_${i}`;
+    const data = { id, type: entry.type, x: pos.x, y: pos.y, z: pos.z };
+    const collectible = new Collectible(
+      game.scene,
+      data,
+      game.dynamicLights,
+    );
+    game._weaponPickups.push({
+      id,
+      type: entry.type,
+      weapon,
+      collectible,
+      pos: pos.clone(),
+      active: true,
+    });
+  }
+  if (game._weaponPickups.length > 0) {
+    console.log(`[Game] Spawned ${game._weaponPickups.length} weapon pickups`);
+  }
+}
+
 export function checkMissilePickups(game, playerPos, delta) {
   if (!game._missilePickups) return;
   const pickupRadiusSq = 25;
@@ -297,6 +348,36 @@ export function checkMissilePickups(game, playerPos, delta) {
       }
       game.updateHUD();
     }
+  }
+}
+
+export function checkWeaponPickups(game, playerPos, delta) {
+  if (!game._weaponPickups) return;
+  const pickupRadiusSq = 25;
+
+  for (const pickup of game._weaponPickups) {
+    if (!pickup.active) continue;
+    pickup.collectible.update(delta);
+
+    const dx = playerPos.x - pickup.pos.x;
+    const dy = playerPos.y - pickup.pos.y;
+    const dz = playerPos.z - pickup.pos.z;
+    if (dx * dx + dy * dy + dz * dz >= pickupRadiusSq) continue;
+
+    unlockPrimaryWeapon(pickup.weapon);
+    if (game.player) {
+      game.player.primaryWeaponUnlocks = {
+        ...(game.player.primaryWeaponUnlocks || {}),
+        [pickup.weapon]: true,
+      };
+    }
+    pickup.collectible.playPickupEffect();
+    pickup.collectible.dispose();
+    pickup.collectible = null;
+    pickup.active = false;
+    game.setPrimaryWeapon?.(pickup.weapon);
+    game.showPickupMessage(pickupMessageForWeapon(pickup.weapon));
+    game.updateHUD();
   }
 }
 

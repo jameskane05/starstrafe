@@ -1104,6 +1104,8 @@ export class StartScreenScene {
     }
     if (this.galaxyTexture) this.galaxyTexture.dispose();
 
+    this.composer?.dispose?.();
+    this.bloomPass?.dispose?.();
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer.domElement.remove();

@@ -80,7 +80,11 @@ export async function init(game) {
   );
   game.scene.add(game.camera);
 
-  game.renderer = new THREE.WebGLRenderer({ antialias: true });
+  // Mobile skips context MSAA (FXAA pass covers AA); saves a multisampled
+  // framebuffer's worth of GPU memory on iOS.
+  const isMobileDevice =
+    "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  game.renderer = new THREE.WebGLRenderer({ antialias: !isMobileDevice });
   // First draw of each shader program runs onFirstUse() → getProgramInfoLog when this is true.
   // Chrome often spends tens–hundreds of ms per program there (visible as stacked blocks in perf).
   // Set to `true` temporarily when debugging shader link errors.
@@ -102,6 +106,15 @@ export async function init(game) {
   game.gameManager = new GameManager();
   window.gameManager = game.gameManager;
   detectPlatform(game.gameManager);
+
+  // Default mobile/iOS to the low rendering profile unless the user has
+  // explicitly picked one; Safari tabs die near ~1-1.5 GB.
+  if (
+    !game.gameManager.savedSettings?.performanceProfile &&
+    (game.gameManager.state.isIOS || game.gameManager.state.isMobile)
+  ) {
+    game.gameManager.state.performanceProfile = "low";
+  }
 
   const perfProfile = game.gameManager.getPerformanceProfile();
   const useLowSplatLOD =
@@ -182,7 +195,10 @@ export async function init(game) {
   game.composer.addPass(new OutputPass());
 
   const bloomUserSetting = game.gameManager.getSetting("bloomEnabled");
-  game.bloomEnabled = bloomUserSetting ?? renderSettings.bloom ?? true;
+  // Mobile defaults to the low profile (bloom off), but keep bloom on by
+  // default there; only an explicit user setting turns it off.
+  const defaultBloom = isMobileDevice ? true : renderSettings.bloom ?? true;
+  game.bloomEnabled = bloomUserSetting ?? defaultBloom;
   gameUpdate.updateBloomActive(game);
 
   game.gameManager.on("bloom:changed", (enabled) => {

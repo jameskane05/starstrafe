@@ -31,6 +31,7 @@ import {
   cacheCharonEscapeRoomAabb,
   stopCharonEscapeSequenceForLevelChange,
 } from "./charonEscapeSequence.js";
+import { stopSaturnaliaCollapseForLevelChange } from "./saturnaliaCollapseSequence.js";
 
 function getLevelOcclusion(game) {
   const level = game.gameManager.getState().currentLevel;
@@ -163,12 +164,16 @@ function saveLevelSpawnCache(
   playerMarkerQuats = null,
   goalQuats = null,
   enemyHeavyFlags = null,
+  boostArr = [],
+  boostQuats = null,
+  weaponPickupArr = [],
 ) {
   if (
     enemyArr.length === 0 &&
     playerArr.length === 0 &&
     missileArr.length === 0 &&
-    goalArr.length === 0
+    goalArr.length === 0 &&
+    boostArr.length === 0
   ) {
     return;
   }
@@ -187,6 +192,14 @@ function saveLevelSpawnCache(
     missile: missileArr.map((v) => v.clone()),
     goals: goalArr.map((v) => v.clone()),
     goalQuats: goalQuatList.map((q) => (q ? q.clone() : null)),
+    boosts: boostArr.map((v) => v.clone()),
+    boostQuats: (boostQuats || boostArr.map(() => null)).map((q) =>
+      q ? q.clone() : null,
+    ),
+    weaponPickups: weaponPickupArr.map((entry) => ({
+      type: entry.type,
+      position: entry.position.clone(),
+    })),
     playerMarkerQuats: markerQuats.map((q) => (q ? q.clone() : null)),
     enemyHeavy:
       enemyHeavyFlags &&
@@ -236,6 +249,7 @@ function extractOrderedGoalsFromObject(root) {
 
 export function extractSpawnPoints(game) {
   stopCharonEscapeSequenceForLevelChange(game);
+  stopSaturnaliaCollapseForLevelChange(game);
   game.spawnPoints = [];
   game.enemySpawnHeavyFlags = [];
   game.playerSpawnPoints = [];
@@ -243,6 +257,9 @@ export function extractSpawnPoints(game) {
   game.missileSpawnPoints = [];
   game.trainingGoalPoints = [];
   game.trainingGoalQuaternions = [];
+  game.levelBoostPoints = [];
+  game.levelBoostQuaternions = [];
+  game.weaponPickupPoints = [];
   game._levelTriggerVolumes = [];
   game.dynamicSceneElementManager?.setElements([]);
 
@@ -265,6 +282,9 @@ export function extractSpawnPoints(game) {
       missile,
       goals = [],
       goalQuaternions = [],
+      boosts = [],
+      boostQuaternions = [],
+      weaponPickups = [],
     } = levelData.userData.extractedSpawnPoints;
     game.spawnPoints = enemy.map((v) => v.clone());
     game.enemySpawnHeavyFlags =
@@ -290,6 +310,14 @@ export function extractSpawnPoints(game) {
         e.quaternion.clone(),
       );
     }
+    game.levelBoostPoints = boosts.map((v) => v.clone());
+    game.levelBoostQuaternions = game.levelBoostPoints.map((_, i) =>
+      boostQuaternions[i] ? boostQuaternions[i].clone() : null,
+    );
+    game.weaponPickupPoints = weaponPickups.map((entry) => ({
+      type: entry.type,
+      position: entry.position.clone(),
+    }));
     saveLevelSpawnCache(
       game,
       level,
@@ -300,6 +328,9 @@ export function extractSpawnPoints(game) {
       game.playerSpawnMarkerQuaternions,
       game.trainingGoalQuaternions,
       game.enemySpawnHeavyFlags,
+      game.levelBoostPoints,
+      game.levelBoostQuaternions,
+      game.weaponPickupPoints,
     );
     game.dynamicSceneElementManager?.setElements(
       levelData.userData.dynamicSceneElements || [],
@@ -307,7 +338,7 @@ export function extractSpawnPoints(game) {
     game._levelTriggerVolumes =
       levelData.userData.levelTriggerVolumes ?? [];
     console.log(
-      `[Game] Parsed ${levelDataId}: ${game.spawnPoints.length} enemies, ${game.playerSpawnPoints.length} player spawns, ${game.missileSpawnPoints.length} missile pickups, ${game.trainingGoalPoints.length} goals`,
+      `[Game] Parsed ${levelDataId}: ${game.spawnPoints.length} enemies, ${game.playerSpawnPoints.length} player spawns, ${game.missileSpawnPoints.length} missile pickups, ${game.weaponPickupPoints.length} weapon pickups, ${game.trainingGoalPoints.length} goals, ${game.levelBoostPoints.length} boosts`,
     );
     applyLevelBounds(game);
     bindCharonReactorCoreFromLevelData(game);
@@ -320,7 +351,8 @@ export function extractSpawnPoints(game) {
     game._levelSpawnCache.level === level &&
     (game._levelSpawnCache.enemy.length > 0 ||
       game._levelSpawnCache.player.length > 0 ||
-      game._levelSpawnCache.goals?.length > 0)
+      game._levelSpawnCache.goals?.length > 0 ||
+      game._levelSpawnCache.boosts?.length > 0)
   ) {
     const c = game._levelSpawnCache;
     game.spawnPoints = c.enemy.map((v) => v.clone());
@@ -339,8 +371,17 @@ export function extractSpawnPoints(game) {
     game.trainingGoalQuaternions = game.trainingGoalPoints.map((_, i) =>
       cachedGoalQuats[i] ? cachedGoalQuats[i].clone() : null,
     );
+    game.levelBoostPoints = (c.boosts || []).map((v) => v.clone());
+    const cachedBoostQuats = c.boostQuats || [];
+    game.levelBoostQuaternions = game.levelBoostPoints.map((_, i) =>
+      cachedBoostQuats[i] ? cachedBoostQuats[i].clone() : null,
+    );
+    game.weaponPickupPoints = (c.weaponPickups || []).map((entry) => ({
+      type: entry.type,
+      position: entry.position.clone(),
+    }));
     console.log(
-      `[Game] Restored ${level} spawns from cache (${game.spawnPoints.length} enemies, ${game.playerSpawnPoints.length} player spawns, ${game.missileSpawnPoints.length} missile pickups, ${game.trainingGoalPoints.length} goals)`,
+      `[Game] Restored ${level} spawns from cache (${game.spawnPoints.length} enemies, ${game.playerSpawnPoints.length} player spawns, ${game.missileSpawnPoints.length} missile pickups, ${game.trainingGoalPoints.length} goals, ${game.levelBoostPoints.length} boosts)`,
     );
     {
       const ld =
@@ -371,7 +412,9 @@ export function extractSpawnPoints(game) {
       if (
         !name.startsWith("Enemy") &&
         !name.startsWith("Spawn") &&
-        !name.startsWith("Missile")
+        !name.startsWith("Missile") &&
+        !name.startsWith("ChargingLaser") &&
+        !name.startsWith("Gatling")
       ) {
         return;
       }
@@ -389,6 +432,12 @@ export function extractSpawnPoints(game) {
         });
       } else if (name.startsWith("Missile"))
         game.missileSpawnPoints.push(pos.clone());
+      else if (name.startsWith("ChargingLaser") || name.startsWith("Gatling")) {
+        game.weaponPickupPoints.push({
+          type: name.startsWith("ChargingLaser") ? "charging_laser" : "gatling",
+          position: pos.clone(),
+        });
+      }
     });
     enemyEntries.sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { numeric: true }),
@@ -415,6 +464,9 @@ export function extractSpawnPoints(game) {
       game.playerSpawnMarkerQuaternions,
       game.trainingGoalQuaternions,
       game.enemySpawnHeavyFlags,
+      game.levelBoostPoints,
+      game.levelBoostQuaternions,
+      game.weaponPickupPoints,
     );
     console.log(
       `[Game] Parsed ${spawnId}: ${game.spawnPoints.length} enemies, ${game.playerSpawnPoints.length} player spawns, ${game.missileSpawnPoints.length} missile pickups`,
@@ -454,6 +506,9 @@ export function extractSpawnPoints(game) {
       game.playerSpawnMarkerQuaternions,
       game.trainingGoalQuaternions,
       game.enemySpawnHeavyFlags,
+      game.levelBoostPoints,
+      game.levelBoostQuaternions,
+      game.weaponPickupPoints,
     );
     console.log(
       `[Game] Extracted ${game.spawnPoints.length} spawn points from occlusion mesh (fallback)`,

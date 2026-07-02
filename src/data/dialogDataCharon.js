@@ -1,6 +1,6 @@
 /**
  * Dialog tracks for the Charon campaign (`currentMissionId: "charon"`).
- * Merged into `dialogTracks` in dialogData.js.
+ * Merged with other level dialog tracks in dialogData.js.
  */
 
 import { GAME_STATES } from "./gameData.js";
@@ -10,8 +10,8 @@ export const charonDialogTracks = {
   charonIntroEntering: {
     id: "charonIntroEntering",
     speakerId: "alcair",
-    audio: dialogPublicUrl("audio/dialog/charon-00-entering-charon.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-00-entering-charon.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-00-entering-charon.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-00-entering-charon.json"),
     captions: [
       say("Entering Charon Station now.", 2.02, 0.24),
       say("The distress beacon is deep within the mining facility.", 2.94, 3),
@@ -34,8 +34,8 @@ export const charonDialogTracks = {
   charonLeaderSpelunkin: {
     id: "charonLeaderSpelunkin",
     speakerId: "leader",
-    audio: dialogPublicUrl("audio/dialog/charon-01-spellunkin.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-01-spellunkin.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-01-spellunkin.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-01-spellunkin.json"),
     captions: [
       say("Gonna have to go spelunkin'.", 1.34, 0.26),
       say("Expect hostiles.", 1.18, 2.4),
@@ -58,8 +58,8 @@ export const charonDialogTracks = {
   charonStarspeedCopyThat: {
     id: "charonStarspeedCopyThat",
     speakerId: "starspeed",
-    audio: dialogPublicUrl("audio/dialog/charon-01-copy-that.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-01-copy-that.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-01-copy-that.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-01-copy-that.json"),
     captions: [say("Copy that.", 0.42, 0.32), say("Aye, sir.", 0.36, 1.3)],
     criteria: {
       currentState: GAME_STATES.PLAYING,
@@ -77,10 +77,10 @@ export const charonDialogTracks = {
     id: "charonAlcairToggleMapDesktop",
     speakerId: "alcair",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-14-toggle-map-desktop.audio.mp3",
+      "audio/dialog/charon/charon-14-toggle-map-desktop.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-14-toggle-map-desktop.json",
+      "audio/dialog/charon/charon-14-toggle-map-desktop.json",
     ),
     captions: [
       say("Press Tab to activate your holo-map, sir.", 2.72, 1.16),
@@ -107,10 +107,10 @@ export const charonDialogTracks = {
     id: "charonAlcairToggleMapMobile",
     speakerId: "alcair",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-14-toggle-map-mobile.audio.mp3",
+      "audio/dialog/charon/charon-14-toggle-map-mobile.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-14-toggle-map-mobile.json",
+      "audio/dialog/charon/charon-14-toggle-map-mobile.json",
     ),
     captions: [
       say("Press the globe icon to toggle your holo-map, sir.", 3.64, 0.54),
@@ -136,10 +136,10 @@ export const charonDialogTracks = {
     id: "charonAlcairEncounteringResistance",
     speakerId: "alcair",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-03-encountering-resistance.audio.mp3",
+      "audio/dialog/charon/charon-03-encountering-resistance.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-03-encountering-resistance.json",
+      "audio/dialog/charon/charon-03-encountering-resistance.json",
     ),
     captions: [
       say("We're encountering resistance.", 1.48, 0.46),
@@ -165,10 +165,10 @@ export const charonDialogTracks = {
     id: "charonLeaderMachineBrainsRunHot",
     speakerId: "leader",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-02-machine-brains-run-hot.audio.mp3",
+      "audio/dialog/charon/charon-02-machine-brains-run-hot.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-02-machine-brains-run-hot.json",
+      "audio/dialog/charon/charon-02-machine-brains-run-hot.json",
     ),
     captions: [
       say("Machine brains run hot.", 1.9, 0.27),
@@ -189,8 +189,8 @@ export const charonDialogTracks = {
   charonControlRoomIced: {
     id: "charonControlRoomIced",
     speakerId: "flightControl",
-    audio: dialogPublicUrl("audio/dialog/charon-02-control-room.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-02-control-room.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-02-control-room.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-02-control-room.json"),
     captions: [
       say("They let the control room ice over like that?", 3.22, 0.24),
     ],
@@ -210,10 +210,10 @@ export const charonDialogTracks = {
     id: "charonStarspeedWhyPumpAir",
     speakerId: "starspeed",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-04-why-do-they-pump-air.audio.mp3",
+      "audio/dialog/charon/charon-04-why-do-they-pump-air.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-04-why-do-they-pump-air.json",
+      "audio/dialog/charon/charon-04-why-do-they-pump-air.json",
     ),
     captions: [
       say("Why do they pump air in?", 1.6, 0.37),
@@ -235,10 +235,10 @@ export const charonDialogTracks = {
     id: "charonLeaderItsSoItDontExplode",
     speakerId: "leader",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-05-its-so-it-dont-explode.audio.mp3",
+      "audio/dialog/charon/charon-05-its-so-it-dont-explode.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-05-its-so-it-dont-explode.json",
+      "audio/dialog/charon/charon-05-its-so-it-dont-explode.json",
     ),
     captions: [say("Uh, it's so it don't explode.", 2.0, 0.37)],
     criteria: {
@@ -256,8 +256,8 @@ export const charonDialogTracks = {
   charonStarspeedOh: {
     id: "charonStarspeedOh",
     speakerId: "starspeed",
-    audio: dialogPublicUrl("audio/dialog/charon-06-oh.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-06-oh.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-06-oh.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-06-oh.json"),
     captions: [say("...oh.", 2.22, 2.74)],
     criteria: {
       currentState: GAME_STATES.PLAYING,
@@ -273,8 +273,8 @@ export const charonDialogTracks = {
   charonStarspeedAnySympathies: {
     id: "charonStarspeedAnySympathies",
     speakerId: "starspeed",
-    audio: dialogPublicUrl("audio/dialog/charon-07-any-sympathies.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-07-any-sympathies.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-07-any-sympathies.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-07-any-sympathies.json"),
     captions: [
       say("Alcair, any sympathies for your fellow machines?", 3.56, 0.26),
     ],
@@ -294,10 +294,10 @@ export const charonDialogTracks = {
     id: "charonAlcairSirYouProgrammedMe",
     speakerId: "alcair",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-08-sir-you-programmed-me.audio.mp3",
+      "audio/dialog/charon/charon-08-sir-you-programmed-me.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-08-sir-you-programmed-me.json",
+      "audio/dialog/charon/charon-08-sir-you-programmed-me.json",
     ),
     captions: [
       say("Sir, you programmed me yourself.", 2.6, 0.32),
@@ -319,10 +319,10 @@ export const charonDialogTracks = {
     id: "charonStarspeedEasyJustKidding",
     speakerId: "starspeed",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-09-easy-just-kidding.audio.mp3",
+      "audio/dialog/charon/charon-09-easy-just-kidding.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-09-easy-just-kidding.json",
+      "audio/dialog/charon/charon-09-easy-just-kidding.json",
     ),
     captions: [say("Easy! Just kidding...", 2.1, 0.19)],
     criteria: {
@@ -340,10 +340,10 @@ export const charonDialogTracks = {
     id: "charonAlcairMissilesIncoming",
     speakerId: "alcair",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-10-missiles-incoming.audio.mp3",
+      "audio/dialog/charon/charon-10-missiles-incoming.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-10-missiles-incoming.json",
+      "audio/dialog/charon/charon-10-missiles-incoming.json",
     ),
     captions: [say("Missiles incoming!", 1.02, 0.19)],
     criteria: {
@@ -363,10 +363,10 @@ export const charonDialogTracks = {
     id: "charonStarspeedWhoaNotDroneClass",
     speakerId: "starspeed",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-10-whoa-not-drone-class.audio.mp3",
+      "audio/dialog/charon/charon-10-whoa-not-drone-class.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-10-whoa-not-drone-class.json",
+      "audio/dialog/charon/charon-10-whoa-not-drone-class.json",
     ),
     captions: [
       say("Whoa!", 1.14, 0.25),
@@ -388,10 +388,10 @@ export const charonDialogTracks = {
     id: "charonLeaderYeahSeeingHeavies",
     speakerId: "leader",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-11-yeah-seeing-heavies.audio.mp3",
+      "audio/dialog/charon/charon-11-yeah-seeing-heavies.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-11-yeah-seeing-heavies.json",
+      "audio/dialog/charon/charon-11-yeah-seeing-heavies.json",
     ),
     captions: [
       say("Yeah, I'm seeing heavies.", 1.26, 0.35),
@@ -414,10 +414,10 @@ export const charonDialogTracks = {
     id: "charonLeaderSeenEnoughBlowThisPlace",
     speakerId: "leader",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-12-seen-enough-blow-this-place.audio.mp3",
+      "audio/dialog/charon/charon-12-seen-enough-blow-this-place.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-12-seen-enough-blow-this-place.json",
+      "audio/dialog/charon/charon-12-seen-enough-blow-this-place.json",
     ),
     captions: [
       sayAs("flightControl", "I've seen enough.", 1.26, 0.44),
@@ -438,8 +438,8 @@ export const charonDialogTracks = {
   charonStarspeedAyeControl: {
     id: "charonStarspeedAyeControl",
     speakerId: "starspeed",
-    audio: dialogPublicUrl("audio/dialog/charon-12-aye-control.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-12-aye-control.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-12-aye-control.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-12-aye-control.json"),
     captions: [
       say("Aye, Control.", 1.06, 0.23),
       say("We'll find the core and plant munitions.", 1.68, 1.31),
@@ -458,9 +458,9 @@ export const charonDialogTracks = {
   charonHostileSubmitStarspeed: {
     id: "charonHostileSubmitStarspeed",
     speakerId: "mobius",
-    audio: dialogPublicUrl("audio/dialog/charon-13-submit-starspeed.audio.mp3"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-13-submit-starspeed.audio.mp3"),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-13-submit-starspeed.json",
+      "audio/dialog/charon/charon-13-submit-starspeed.json",
     ),
     captions: [
       say("Submit, Starspeed.", 2.32, 0.9),
@@ -481,8 +481,8 @@ export const charonDialogTracks = {
   charonStarspeedWhatTheF: {
     id: "charonStarspeedWhatTheF",
     speakerId: "starspeed",
-    audio: dialogPublicUrl("audio/dialog/charon-14-what-the-f.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-14-what-the-f.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-14-what-the-f.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-14-what-the-f.json"),
     captions: [say("What the fu-", 1.36, 0.43)],
     criteria: {
       currentState: GAME_STATES.PLAYING,
@@ -500,10 +500,10 @@ export const charonDialogTracks = {
     id: "charonLeaderWhateverThatWas",
     speakerId: "leader",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-15-whatever-that-was.audio.mp3",
+      "audio/dialog/charon/charon-15-whatever-that-was.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-15-whatever-that-was.json",
+      "audio/dialog/charon/charon-15-whatever-that-was.json",
     ),
     captions: [say("Whatever that was, let's kill it.", 3.34, 0.25)],
     criteria: {
@@ -521,9 +521,9 @@ export const charonDialogTracks = {
   charonStarspeedNoArgumentHere: {
     id: "charonStarspeedNoArgumentHere",
     speakerId: "starspeed",
-    audio: dialogPublicUrl("audio/dialog/charon-15-no-argument-here.audio.mp3"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-15-no-argument-here.audio.mp3"),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-15-no-argument-here.json",
+      "audio/dialog/charon/charon-15-no-argument-here.json",
     ),
     captions: [say("No argument here.", 0.78, 0.8)],
     criteria: {
@@ -541,10 +541,10 @@ export const charonDialogTracks = {
     id: "charonLeaderThatEnergyField",
     speakerId: "leader",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-16-that-energy-field.audio.mp3",
+      "audio/dialog/charon/charon-16-that-energy-field.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-16-that-energy-field.json",
+      "audio/dialog/charon/charon-16-that-energy-field.json",
     ),
     captions: [
       say("That energy field!", 1.44, 1.45),
@@ -565,8 +565,8 @@ export const charonDialogTracks = {
   charonMobiusLaugh: {
     id: "charonMobiusLaugh",
     speakerId: "mobius",
-    audio: dialogPublicUrl("audio/dialog/charon-17-mobius-laugh.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-17-mobius-laugh.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-17-mobius-laugh.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-17-mobius-laugh.json"),
     captions: [say("[laughing]", 3)],
     criteria: {
       currentState: GAME_STATES.PLAYING,
@@ -583,10 +583,10 @@ export const charonDialogTracks = {
     id: "charonAlcairSirWeNeedToLeave",
     speakerId: "alcair",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-19-sir-we-need-to-leave.audio.mp3",
+      "audio/dialog/charon/charon-19-sir-we-need-to-leave.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-19-sir-we-need-to-leave.json",
+      "audio/dialog/charon/charon-19-sir-we-need-to-leave.json",
     ),
     captions: [say("Sir, we need to leave. Now!", 1.96, 0.16)],
     criteria: {
@@ -605,10 +605,10 @@ export const charonDialogTracks = {
     id: "charonMobiusPointlessReactorTaunt",
     speakerId: "mobius",
     audio: dialogPublicUrl(
-      "audio/dialog/charon-18-pointless-you-matter-not.audio.mp3",
+      "audio/dialog/charon/charon-18-pointless-you-matter-not.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/charon-18-pointless-you-matter-not.json",
+      "audio/dialog/charon/charon-18-pointless-you-matter-not.json",
     ),
     captions: [
       say("Pointless.", 0.86, 0.64),
@@ -634,8 +634,8 @@ export const charonDialogTracks = {
   charonLeaderStarspeedOut: {
     id: "charonLeaderStarspeedOut",
     speakerId: "leader",
-    audio: dialogPublicUrl("audio/dialog/charon-20-starspeed-out.audio.mp3"),
-    faceDataUrl: dialogPublicUrl("audio/dialog/charon-20-starspeed-out.json"),
+    audio: dialogPublicUrl("audio/dialog/charon/charon-20-starspeed-out.audio.mp3"),
+    faceDataUrl: dialogPublicUrl("audio/dialog/charon/charon-20-starspeed-out.json"),
     captions: [say("Starspeed - out!", 1.5, 0.2)],
     criteria: {
       currentState: GAME_STATES.PLAYING,

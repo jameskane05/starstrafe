@@ -66,6 +66,11 @@ const BOOST_MAX_FUEL = 200;
 const COLLECTIBLE_SPAWN_RADIUS = 25;
 const COLLECTIBLE_COLLECT_RADIUS = 3;
 const COLLECTIBLE_RESPAWN_TIME = 15;
+const GATLING_DAMAGE = 6;
+const GATLING_SPEED = 275;
+const CHARGING_LASER_DAMAGE = 145;
+const CHARGING_LASER_RANGE = 340;
+const CHARGING_LASER_RADIUS = 3.2;
 
 const BOT_MAX_COUNT = 8;
 const BOT_SPEED = 12;
@@ -197,6 +202,12 @@ export class GameRoom extends Room {
     qw?: number;
   }[] = [];
   private levelMissileSpawns: { x: number; y: number; z: number }[] = [];
+  private levelWeaponSpawns: {
+    type: string;
+    x: number;
+    y: number;
+    z: number;
+  }[] = [];
 
   private registerMessageHandlers() {
     this.onMessage("input", (client, data) => this.handleInput(client, data));
@@ -220,6 +231,16 @@ export class GameRoom extends Room {
     this.onMessage("setLobbyColor", (client, data) =>
       this.handleSetLobbyColor(client, data),
     );
+    this.onMessage("weaponUnlocks", (client, data) =>
+      this.handleWeaponUnlocks(client, data),
+    );
+  }
+
+  private handleWeaponUnlocks(client: Client, data: any) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (data?.chargingLaser === true) player.hasChargingLaser = true;
+    if (data?.gatling === true) player.hasGatling = true;
   }
 
   private handleSetLobbyColor(client: Client, data: any) {
@@ -268,6 +289,7 @@ export class GameRoom extends Room {
     this.levelSpawnPoints = [];
     this.levelPlayerSpawns = [];
     this.levelMissileSpawns = [];
+    this.levelWeaponSpawns = [];
     this.levelBoundsAabb = null;
     console.log(
       `[GameRoom] Host changed map to ${level}, cleared ready status`,
@@ -331,11 +353,29 @@ export class GameRoom extends Room {
     const enemySpawns = parse(data?.points);
     const playerSpawns = parsePlayerSpawns(data?.playerSpawns);
     const missileSpawns = parse(data?.missileSpawns);
+    const weaponSpawns = (Array.isArray(data?.weaponSpawns)
+      ? data.weaponSpawns
+      : [])
+      .slice(0, 32)
+      .filter(
+        (p: any) =>
+          (p?.type === "charging_laser" || p?.type === "gatling") &&
+          typeof p.x === "number" &&
+          typeof p.y === "number" &&
+          typeof p.z === "number",
+      )
+      .map((p: any) => ({ type: p.type, x: p.x, y: p.y, z: p.z }));
 
     if (enemySpawns.length > 0) this.levelSpawnPoints = enemySpawns;
     if (playerSpawns.length > 0) this.levelPlayerSpawns = playerSpawns;
     if (missileSpawns.length > 0) {
       this.levelMissileSpawns = missileSpawns;
+      if (this.state.phase === "playing") {
+        this.respawnCollectiblesAtLevelPoints();
+      }
+    }
+    if (weaponSpawns.length > 0) {
+      this.levelWeaponSpawns = weaponSpawns;
       if (this.state.phase === "playing") {
         this.respawnCollectiblesAtLevelPoints();
       }
@@ -370,7 +410,7 @@ export class GameRoom extends Room {
     }
 
     console.log(
-      `[GameRoom] Spawn points from host: ${enemySpawns.length} enemy, ${playerSpawns.length} player, ${missileSpawns.length} missile`,
+      `[GameRoom] Spawn points from host: ${enemySpawns.length} enemy, ${playerSpawns.length} player, ${missileSpawns.length} missile, ${weaponSpawns.length} weapon`,
     );
 
     const hasLevelSpawnsNow =
@@ -543,6 +583,12 @@ export class GameRoom extends Room {
 
     if (data.weapon === "laser") {
       this.spawnProjectile(player, data, "laser", classStats.laserSpeed, 25);
+    } else if (data.weapon === "gatling") {
+      if (!player.hasGatling) return;
+      this.spawnProjectile(player, data, "gatling", GATLING_SPEED, GATLING_DAMAGE);
+    } else if (data.weapon === "chargingLaser") {
+      if (!player.hasChargingLaser) return;
+      this.fireChargingLaser(player, data);
     } else if (data.weapon === "missile") {
       if (player.missiles > 0) {
         player.missiles--;
@@ -616,11 +662,124 @@ export class GameRoom extends Room {
       type === "missile" && data.variant === "kinetic" ? "kinetic" : "homing";
     proj.lifetime =
       type === "missile" ? (proj.variant === "kinetic" ? 8 : 5) : 3;
+    proj.length = data.length || 0;
 
     this.state.projectiles.set(proj.id, proj);
     console.log(
       `[GameRoom] Projectile spawned: ${proj.id} type=${type} pos=(${proj.x.toFixed(1)},${proj.y.toFixed(1)},${proj.z.toFixed(1)}) dir=(${proj.dx.toFixed(2)},${proj.dy.toFixed(2)},${proj.dz.toFixed(2)})`,
     );
+  }
+
+  private fireChargingLaser(player: Player, data: any) {
+    const len = Math.max(4, Math.min(CHARGING_LASER_RANGE, data.length || CHARGING_LASER_RANGE));
+    const visual = new Projectile();
+    visual.id = `proj_${this.projectileIdCounter++}`;
+    visual.ownerId = player.id;
+    visual.x = data.x;
+    visual.y = data.y;
+    visual.z = data.z;
+    visual.dx = data.dx;
+    visual.dy = data.dy;
+    visual.dz = data.dz;
+    visual.speed = 0;
+    visual.damage = 0;
+    visual.type = "chargingLaser";
+    visual.lifetime = 1;
+    visual.length = len;
+    this.state.projectiles.set(visual.id, visual);
+
+    const end = {
+      x: data.x + data.dx * len,
+      y: data.y + data.dy * len,
+      z: data.z + data.dz * len,
+    };
+    this.applyChargingLaserHits(player, data, end);
+  }
+
+  private distanceSqToSegment(
+    point: { x: number; y: number; z: number },
+    a: { x: number; y: number; z: number },
+    b: { x: number; y: number; z: number },
+  ) {
+    const abx = b.x - a.x;
+    const aby = b.y - a.y;
+    const abz = b.z - a.z;
+    const lenSq = abx * abx + aby * aby + abz * abz;
+    let t = 0;
+    if (lenSq > 0.0001) {
+      t = Math.max(
+        0,
+        Math.min(
+          1,
+          ((point.x - a.x) * abx + (point.y - a.y) * aby + (point.z - a.z) * abz) / lenSq,
+        ),
+      );
+    }
+    const x = a.x + abx * t;
+    const y = a.y + aby * t;
+    const z = a.z + abz * t;
+    const dx = point.x - x;
+    const dy = point.y - y;
+    const dz = point.z - z;
+    return { distSq: dx * dx + dy * dy + dz * dz, x, y, z };
+  }
+
+  private applyChargingLaserHits(
+    shooter: Player,
+    start: { x: number; y: number; z: number },
+    end: { x: number; y: number; z: number },
+  ) {
+    this.state.players.forEach((player: Player) => {
+      if (!player.alive || player.id === shooter.id) return;
+      if (this.state.mode === "team" && shooter.team === player.team) return;
+      const hit = this.distanceSqToSegment(player, start, end);
+      if (hit.distSq > CHARGING_LASER_RADIUS * CHARGING_LASER_RADIUS) return;
+      player.health -= CHARGING_LASER_DAMAGE;
+      player.lastDamageTime = Date.now();
+      this.broadcast("hit", {
+        targetId: player.id,
+        shooterId: shooter.id,
+        shooterAccentColor: shooter.accentColor ?? "",
+        damage: CHARGING_LASER_DAMAGE,
+        weapon: "chargingLaser",
+        x: hit.x,
+        y: hit.y,
+        z: hit.z,
+      });
+      if (player.health <= 0) this.handlePlayerDeath(player, shooter.id);
+    });
+
+    this.state.bots.forEach((bot: Bot, botId: string) => {
+      const hit = this.distanceSqToSegment(bot, start, end);
+      if (hit.distSq > CHARGING_LASER_RADIUS * CHARGING_LASER_RADIUS) return;
+      bot.health -= CHARGING_LASER_DAMAGE;
+      this.broadcast("hit", {
+        targetId: botId,
+        shooterId: shooter.id,
+        shooterAccentColor: shooter.accentColor ?? "",
+        damage: CHARGING_LASER_DAMAGE,
+        weapon: "chargingLaser",
+        x: hit.x,
+        y: hit.y,
+        z: hit.z,
+      });
+      if (bot.health <= 0) {
+        const deathX = bot.x;
+        const deathY = bot.y;
+        const deathZ = bot.z;
+        this.state.bots.delete(botId);
+        this.botFireCooldowns.delete(botId);
+        this.botBrain.delete(botId);
+        this.botRespawnQueue.push({
+          botId,
+          timer: BOT_RESPAWN_TIME,
+          x: bot.spawnX,
+          y: bot.spawnY,
+          z: bot.spawnZ,
+        });
+        this.broadcast("botDeath", { botId, x: deathX, y: deathY, z: deathZ });
+      }
+    });
   }
 
   private handleClassSelect(_client: Client, _data: any) {}
@@ -1050,7 +1209,7 @@ export class GameRoom extends Room {
     this.state.collectibles.clear();
     this.collectibleRespawnTimers.clear();
 
-    if (this.levelMissileSpawns.length > 0) {
+    if (this.levelMissileSpawns.length > 0 || this.levelWeaponSpawns.length > 0) {
       this.spawnCollectiblesAtLevelPoints();
     } else {
       const usedPositions: { x: number; z: number }[] = [];
@@ -1072,6 +1231,9 @@ export class GameRoom extends Room {
   private spawnCollectiblesAtLevelPoints() {
     for (const pt of this.levelMissileSpawns) {
       this.spawnCollectible("missile", pt.x, pt.y, pt.z);
+    }
+    for (const pt of this.levelWeaponSpawns) {
+      this.spawnCollectible(pt.type, pt.x, pt.y, pt.z);
     }
   }
 
@@ -1243,6 +1405,8 @@ export class GameRoom extends Room {
     player.maxBoostFuel = BOOST_MAX_FUEL;
     player.isBoosting = false;
     player.hasLaserUpgrade = false;
+    player.hasChargingLaser = player.hasChargingLaser === true;
+    player.hasGatling = player.hasGatling === true;
     player.lastDamageTime = 0;
     player.alive = true;
     player.respawnTime = 0;
@@ -1277,7 +1441,7 @@ export class GameRoom extends Room {
       const prevZ = proj.z;
 
       // Only move lasers server-side; missiles are moved by owner's client via missileUpdate
-      if (proj.type !== "missile") {
+      if (proj.type !== "missile" && proj.type !== "chargingLaser") {
         proj.x += proj.dx * proj.speed * dt;
         proj.y += proj.dy * proj.speed * dt;
         proj.z += proj.dz * proj.speed * dt;
@@ -1286,7 +1450,7 @@ export class GameRoom extends Room {
 
       if (proj.lifetime <= 0) {
         toRemove.push(id);
-      } else if (proj.type !== "missile") {
+      } else if (proj.type !== "missile" && proj.type !== "chargingLaser") {
         // Lasers: swept segment from tick integration. Missiles: swept in handleMissileUpdate
         // (per client segment); doing it here would be prev===current (point-only).
         this.checkSweptCollision(proj, id, prevX, prevY, prevZ, toRemove);
@@ -1480,6 +1644,13 @@ export class GameRoom extends Room {
             const classStats =
               SHIP_CLASSES[player.shipClass as keyof typeof SHIP_CLASSES];
             if (player.missiles >= classStats.maxMissiles) return;
+          } else if (
+            collectible.type === "charging_laser" &&
+            player.hasChargingLaser
+          ) {
+            return;
+          } else if (collectible.type === "gatling" && player.hasGatling) {
+            return;
           }
           this.handleCollectiblePickup(player, collectible);
           toRemove.push(id);
@@ -1504,12 +1675,24 @@ export class GameRoom extends Room {
 
     toRespawn.forEach((id) => {
       this.collectibleRespawnTimers.delete(id);
-      if (this.levelMissileSpawns.length > 0) {
+      if (this.levelMissileSpawns.length > 0 || this.levelWeaponSpawns.length > 0) {
+        const weaponPool = this.levelWeaponSpawns.filter(
+          (pt) =>
+            pt.type === "charging_laser" || pt.type === "gatling",
+        );
+        if (
+          weaponPool.length > 0 &&
+          (this.levelMissileSpawns.length === 0 || Math.random() > 0.55)
+        ) {
+          const pt = weaponPool[Math.floor(Math.random() * weaponPool.length)];
+          this.spawnCollectible(pt.type, pt.x, pt.y, pt.z);
+          return;
+        }
         const pt =
           this.levelMissileSpawns[
             Math.floor(Math.random() * this.levelMissileSpawns.length)
           ];
-        this.spawnCollectible("missile", pt.x, pt.y, pt.z);
+        if (pt) this.spawnCollectible("missile", pt.x, pt.y, pt.z);
       } else {
         const type = Math.random() > 0.5 ? "missile" : "laser_upgrade";
         const pos = this.getRandomCollectiblePosition([]);
@@ -1536,6 +1719,12 @@ export class GameRoom extends Room {
     } else if (collectible.type === "laser_upgrade") {
       player.hasLaserUpgrade = true;
       console.log(`[GameRoom] ${player.name} picked up laser upgrade`);
+    } else if (collectible.type === "charging_laser") {
+      player.hasChargingLaser = true;
+      console.log(`[GameRoom] ${player.name} picked up charging laser`);
+    } else if (collectible.type === "gatling") {
+      player.hasGatling = true;
+      console.log(`[GameRoom] ${player.name} picked up gatling`);
     }
 
     // Broadcast pickup event
@@ -1715,6 +1904,7 @@ export class GameRoom extends Room {
       this.levelSpawnPoints = [];
       this.levelPlayerSpawns = [];
       this.levelMissileSpawns = [];
+      this.levelWeaponSpawns = [];
       this.state.players.forEach((p: Player) => {
         p.ready = false;
         p.kills = 0;

@@ -49,6 +49,7 @@ import {
 import { prewarmEnemyMeshesInPlace } from "./gameEnemies.js";
 import { markerQuaternionToCameraQuaternion } from "../utils/playerSpawnOrientation.js";
 import { loadShipModels, shipModels } from "../entities/Enemy.js";
+import { getPrimaryWeaponUnlocks } from "./weaponUnlocks.js";
 import {
   allocateCheckpointDissolveBatchSerial,
   beginCheckpointDissolve,
@@ -340,8 +341,9 @@ function pushLevelSpawnsToServer(game) {
   const ne = game.spawnPoints?.length ?? 0;
   const np = game.playerSpawnPoints?.length ?? 0;
   const nm = game.missileSpawnPoints?.length ?? 0;
+  const nw = game.weaponPickupPoints?.length ?? 0;
   console.log(
-    `[Multiplayer] spawn sync → server (host=${NetworkManager.isHost()}): ${ne} enemy, ${np} player, ${nm} missile`,
+    `[Multiplayer] spawn sync → server (host=${NetworkManager.isHost()}): ${ne} enemy, ${np} player, ${nm} missile, ${nw} weapon`,
   );
   const playerSpawns = (game.playerSpawnPoints || []).map((p, i) => {
     const o = { x: p.x, y: p.y, z: p.z };
@@ -359,6 +361,7 @@ function pushLevelSpawnsToServer(game) {
     enemySpawns: game.spawnPoints,
     playerSpawns,
     missileSpawns: game.missileSpawnPoints,
+    weaponSpawns: game.weaponPickupPoints,
     bounds: game._levelBounds || null,
   });
 }
@@ -416,6 +419,12 @@ export function setupNetworkListeners(game) {
         player.maxBoostFuel ?? game.player.maxBoostFuel;
       game.player.isBoosting = player.isBoosting ?? false;
       game.player.hasLaserUpgrade = player.hasLaserUpgrade;
+      game.player.primaryWeaponUnlocks = {
+        ...getPrimaryWeaponUnlocks(),
+        ...(game.player.primaryWeaponUnlocks || {}),
+        chargingLaser: player.hasChargingLaser === true,
+        gatling: player.hasGatling === true,
+      };
 
       const lastProcessed = player.lastProcessedInput;
       if (lastProcessed > 0) {
@@ -625,6 +634,7 @@ export async function startMultiplayerGame(game) {
 
   game.player = new Player(game.camera, game.input, game.level, game.scene, {
     game,
+    primaryWeaponUnlocks: getPrimaryWeaponUnlocks(),
   });
   game.player.health = localPlayer.health;
   game.player.maxHealth = localPlayer.maxHealth;
@@ -634,6 +644,12 @@ export async function startMultiplayerGame(game) {
   game.player.maxBoostFuel =
     localPlayer.maxBoostFuel ?? game.player.maxBoostFuel;
   game.player.hasLaserUpgrade = localPlayer.hasLaserUpgrade || false;
+  game.player.primaryWeaponUnlocks = {
+    ...getPrimaryWeaponUnlocks(),
+    chargingLaser: localPlayer.hasChargingLaser === true,
+    gatling: localPlayer.hasGatling === true,
+  };
+  NetworkManager.sendWeaponUnlocks?.(getPrimaryWeaponUnlocks());
   game.player.acceleration = classStats.acceleration;
   game.player.maxSpeed = classStats.maxSpeed;
 
@@ -769,5 +785,11 @@ export function cleanupMultiplayer(game) {
       if (pickup.collectible) pickup.collectible.dispose();
     }
     game._missilePickups = null;
+  }
+  if (game._weaponPickups) {
+    for (const pickup of game._weaponPickups) {
+      pickup.collectible?.dispose?.();
+    }
+    game._weaponPickups = null;
   }
 }

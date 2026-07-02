@@ -51,6 +51,7 @@ import { prewarmSpawnWarp } from "../vfx/spawnWarp.js";
 import { Missile } from "../entities/Missile.js";
 import { KineticMissile } from "../entities/KineticMissile.js";
 import { Projectile } from "../entities/Projectile.js";
+import { initLevelBoosters } from "./levelBoosters.js";
 import { GAME_STATES } from "../data/gameData.js";
 import MenuManager from "../ui/MenuManager.js";
 import engineAudio from "../audio/EngineAudio.js";
@@ -69,6 +70,8 @@ import {
   waitForFirstViewReady,
 } from "./gameFirstViewLoading.js";
 import { applyAuthoredPlayerSpawn } from "../utils/playerSpawnOrientation.js";
+import { createPathRailFromScene } from "../utils/pathRail.js";
+import { getPrimaryWeaponUnlocks } from "./weaponUnlocks.js";
 
 function clearAlliedShips(game) {
   if (!game.alliedShips) game.alliedShips = [];
@@ -78,17 +81,21 @@ function clearAlliedShips(game) {
   game.alliedShips.length = 0;
 }
 
-function spawnAlliedEscort(game) {
+function spawnAlliedEscort(game, missionConfig = null) {
   clearAlliedShips(game);
+  if (missionConfig?.missionId !== "saturnalia") return;
   const allyPreset = game.gameManager.getDifficultyPreset?.()?.ally;
   if (allyPreset?.enabled === false) return;
   const playerPos = game.xrManager?.isPresenting && game.xrManager.rig
     ? game.xrManager.rig.position
     : game.camera.position;
-  const offset = new THREE.Vector3(18, 5, 18).applyQuaternion(
+  const offset = new THREE.Vector3(8, 3, -18).applyQuaternion(
     game.camera.quaternion,
   );
   const spawnPos = playerPos.clone().add(offset);
+  const pathRail = createPathRailFromScene(
+    game.sceneManager?.getObject?.("saturnaliaLevelData"),
+  );
   const enableLights =
     game.gameManager.getPerformanceSetting("rendering", "enemyLights") ?? true;
   const ally = new AllyShip(
@@ -103,6 +110,7 @@ function spawnAlliedEscort(game) {
       fireRate: allyPreset?.fireRate ?? 1.1,
       damage: allyPreset?.damage ?? 14,
       cloneMaterials: false,
+      pathRail,
     },
   );
   game.alliedShips.push(ally);
@@ -140,6 +148,7 @@ export async function startSoloDebug(game) {
 
   game.player = new Player(game.camera, game.input, game.level, game.scene, {
     game,
+    primaryWeaponUnlocks: getPrimaryWeaponUnlocks(),
   });
   const difficulty = game.gameManager.getDifficultyPreset?.();
   const playerHealth = difficulty?.player?.maxHealth ?? 100;
@@ -165,6 +174,7 @@ export async function startSoloDebug(game) {
   if (_soloGeomRoot) game.player.automap.setLevel(_soloGeomRoot);
 
   game._extractSpawnPoints();
+  initLevelBoosters(game);
 
   if (missionConfig?.missionId === "trainingGrounds") {
     await gameEnemies.initTrainingMissionEnemyPool(game);
@@ -215,7 +225,7 @@ export async function startSoloDebug(game) {
         Math.floor(Math.random() * game.playerSpawnPoints.length),
     );
   }
-  spawnAlliedEscort(game);
+  spawnAlliedEscort(game, missionConfig);
   void initializeCockpitEnvZones(game).then((zones) => {
     if (!zones) void applyCockpitEnvironmentForCurrentLevel(game);
   });
@@ -243,6 +253,7 @@ export async function startSoloDebug(game) {
     gameEnemies.clearDeferredEnemySpawnState(game);
     await gameEnemies.spawnEnemiesFromLevelSpawnPointsWithPrewarm(game);
     gameEnemies.spawnMissilePickups(game);
+    gameEnemies.spawnWeaponPickups(game);
   } else {
     if (game._missilePickups) {
       for (const pickup of game._missilePickups) {
@@ -250,6 +261,13 @@ export async function startSoloDebug(game) {
       }
       game._missilePickups = [];
     }
+    if (game._weaponPickups) {
+      for (const pickup of game._weaponPickups) {
+        pickup.collectible?.dispose?.();
+      }
+      game._weaponPickups = [];
+    }
+    gameEnemies.spawnWeaponPickups(game);
     game.enemyRespawnQueue.length = 0;
     game.gameManager.clearMissionState({
       currentMissionId: missionConfig.missionId,

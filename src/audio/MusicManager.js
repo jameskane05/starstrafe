@@ -59,6 +59,14 @@ class MusicManager {
     this.playlistIndex = 0;
   }
 
+  _isMobilePlatform() {
+    const state = this.gameManager?.getState?.();
+    if (state && (state.isMobile != null || state.isIOS != null)) {
+      return !!(state.isMobile || state.isIOS);
+    }
+    return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  }
+
   _loadTrack(path) {
     if (this.loaded[path]) return this.loaded[path];
 
@@ -68,12 +76,27 @@ class MusicManager {
       loop: false,
       volume: volume,
       preload: true,
+      // On mobile, stream via HTMLAudioElement instead of decoding the whole
+      // track into a Web Audio buffer (~40-50 MB PCM per track).
+      html5: this._isMobilePlatform(),
       onend: () => this._onTrackEnd(path),
       onloaderror: (id, error) => console.error(`[Music] Failed to load ${path}:`, error),
     });
 
     this.loaded[path] = howl;
     return howl;
+  }
+
+  /** Free a non-current track's decoded buffer / audio element. */
+  _unloadTrack(track) {
+    if (!track || track === this.currentTrack) return;
+    for (const [path, howl] of Object.entries(this.loaded)) {
+      if (howl === track) {
+        delete this.loaded[path];
+        break;
+      }
+    }
+    track.unload();
   }
 
   _onTrackEnd(path) {
@@ -148,7 +171,10 @@ class MusicManager {
       };
       this.isTransitioning = false;
     } else {
-      if (previousTrack && previousTrack !== track) previousTrack.stop();
+      if (previousTrack && previousTrack !== track) {
+        previousTrack.stop();
+        this._unloadTrack(previousTrack);
+      }
       track.volume(targetVolume);
       track.play();
       this.isTransitioning = false;
@@ -298,7 +324,10 @@ class MusicManager {
       }
 
       if (t >= 1) {
-        if (fadeOutTrack) fadeOutTrack.stop();
+        if (fadeOutTrack) {
+          fadeOutTrack.stop();
+          this._unloadTrack(fadeOutTrack);
+        }
         this.crossfadeState.active = false;
         this.isTransitioning = false;
       }
@@ -315,7 +344,10 @@ class MusicManager {
             duckMul,
         );
         if (t >= 1) {
-          if (this.fadeState.stopAfterFade) track.stop();
+          if (this.fadeState.stopAfterFade) {
+            track.stop();
+            this._unloadTrack(track);
+          }
           this.fadeState.active = false;
           this.isTransitioning = false;
         }

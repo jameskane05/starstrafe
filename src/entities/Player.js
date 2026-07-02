@@ -32,6 +32,7 @@ import {
 } from "../vfx/shaders/hologramShader.glsl.js";
 import proceduralAudio from "../audio/ProceduralAudio.js";
 import { refreshCockpitVisibility } from "../game/gameInGameUI.js";
+import { PRIMARY_WEAPON_LABELS } from "../game/weaponUnlocks.js";
 
 const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
@@ -302,6 +303,7 @@ export class Player {
     this.missiles = options.missiles || 6;
     this.maxMissiles = options.maxMissiles || 6;
     this.hasLaserUpgrade = false;
+    this.primaryWeaponUnlocks = options.primaryWeaponUnlocks || null;
 
     this.lastDamageTime = 0;
     this.shieldRegenDelay = 5;
@@ -314,6 +316,8 @@ export class Player {
     this.boostRegenDelay = 3;
     this.lastBoostTime = 0;
     this.boostMultiplier = 2.5;
+    this.overboostMultiplier = 1;
+    this.overboostActive = false;
     this.isBoosting = false;
 
     this.acceleration = options.acceleration || 0.8625;
@@ -367,6 +371,8 @@ export class Player {
       missiles: this.missiles,
       maxMissiles: this.maxMissiles,
       boostPercent: Math.round((this.boostFuel / this.maxBoostFuel) * 100),
+      overboostActive: false,
+      primaryWeapon: this.game?.getSelectedPrimaryWeapon?.() ?? "laser",
       missileMode: this.game?.getSelectedMissileMode?.() ?? "homing",
     };
 
@@ -671,14 +677,16 @@ export class Player {
 
   _updateDialogAvatarRenderers(delta) {
     const renderer = this.game?.renderer;
-    const speakerRenderers = Object.values(this.dialogSpeakerRenderers);
-    if (speakerRenderers.length > 0 && renderer) {
-      const seen = new Set();
-      for (const speakerRenderer of speakerRenderers) {
-        if (!speakerRenderer || seen.has(speakerRenderer)) continue;
-        seen.add(speakerRenderer);
-        speakerRenderer.update(renderer, delta);
-      }
+    if (Object.keys(this.dialogSpeakerRenderers).length > 0 && renderer) {
+      // Only the holo-visible avatar(s) render to their 512x512 targets: the
+      // active speaker plus, mid static-burst switch, the incoming one. Idle
+      // avatars skip their offscreen render entirely.
+      const active = this.activeDialogSpeakerId
+        ? this.dialogSpeakerRenderers[this.activeDialogSpeakerId]
+        : null;
+      const pending = this._holoSpeakerTransition?.toRenderer ?? null;
+      if (active) active.update(renderer, delta);
+      if (pending && pending !== active) pending.update(renderer, delta);
       return;
     }
 
@@ -805,24 +813,7 @@ export class Player {
             this.game.dialogManager = dm;
           };
 
-          Promise.allSettled(
-            Object.keys(dialogSpeakers).map((speakerId) =>
-              loadSpeakerRenderer(speakerId),
-            ),
-          )
-            .then(async (results) => {
-              const loadedRenderers = results
-                .filter((result) => result.status === "fulfilled")
-                .map((result) => result.value)
-                .filter(Boolean);
-
-              if (loadedRenderers.length > 0) {
-                this._setActiveDialogSpeaker(null);
-                await initializeDialogManager();
-                return;
-              }
-
-              console.warn("[Cockpit] VRM load failed, using 2D viseme.");
+          const setupViseme2DFallback = () => {
               const margin = 0.02;
               const cellSize = 1 / 4;
               const displaySize = cellSize * (1 - margin * 2);
@@ -879,6 +870,27 @@ export class Player {
                 (e) =>
                   console.warn("[Cockpit] 2D viseme texture load failed:", e),
               );
+          };
+
+          Promise.allSettled(
+            Object.keys(dialogSpeakers).map((speakerId) =>
+              loadSpeakerRenderer(speakerId),
+            ),
+          )
+            .then(async (results) => {
+              const loadedRenderers = results
+                .filter((result) => result.status === "fulfilled")
+                .map((result) => result.value)
+                .filter(Boolean);
+
+              if (loadedRenderers.length > 0) {
+                this._setActiveDialogSpeaker(null);
+                await initializeDialogManager();
+                return;
+              }
+
+              console.warn("[Cockpit] VRM load failed, using 2D viseme.");
+              setupViseme2DFallback();
             })
             .catch((err) => {
               console.warn("[Cockpit] Speaker avatar setup failed:", err);
@@ -956,6 +968,8 @@ export class Player {
       missiles: null,
       maxMissiles: null,
       boostPercent: null,
+      overboostActive: false,
+      primaryWeapon: null,
       missileMode: null,
     };
     this.updateCockpitStatusDisplay();
@@ -994,6 +1008,9 @@ export class Player {
             (this.boostFuel / Math.max(1, this.maxBoostFuel || 1)) * 100,
         ),
       ),
+      overboostActive: status.overboostActive ?? this.overboostActive === true,
+      primaryWeapon:
+        status.primaryWeapon ?? this.game?.getSelectedPrimaryWeapon?.() ?? "laser",
       missileMode:
         status.missileMode ?? this.game?.getSelectedMissileMode?.() ?? "homing",
     };
@@ -1003,6 +1020,8 @@ export class Player {
       prev.missiles === nextState.missiles &&
       prev.maxMissiles === nextState.maxMissiles &&
       prev.boostPercent === nextState.boostPercent &&
+      prev.overboostActive === nextState.overboostActive &&
+      prev.primaryWeapon === nextState.primaryWeapon &&
       prev.missileMode === nextState.missileMode
     ) {
       return;
@@ -1048,11 +1067,15 @@ export class Player {
         label: "THRUST",
         value: `${this.cockpitStatusState.boostPercent}%`,
         ratio: THREE.MathUtils.clamp(
-          this.cockpitStatusState.boostPercent / 100,
+          this.cockpitStatusState.overboostActive
+            ? 1
+            : this.cockpitStatusState.boostPercent / 100,
           0,
           1,
         ),
         icon: this.cockpitStatusIcons.thrust,
+        overboost: this.cockpitStatusState.overboostActive,
+        modeLabel: this.cockpitStatusState.overboostActive ? "OVERDRIVE" : null,
       },
       {
         label: "MISSILES",
@@ -1065,9 +1088,11 @@ export class Player {
         ),
         icon: this.cockpitStatusIcons.missiles,
         modeLabel:
-          this.cockpitStatusState.missileMode === "kinetic"
-            ? "KINETIC"
-            : "HOMING",
+          `${PRIMARY_WEAPON_LABELS[this.cockpitStatusState.primaryWeapon] ?? "LASER"} / ${
+            this.cockpitStatusState.missileMode === "kinetic"
+              ? "KINETIC"
+              : "HOMING"
+          }`,
       },
     ];
 
@@ -1086,15 +1111,20 @@ export class Player {
         ctx.restore();
       }
 
-      ctx.fillStyle = "rgba(225, 255, 255, 0.96)";
+      const valueColor = row.overboost
+        ? "rgba(255, 128, 36, 0.98)"
+        : "rgba(225, 255, 255, 0.96)";
+      ctx.fillStyle = valueColor;
       ctx.textBaseline = "middle";
       if (row.modeLabel) {
         ctx.font = '700 65px "Rajdhani", "Courier New", monospace';
         ctx.textAlign = "right";
+        ctx.fillStyle = valueColor;
         ctx.fillText(row.modeLabel, valueRightX, centerY - 52);
       }
       ctx.font = '700 92px "Orbitron", "Rajdhani", monospace';
       ctx.textAlign = "right";
+      ctx.fillStyle = valueColor;
       ctx.fillText(row.value, valueRightX, valueY);
       ctx.textBaseline = "alphabetic";
 
@@ -1106,7 +1136,9 @@ export class Player {
       ctx.roundRect(barX, barY, barWidth, barHeight, 10);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = "rgba(235, 255, 255, 0.95)";
+      ctx.fillStyle = row.overboost
+        ? "rgba(255, 128, 36, 0.95)"
+        : "rgba(235, 255, 255, 0.95)";
       ctx.beginPath();
       ctx.roundRect(
         barX + 4,
@@ -1204,8 +1236,9 @@ export class Player {
       this.velocity.add(_accel);
     }
 
-    if (this.velocity.lengthSq() > this.maxSpeed * this.maxSpeed) {
-      this.velocity.normalize().multiplyScalar(this.maxSpeed);
+    const effectiveMaxSpeed = this.maxSpeed * (this.overboostMultiplier ?? 1);
+    if (this.velocity.lengthSq() > effectiveMaxSpeed * effectiveMaxSpeed) {
+      this.velocity.normalize().multiplyScalar(effectiveMaxSpeed);
     }
     const frameScale = Math.min(
       delta * MOVEMENT_REFERENCE_HZ,
@@ -1249,12 +1282,12 @@ export class Player {
     }
 
     if (this.engineMaterials.length > 0) {
-      this.engineGlowTarget = this.isBoosting
+      this.engineGlowTarget = this.overboostActive || this.isBoosting
         ? 1
         : Math.min(1, this.velocity.length() / this.maxSpeed);
       this.engineGlowT +=
         (this.engineGlowTarget - this.engineGlowT) * Math.min(1, delta * 4);
-      const boostGlow = this.isBoosting ? 1 : 0;
+      const boostGlow = this.overboostActive || this.isBoosting ? 1 : 0;
       for (const mat of this.engineMaterials) {
         if (!mat.color || !mat.emissive) continue;
         mat.color.lerpColors(
@@ -1590,15 +1623,25 @@ export class Player {
     const wantsBoost = useGamepad ? gp.boost : keys.boost;
     if (wantsBoost && this.boostFuel > 0 && _accel.lengthSq() > 0) {
       this.isBoosting = true;
-      this.boostFuel = Math.max(
-        0,
-        this.boostFuel - this.boostDrainRate * delta,
-      );
+      if (this.overboostActive) {
+        this.boostFuel = this.maxBoostFuel;
+      } else {
+        this.boostFuel = Math.max(
+          0,
+          this.boostFuel - this.boostDrainRate * delta,
+        );
+      }
       this.lastBoostTime = elapsedTime;
     } else {
       this.isBoosting = false;
+      if (this.overboostActive) {
+        this.boostFuel = this.maxBoostFuel;
+      }
       // Regenerate boost fuel after delay
-      if (elapsedTime - this.lastBoostTime >= this.boostRegenDelay) {
+      if (
+        !this.overboostActive &&
+        elapsedTime - this.lastBoostTime >= this.boostRegenDelay
+      ) {
         this.boostFuel = Math.min(
           this.maxBoostFuel,
           this.boostFuel + this.boostRegenRate * delta,
@@ -1611,6 +1654,7 @@ export class Player {
       if (this.isBoosting) {
         accelMod *= this.boostMultiplier;
       }
+      accelMod *= this.overboostMultiplier ?? 1;
       _accel.normalize().multiplyScalar(accelMod * delta);
       this.velocity.add(_accel);
     }

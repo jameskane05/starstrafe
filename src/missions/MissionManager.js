@@ -331,6 +331,7 @@ export class MissionManager {
     this.game._checkpointDissolvePrewarmed = false;
     this.clearCheckpoints();
     this.clearDirectionalHelperTarget();
+    this.runtime.cannonTrackerEl?.remove();
     this.currentMission = null;
     this.currentStep = null;
     this.currentObjectives = [];

@@ -270,7 +270,19 @@ export class MobileControls {
         { passive: false },
       );
     }
-    handle(fireWeapon, () => this.game.firePlayerWeapon());
+    if (fireWeapon) {
+      fireWeapon.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        haptic();
+        this.game.setPrimaryFireHeld?.(true);
+      }, { passive: false });
+      const endPrimaryFire = (e) => {
+        e.preventDefault();
+        this.game.setPrimaryFireHeld?.(false);
+      };
+      fireWeapon.addEventListener('touchend', endPrimaryFire, { passive: false });
+      fireWeapon.addEventListener('touchcancel', endPrimaryFire, { passive: false });
+    }
 
     handle(menuBtn, () => this.game.showEscMenu());
     handle(mapBtn,  () => this.game.player?.automap?.toggle());

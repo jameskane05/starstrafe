@@ -275,8 +275,26 @@ class MenuManager {
     setTimeout(() => this.resetFocus(), 50);
   }
 
+  async _rebuildStartScene() {
+    if (this.startScene || this._startSceneInitPromise || !this.menuBg) return;
+    const scene = new StartScreenScene();
+    this._startSceneInitPromise = scene
+      .init(this.menuBg)
+      .then(() => {
+        this.startScene = scene;
+        this.syncStartSceneState();
+      })
+      .catch((error) => {
+        console.warn("[Menu] Start scene rebuild failed:", error);
+        scene.dispose();
+      })
+      .finally(() => {
+        this._startSceneInitPromise = null;
+      });
+    await this._startSceneInitPromise;
+  }
+
   syncStartSceneState() {
-    if (!this.startScene) return;
     const showScene =
       this.currentScreen === SCREENS.INITIAL_LOADING ||
       this.currentScreen === SCREENS.MAIN_MENU ||
@@ -285,6 +303,11 @@ class MenuManager {
       this.currentScreen === SCREENS.JOIN_GAME ||
       this.currentScreen === SCREENS.LOADING ||
       this.currentScreen === SCREENS.OPTIONS;
+
+    if (!this.startScene) {
+      if (showScene) void this._rebuildStartScene();
+      return;
+    }
 
     this.startScene.setLoadingBackgroundOnly(
       this.backgroundOnlyLoading ||
@@ -1614,11 +1637,21 @@ class MenuManager {
     if (this.container) {
       this.container.classList.add("hidden");
     }
-    if (this.startScene) {
-      this.startScene.pause();
-      if (this.startScene.renderer) {
-        this.startScene.renderer.domElement.style.display = "none";
-      }
+    if (!this.startScene) return;
+
+    const gmState = window.gameManager?.state;
+    if (gmState?.isMobile || gmState?.isIOS) {
+      // Free the menu's whole WebGL context during play; a second live
+      // context is dead weight against Safari's tab memory limit. Rebuilt
+      // lazily by syncStartSceneState() when the menu returns.
+      this.startScene.dispose();
+      this.startScene = null;
+      return;
+    }
+
+    this.startScene.pause();
+    if (this.startScene.renderer) {
+      this.startScene.renderer.domElement.style.display = "none";
     }
   }
 
