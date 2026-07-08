@@ -32,7 +32,6 @@ import {
 } from "../vfx/shaders/hologramShader.glsl.js";
 import proceduralAudio from "../audio/ProceduralAudio.js";
 import { refreshCockpitVisibility } from "../game/gameInGameUI.js";
-import { PRIMARY_WEAPON_LABELS } from "../game/weaponUnlocks.js";
 
 const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
@@ -372,7 +371,6 @@ export class Player {
       maxMissiles: this.maxMissiles,
       boostPercent: Math.round((this.boostFuel / this.maxBoostFuel) * 100),
       overboostActive: false,
-      primaryWeapon: this.game?.getSelectedPrimaryWeapon?.() ?? "laser",
       missileMode: this.game?.getSelectedMissileMode?.() ?? "homing",
     };
 
@@ -969,7 +967,6 @@ export class Player {
       maxMissiles: null,
       boostPercent: null,
       overboostActive: false,
-      primaryWeapon: null,
       missileMode: null,
     };
     this.updateCockpitStatusDisplay();
@@ -1009,8 +1006,6 @@ export class Player {
         ),
       ),
       overboostActive: status.overboostActive ?? this.overboostActive === true,
-      primaryWeapon:
-        status.primaryWeapon ?? this.game?.getSelectedPrimaryWeapon?.() ?? "laser",
       missileMode:
         status.missileMode ?? this.game?.getSelectedMissileMode?.() ?? "homing",
     };
@@ -1021,7 +1016,6 @@ export class Player {
       prev.maxMissiles === nextState.maxMissiles &&
       prev.boostPercent === nextState.boostPercent &&
       prev.overboostActive === nextState.overboostActive &&
-      prev.primaryWeapon === nextState.primaryWeapon &&
       prev.missileMode === nextState.missileMode
     ) {
       return;
@@ -1088,11 +1082,9 @@ export class Player {
         ),
         icon: this.cockpitStatusIcons.missiles,
         modeLabel:
-          `${PRIMARY_WEAPON_LABELS[this.cockpitStatusState.primaryWeapon] ?? "LASER"} / ${
-            this.cockpitStatusState.missileMode === "kinetic"
-              ? "KINETIC"
-              : "HOMING"
-          }`,
+          this.cockpitStatusState.missileMode === "kinetic"
+            ? "KINETIC"
+            : "HOMING",
       },
     ];
 
