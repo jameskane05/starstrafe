@@ -69,6 +69,8 @@ export class Input {
       rollLeft: false,
       rollRight: false,
     };
+
+    this.primaryFireHeld = false;
     
     this.mouse = { x: 0, y: 0 };
     
@@ -165,10 +167,25 @@ export class Input {
       this.game.toggleHidePilotChrome?.();
       return;
     }
+    if (
+      e.code === 'KeyE' &&
+      e.altKey &&
+      e.shiftKey &&
+      !e.repeat &&
+      this.game.gameManager?.isPlaying()
+    ) {
+      e.preventDefault();
+      this.game.captureEnvMap?.().catch((err) =>
+        console.error('[EnvMapCapture] Failed:', err),
+      );
+      return;
+    }
     this.setKey(e.code, true);
     if (!e.repeat && this.game.gameManager?.isPlaying()) {
       if (KeyBindings.isKeyBound('switchMissileMode', e.code)) {
         this.game.toggleMissileMode?.();
+      } else if (KeyBindings.isKeyBound('switchPrimaryWeapon', e.code)) {
+        this.game.cyclePrimaryWeapon?.();
       } else if (KeyBindings.isKeyBound('missile', e.code)) {
         this.game.setMissileMode?.('homing');
         this.game.fireSelectedMissile?.();
@@ -248,13 +265,18 @@ export class Input {
     }
 
     if (e.button === 0) {
-      this.game.firePlayerWeapon();
+      this.primaryFireHeld = true;
+      this.game.setPrimaryFireHeld?.(true);
     } else if (e.button === 2) {
       this.game.fireSelectedMissile();
     }
   }
 
   onMouseUp(e) {
+    if (e.button === 0) {
+      this.primaryFireHeld = false;
+      this.game.setPrimaryFireHeld?.(false);
+    }
     this.game.player?.automap?.endDrag();
   }
 
@@ -274,6 +296,11 @@ export class Input {
       const look = this.mobile.getLookDelta();
       this.mouse.x += look.x;
       this.mouse.y += look.y;
+    }
+    // Mobile touch buttons set the held state directly; syncing the mouse
+    // state here would stomp it every frame.
+    if (!this.isGamepadMode() && !this.mobile.active) {
+      this.game.setPrimaryFireHeld?.(this.primaryFireHeld);
     }
   }
 

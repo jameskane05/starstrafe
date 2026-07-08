@@ -60,6 +60,7 @@ import sfxSounds from "../audio/sfxData.js";
 import engineAudio from "../audio/EngineAudio.js";
 import { XRManager } from "../xr/XRManager.js";
 import { getDebugMissionSpawn } from "../utils/debugSpawner.js";
+import { installEnvMapCapture } from "../utils/envMapCapture.js";
 import { initCheckpointVisualPool } from "../missions/MissionManager.js";
 import { LevelTriggerManager } from "./levelTriggerManager.js";
 
@@ -75,11 +76,15 @@ export async function init(game) {
     70,
     window.innerWidth / window.innerHeight,
     0.1,
-    1000,
+    2000,
   );
   game.scene.add(game.camera);
 
-  game.renderer = new THREE.WebGLRenderer({ antialias: true });
+  // Mobile skips context MSAA (FXAA pass covers AA); saves a multisampled
+  // framebuffer's worth of GPU memory on iOS.
+  const isMobileDevice =
+    "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  game.renderer = new THREE.WebGLRenderer({ antialias: !isMobileDevice });
   // First draw of each shader program runs onFirstUse() → getProgramInfoLog when this is true.
   // Chrome often spends tens–hundreds of ms per program there (visible as stacked blocks in perf).
   // Set to `true` temporarily when debugging shader link errors.
@@ -101,6 +106,15 @@ export async function init(game) {
   game.gameManager = new GameManager();
   window.gameManager = game.gameManager;
   detectPlatform(game.gameManager);
+
+  // Default mobile/iOS to the low rendering profile unless the user has
+  // explicitly picked one; Safari tabs die near ~1-1.5 GB.
+  if (
+    !game.gameManager.savedSettings?.performanceProfile &&
+    (game.gameManager.state.isIOS || game.gameManager.state.isMobile)
+  ) {
+    game.gameManager.state.performanceProfile = "low";
+  }
 
   const perfProfile = game.gameManager.getPerformanceProfile();
   const useLowSplatLOD =
@@ -180,14 +194,7 @@ export async function init(game) {
   game.composer.addPass(game.bloomPass);
   game.composer.addPass(new OutputPass());
 
-  const bloomUserSetting = game.gameManager.getSetting("bloomEnabled");
-  game.bloomEnabled = bloomUserSetting ?? renderSettings.bloom ?? true;
   gameUpdate.updateBloomActive(game);
-
-  game.gameManager.on("bloom:changed", (enabled) => {
-    game.bloomEnabled = enabled;
-    gameUpdate.updateBloomActive(game);
-  });
 
   game.gameManager.on("bloom:settings", (settings) => {
     if (settings.strength !== undefined)
@@ -234,6 +241,7 @@ export async function init(game) {
     renderer: game.renderer,
     sparkRenderer: game.sparkRenderer,
   });
+  installEnvMapCapture(game);
   await game.gameManager.initialize({
     sceneManager: game.sceneManager,
     scene: game.scene,
@@ -295,7 +303,15 @@ export async function init(game) {
 
   await MenuManager.init();
   MenuManager.on("gameStart", async () => await game.startMultiplayerGame());
-  MenuManager.on("campaignStart", () => game.startCharonCampaign());
+  MenuManager.on("campaignStart", (missionId) => {
+    if (missionId === "saturnalia") {
+      return game.startSaturnaliaCampaign();
+    }
+    if (missionId === "capital-ship-earth-defense") {
+      return game.startEarthDefenseCampaign();
+    }
+    return game.startCharonCampaign();
+  });
   MenuManager.on("trainingGroundsStart", (levelId) =>
     game.startTrainingGrounds(levelId || "newworld"),
   );

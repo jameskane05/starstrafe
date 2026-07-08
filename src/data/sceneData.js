@@ -103,6 +103,48 @@ export const sceneObjects = {
     },
   },
 
+  saturnaliaLevel: {
+    id: "saturnaliaLevel",
+    type: "splat",
+    path: "./splats/saturnalia/New_Saturn-lod.rad",
+    description: "Saturnalia interstellar hub gaussian splat with LOD",
+    position: { x: 0, y: 100, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 10,
+    priority: 100,
+    preload: false,
+    paged: true,
+    lod: true,
+    extSplats: true,
+    gizmo: false,
+    criteria: {
+      currentLevel: "saturnalia",
+      currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
+    },
+  },
+
+  saturnaliaLevelData: {
+    id: "saturnaliaLevelData",
+    type: "gltf",
+    path: "./splats/saturnalia-data.glb",
+    position: { x: 0, y: 100, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 10,
+    priority: 95,
+    preload: false,
+    gizmo: false,
+    options: {
+      occluder: true,
+      debugWireframe: false,
+      physicsCollider: true,
+      combinedLevel: { geometryName: "LevelGeometry" },
+    },
+    criteria: {
+      currentLevel: "saturnalia",
+      currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
+    },
+  },
+
   redarenaLevel: {
     id: "redarenaLevel",
     type: "splat",
@@ -208,6 +250,48 @@ export const sceneObjects = {
       currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
     },
   },
+
+  earthdefenseLevel: {
+    id: "earthdefenseLevel",
+    type: "splat",
+    path: "./splats/earth/earth-final-3-lod.rad",
+    description: "Earth Defense environment gaussian splat with LOD",
+    position: { x: 0, y: -10, z: 0 },
+    rotation: { x: 180, y: 0, z: 0 },
+    scale: 12,
+    priority: 100,
+    preload: false,
+    paged: true,
+    lod: true,
+    extSplats: true,
+    gizmo: false,
+    criteria: {
+      currentLevel: "earthdefense",
+      currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
+    },
+  },
+
+  earthdefenseLevelData: {
+    id: "earthdefenseLevelData",
+    type: "gltf",
+    path: "./splats/earth-data.glb",
+    position: { x: 0, y: -10, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 3,
+    priority: 95,
+    preload: false,
+    gizmo: false,
+    options: {
+      occluder: true,
+      debugWireframe: false,
+      physicsCollider: true,
+      combinedLevel: { geometryName: "LevelGeometry" },
+    },
+    criteria: {
+      currentLevel: "earthdefense",
+      currentState: { $in: [GAME_STATES.PLAYING, GAME_STATES.PAUSED] },
+    },
+  },
 };
 
 /**
@@ -254,10 +338,14 @@ export const LEVEL_OBJECT_IDS = [
   "charonLevelData",
   "newworldLevel",
   "newworldLevelData",
+  "saturnaliaLevel",
+  "saturnaliaLevelData",
   "redarenaLevel",
   "redarenaLevelData",
   "arenatechLevel",
   "arenatechLevelData",
+  "earthdefenseLevel",
+  "earthdefenseLevelData",
 ];
 
 /**

@@ -22,6 +22,39 @@ const _dir = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _fakePos = new THREE.Vector3();
 
+export const ENGINE_TRAIL_FIXED_STEP = 1 / 60;
+export const ENGINE_TRAIL_SAMPLE_SPACING = 0.12;
+const ENGINE_TRAIL_MAX_SEGMENT_STEPS = 64;
+
+const _trackSamplePos = new THREE.Vector3();
+
+export function trackEngineTrailSegment(
+  trail,
+  from,
+  to,
+  now,
+  sampleSpacing = ENGINE_TRAIL_SAMPLE_SPACING,
+) {
+  const dist = from.distanceTo(to);
+  if (dist <= sampleSpacing) {
+    trail.trackPosition(to, ENGINE_TRAIL_FIXED_STEP, now);
+    return;
+  }
+
+  const rawSteps = Math.ceil(dist / sampleSpacing);
+  if (rawSteps > ENGINE_TRAIL_MAX_SEGMENT_STEPS) {
+    trail.clear();
+    trail.trackPosition(to, ENGINE_TRAIL_FIXED_STEP, now);
+    return;
+  }
+
+  const stepDelta = ENGINE_TRAIL_FIXED_STEP / rawSteps;
+  for (let step = 1; step <= rawSteps; step++) {
+    _trackSamplePos.lerpVectors(from, to, step / rawSteps);
+    trail.trackPosition(_trackSamplePos, stepDelta, now);
+  }
+}
+
 export class EngineTrail {
   constructor(scene, options = {}) {
     this.scene = scene;
@@ -39,6 +72,9 @@ export class EngineTrail {
     this.colorEnd = hasGradient ? new THREE.Color(options.colorEnd) : null;
     this.emissiveIntensity = options.emissiveIntensity ?? 2.8;
     this.fakeTail = options.fakeTail ?? null;
+    this.sampleInterval =
+      options.sampleInterval ?? this.trailTime / Math.max(1, this.maxPoints);
+    this._sampleAccumulator = 0;
     this._backDir = new THREE.Vector3(0, 0, 1);
     this._lerpColor = new THREE.Color();
 
@@ -125,6 +161,10 @@ export class EngineTrail {
     this._material.uniforms.uIntensity.value = value;
   }
 
+  setWidth(value) {
+    this.width = value;
+  }
+
   addPoint(worldPos, now = performance.now() / 1000) {
     this.points.push({ position: worldPos.clone(), time: now });
     while (this.points.length > this.maxPoints) this.points.shift();
@@ -132,8 +172,27 @@ export class EngineTrail {
 
   clear() {
     this.points.length = 0;
+    this._sampleAccumulator = 0;
     this._geometry.setDrawRange(0, 0);
     this.mesh.visible = false;
+  }
+
+  trackPosition(worldPos, delta, now = performance.now() / 1000) {
+    if (delta > 0) {
+      this._sampleAccumulator += delta;
+      let guard = 0;
+      const maxSamples = this.maxPoints + 4;
+      while (this._sampleAccumulator >= this.sampleInterval) {
+        if (++guard > maxSamples) {
+          this._sampleAccumulator = 0;
+          break;
+        }
+        this._sampleAccumulator -= this.sampleInterval;
+        const pointTime = now - this._sampleAccumulator;
+        this.addPoint(worldPos, pointTime);
+      }
+    }
+    this.update(now);
   }
 
   update(now = performance.now() / 1000) {

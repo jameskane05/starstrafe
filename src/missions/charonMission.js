@@ -32,7 +32,7 @@ export const charonMission = {
       charonEscapeActive: false,
       charonEscapeSucceeded: false,
     });
-    const positions = game._charonInitialEnemyPositions;
+    const positions = game._missionInitialEnemyPositions;
     if (positions?.length) {
       spawnMissionWaveFromPool(game, positions);
     }

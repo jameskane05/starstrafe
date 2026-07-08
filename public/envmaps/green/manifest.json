@@ -1,0 +1,21 @@
+{
+  "type": "starspeed-spark-env-cubemap",
+  "faceOrder": [
+    "px",
+    "nx",
+    "py",
+    "ny",
+    "pz",
+    "nz"
+  ],
+  "size": 256,
+  "near": 0.1,
+  "far": 1000,
+  "worldCenter": [
+    493.03849629939225,
+    -163.24649603459784,
+    -1527.7251095836
+  ],
+  "generatedAt": "2026-06-27T19:32:20.823Z",
+  "loader": "THREE.CubeTextureLoader().setPath(folder).load(['px.png','nx.png','py.png','ny.png','pz.png','nz.png'])"
+}

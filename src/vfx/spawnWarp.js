@@ -259,6 +259,7 @@ export function prewarmSpawnWarp(renderer, camera, root, options = {}) {
     if (!child.isMesh || !child.material) return;
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     for (const material of mats) {
+      if (material?.userData?.enemySharedTemplateMaterial) continue;
       material?.dispose?.();
     }
     if (options.disposeGeometry) {

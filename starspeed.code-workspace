@@ -12,6 +12,9 @@
     {
       "path": "../../Desktop/star",
     },
+    {
+      "path": "../procedural-generator",
+    },
   ],
   "settings": {},
 }

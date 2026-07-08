@@ -307,6 +307,16 @@ canvas {
   text-transform: uppercase;
 }
 
+#mission-panel .mission-panel-distance {
+  color: #8affff;
+  font-family: "Orbitron", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: -0.15rem 0 0.5rem;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.45);
+}
+
 #mission-panel .mission-panel-list {
   display: flex;
   flex-direction: column;
@@ -576,6 +586,72 @@ canvas {
   font-size: 1.35rem;
   letter-spacing: 0.06em;
   top: 26%;
+}
+
+/* Screen-space secondary objective tracker (e.g. Saturnalia charging cannon). */
+.objective-tracker {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) scale(0.64);
+  z-index: 90;
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: "Orbitron", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: #7cff7c;
+  text-shadow:
+    0 0 10px #32ff72,
+    0 0 22px #0dff4d;
+  opacity: 0;
+  transition:
+    opacity 0.3s ease-in,
+    transform 0.3s ease-in;
+}
+
+.objective-tracker.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(0.82);
+  transition: none;
+  animation: objective-tracker-in 0.45s cubic-bezier(0.25, 1.5, 0.4, 1);
+}
+
+@keyframes objective-tracker-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.6);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.76);
+  }
+  75% {
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.objective-tracker-diamond {
+  display: inline-block;
+  margin-right: 0.4em;
+  animation: objective-tracker-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes objective-tracker-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+body.pilot-chrome-hidden .objective-tracker {
+  visibility: hidden !important;
 }
 
 #mobile-controls {
@@ -904,6 +980,18 @@ canvas {
   -webkit-backdrop-filter: blur(16px);
 }
 
+#mission-complete-overlay.mission-complete-overlay--solid-black .mission-complete-backdrop {
+  background: #000;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#mission-complete-overlay.mission-complete-overlay--solid-black.mission-complete-overlay--visible .mission-complete-backdrop {
+  opacity: 1;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 #mission-complete-overlay .mission-complete-card {
   position: relative;
   z-index: 1;
@@ -1007,6 +1095,7 @@ body.pilot-chrome-hidden #controls-help,
 body.pilot-chrome-hidden #mission-panel,
 body.pilot-chrome-hidden #tab-leaderboard,
 body.pilot-chrome-hidden #charon-escape-countdown,
+body.pilot-chrome-hidden #saturnalia-destruction-countdown,
 body.pilot-chrome-hidden .pickup-message,
 body.pilot-chrome-hidden #boost-hud {
   visibility: hidden !important;
@@ -1014,7 +1103,10 @@ body.pilot-chrome-hidden #boost-hud {
 }
 
 #charon-opening-overlay,
-#charon-outro-overlay {
+#charon-outro-overlay,
+#saturnalia-opening-overlay,
+#saturnalia-outro-overlay,
+#earth-opening-overlay {
   position: fixed;
   inset: 0;
   z-index: 3100;
@@ -1030,13 +1122,19 @@ body.pilot-chrome-hidden #boost-hud {
 }
 
 #charon-opening-overlay.charon-opening-overlay--fade-out,
-#charon-outro-overlay.charon-opening-overlay--fade-out {
+#charon-outro-overlay.charon-opening-overlay--fade-out,
+#saturnalia-opening-overlay.charon-opening-overlay--fade-out,
+#saturnalia-outro-overlay.charon-opening-overlay--fade-out,
+#earth-opening-overlay.charon-opening-overlay--fade-out {
   opacity: 0;
   pointer-events: none;
 }
 
 #charon-opening-overlay .charon-opening-panel,
-#charon-outro-overlay .charon-opening-panel {
+#charon-outro-overlay .charon-opening-panel,
+#saturnalia-opening-overlay .charon-opening-panel,
+#saturnalia-outro-overlay .charon-opening-panel,
+#earth-opening-overlay .charon-opening-panel {
   /* Fixed width so flex centering does not shift as typewriter grows text */
   width: min(44rem, 90vw);
   max-width: 100%;
@@ -1045,7 +1143,10 @@ body.pilot-chrome-hidden #boost-hud {
 }
 
 #charon-opening-overlay .charon-opening-line,
-#charon-outro-overlay .charon-opening-line {
+#charon-outro-overlay .charon-opening-line,
+#saturnalia-opening-overlay .charon-opening-line,
+#saturnalia-outro-overlay .charon-opening-line,
+#earth-opening-overlay .charon-opening-line {
   width: 100%;
   text-align: left;
   font-family: "Orbitron", sans-serif;
@@ -1062,6 +1163,23 @@ body.pilot-chrome-hidden #boost-hud {
 }
 
 #charon-opening-overlay .charon-opening-line[data-line="2"],
-#charon-outro-overlay .charon-opening-line[data-line="2"] {
+#charon-outro-overlay .charon-opening-line[data-line="2"],
+#saturnalia-opening-overlay .charon-opening-line[data-line="2"],
+#saturnalia-outro-overlay .charon-opening-line[data-line="2"],
+#earth-opening-overlay .charon-opening-line[data-line="2"] {
   margin-bottom: 0;
+}
+
+#saturnalia-escape-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  background: #000;
+  opacity: 0;
+  transition: opacity 2s ease-out;
+  pointer-events: auto;
+}
+
+#saturnalia-escape-overlay.saturnalia-escape-overlay--visible {
+  opacity: 1;
 }

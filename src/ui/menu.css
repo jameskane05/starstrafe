@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;500;700;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;500;700;900&family=Exo+2:wght@400;500;600;700&display=swap");
 
 @font-face {
   font-family: "Supercharge Halftone";
@@ -225,9 +225,11 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: center;
+  justify-content: flex-start;
   margin-right: 5%;
+  height: 80vh;
   max-height: 80vh;
+  transform: translateY(-4vh);
 }
 
 .main-menu .menu-panel {
@@ -351,6 +353,235 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
 .main-menu .menu-btn {
   min-width: 240px;
   padding: 0.85rem 0.5rem;
+}
+
+.main-menu-transition-stage {
+  position: relative;
+  width: 290px;
+  pointer-events: none;
+}
+
+.main-menu-transition-stage > * {
+  width: 100%;
+  pointer-events: auto;
+}
+
+.main-menu-transition-stage .main-menu-slide-exit {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.main-menu-transition-stage .menu-panel {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.main-menu-slide-exit {
+  animation: mainMenuSlideOutRight 280ms ease-in forwards;
+}
+
+.campaign-menu-slide-enter {
+  opacity: 0;
+  animation: campaignMenuSlideInRight 280ms ease-out 90ms forwards;
+}
+
+.campaign-menu-reversing .main-menu-slide-exit {
+  animation: mainMenuSlideBackInRight 280ms ease-out 90ms forwards;
+}
+
+.campaign-menu-reversing .campaign-menu-slide-enter {
+  opacity: 1;
+  animation: campaignMenuSlideOutRight 280ms ease-in forwards;
+}
+
+.campaign-menu-panel {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.campaign-menu-content {
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.campaign-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: right;
+}
+
+.campaign-heading-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.campaign-heading label {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.2em;
+  margin-bottom: 0.1rem;
+}
+
+.campaign-heading h2 {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  letter-spacing: 0.14em;
+  margin: 0;
+}
+
+.main-menu .menu-btn.campaign-back-arrow {
+  width: 2rem;
+  min-width: 0;
+  height: 2rem;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.main-menu .menu-btn.campaign-back-arrow:hover {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.main-menu .menu-btn.campaign-back-arrow.nav-focus {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.campaign-mission-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.campaign-mission-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-family: "Rajdhani", sans-serif;
+  padding: 0.42rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.campaign-mission-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-cyan);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 240, 255, 0.2);
+}
+
+.campaign-mission-card.selected {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: var(--accent-cyan);
+}
+
+.campaign-mission-card.disabled,
+.campaign-mission-card:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  background: var(--bg-panel);
+  border-color: var(--border-color);
+  filter: blur(1px);
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.campaign-mission-card.disabled .campaign-mission-preview,
+.campaign-mission-card:disabled .campaign-mission-preview {
+  filter: grayscale(1);
+}
+
+.map-preview.campaign-mission-preview {
+  width: 84px;
+  height: 84px;
+}
+
+.campaign-mission-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.campaign-mission-title {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.9rem;
+  color: var(--accent-cyan);
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+
+.campaign-mission-description {
+  font-size: 0.88rem;
+  line-height: 1.12;
+  color: var(--text-light);
+}
+
+.campaign-start-btn {
+  align-self: stretch;
+}
+
+@keyframes mainMenuSlideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(115%);
+  }
+}
+
+@keyframes campaignMenuSlideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(115%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes mainMenuSlideBackInRight {
+  from {
+    opacity: 0;
+    transform: translateX(115%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes campaignMenuSlideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(115%);
+  }
 }
 
 .menu-buttons-row {
@@ -861,6 +1092,7 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
 .code-input-group {
   display: flex;
   gap: 0.5rem;
+  align-items: stretch;
 }
 
 .code-input-group input {
@@ -895,6 +1127,7 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
 .code-input-group .menu-btn {
   min-width: auto;
   padding: 0.8rem 1.5rem;
+  flex: 0 0 auto;
 }
 
 .divider {
@@ -2508,11 +2741,11 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
 
 .feedback-modal-content {
   position: relative;
-  background: var(--bg-panel);
-  border: 2px solid var(--accent-cyan);
-  padding: 2rem 2.5rem;
-  box-shadow: 0 0 30px rgba(0, 240, 255, 0.3);
-  max-width: min(90vw, 480px);
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  max-width: min(90vw, 900px);
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -2524,15 +2757,17 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.25rem;
+  padding: 0.5rem 0 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .feedback-modal-content h3 {
   font-family: "Orbitron", sans-serif;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   color: var(--accent-cyan);
   margin: 0;
   letter-spacing: 0.15em;
+  text-align: right;
 }
 
 .feedback-modal-close {
@@ -2544,8 +2779,9 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--accent-cyan);
-  font-size: 1.75rem;
+  color: var(--text-secondary);
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
   border-radius: 4px;
@@ -2556,8 +2792,31 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
   color: #fff;
 }
 
-.feedback-form .form-group {
+.feedback-form {
+  background: linear-gradient(
+    135deg,
+    rgba(10, 10, 18, 0.92) 0%,
+    rgba(10, 10, 18, 0.85) 100%
+  );
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  border-radius: 4px;
+  backdrop-filter: blur(10px);
+  padding: 1rem 1.25rem;
+  box-sizing: border-box;
+}
+
+.feedback-form-row {
+  gap: 2rem;
   margin-bottom: 1rem;
+}
+
+.feedback-form .form-group {
+  margin-bottom: 0.85rem;
+}
+
+.feedback-form-row .form-group {
+  flex: 1;
+  margin-bottom: 0;
 }
 
 .feedback-form .form-group label {
@@ -2573,18 +2832,18 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
 .feedback-form .menu-select,
 .feedback-form textarea {
   width: 100%;
-  padding: 0.6rem 1rem;
+  padding: 0.5rem 0.75rem;
   background: var(--bg-panel);
   border: 1px solid var(--border-color);
   color: var(--accent-cyan);
   font-family: "Rajdhani", sans-serif;
-  font-size: 1rem;
+  font-size: 0.9rem;
   box-sizing: border-box;
 }
 
 .feedback-form textarea {
   resize: vertical;
-  min-height: 80px;
+  min-height: 72px;
 }
 
 .feedback-form input:focus,
@@ -2597,7 +2856,7 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
 
 .feedback-type-radios {
   display: flex;
-  gap: 0.75rem;
+  gap: 1rem;
   width: 100%;
 }
 
@@ -2612,7 +2871,7 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
   justify-content: center;
   gap: 1rem;
   cursor: pointer;
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 0.75rem;
   background: var(--bg-panel);
   border: 1px solid var(--border-color);
   flex: 1;
@@ -2662,7 +2921,7 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
 .feedback-ratings {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem 1.5rem;
+  gap: 0.75rem 2rem;
   margin-bottom: 1rem;
 }
 
@@ -2715,13 +2974,13 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
 .feedback-modal-buttons {
   display: flex;
   gap: 1rem;
-  justify-content: center;
+  justify-content: flex-end;
   margin-top: 1rem;
 }
 
 .feedback-modal-buttons .menu-btn {
-  flex: 1;
-  min-width: 0;
+  flex: 0 1 220px;
+  min-width: 160px;
 }
 
 .feedback-confirmation {
@@ -2730,6 +2989,15 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
   align-items: center;
   gap: 1.5rem;
   text-align: center;
+  background: linear-gradient(
+    135deg,
+    rgba(10, 10, 18, 0.92) 0%,
+    rgba(10, 10, 18, 0.85) 100%
+  );
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  border-radius: 4px;
+  backdrop-filter: blur(10px);
+  padding: 2rem 2.5rem;
 }
 
 .feedback-confirmation-message {
@@ -3263,6 +3531,9 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
     padding: 0.7rem 2rem;
     font-size: 1rem;
   }
+  .main-menu-transition-stage {
+    width: 346px;
+  }
   .main-menu .name-input-group input {
     padding: 0.5rem 0.6rem;
   }
@@ -3339,6 +3610,27 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
   .main-menu .menu-content {
     gap: 0.5rem;
   }
+  .campaign-menu-content {
+    gap: 0.35rem;
+  }
+  .campaign-mission-list {
+    gap: 0.3rem;
+  }
+  .campaign-mission-card {
+    gap: 0.4rem;
+    padding: 0.35rem;
+  }
+  .map-preview.campaign-mission-preview {
+    width: 50px;
+    height: 50px;
+  }
+  .campaign-mission-title {
+    font-size: 0.76rem;
+  }
+  .campaign-mission-description {
+    font-size: 0.78rem;
+    line-height: 1.08;
+  }
   .menu-btn {
     padding: 0.5rem 0.9rem;
     font-size: 0.9rem;
@@ -3361,6 +3653,8 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
       100dvh - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 8px
     );
+    height: auto;
+    transform: none;
     overflow-x: hidden;
     overflow-y: auto;
     justify-content: center;
@@ -3480,7 +3774,41 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
     justify-content: flex-start;
     margin-right: 0;
     width: 100%;
+    height: auto;
+    transform: none;
     padding: 0 1rem;
+  }
+  .main-menu-transition-stage {
+    width: 100%;
+    max-width: 360px;
+    margin-right: 0;
+  }
+  .campaign-menu-content {
+    align-items: stretch;
+  }
+  .campaign-heading {
+    align-items: center;
+    text-align: right;
+  }
+  .campaign-heading-copy {
+    align-items: flex-end;
+  }
+  .campaign-mission-card {
+    gap: 0.45rem;
+    padding: 0.4rem;
+  }
+  .map-preview.campaign-mission-preview {
+    width: 54px;
+    height: 54px;
+  }
+  .campaign-mission-title {
+    font-size: 0.8rem;
+  }
+  .campaign-mission-description {
+    font-size: 0.8rem;
+  }
+  .campaign-start-btn {
+    align-self: stretch;
   }
   .main-menu .menu-title {
     text-align: center;
@@ -3580,6 +3908,16 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
     height: auto;
     max-height: 85vh;
     gap: 0;
+  }
+  .feedback-form-row,
+  .feedback-type-radios,
+  .feedback-modal-buttons {
+    flex-direction: column;
+  }
+  .feedback-modal-buttons .menu-btn {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
   }
   .options-sidebar {
     flex-direction: row;
@@ -3689,11 +4027,14 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
   }
 
   .join-game .code-input-group {
-    flex-direction: column;
+    flex-direction: row;
   }
-  .join-game .code-input-group input,
-  .join-game .code-input-group .menu-btn {
+  .join-game .code-input-group input {
     width: 100%;
+  }
+  .join-game .code-input-group .menu-btn {
+    width: auto;
+    min-width: 96px;
   }
   .join-game .room-list {
     min-height: 180px;
@@ -3856,6 +4197,8 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
     width: 100%;
     max-width: 100%;
     margin-right: 0;
+    height: auto;
+    transform: none;
     padding: 0 1rem;
     box-sizing: border-box;
   }
@@ -4064,6 +4407,8 @@ body.video-main-menu .main-menu-video-title .subtitle:last-of-type {
     width: 100%;
     max-width: 100%;
     margin-right: 0;
+    height: auto;
+    transform: none;
     padding: 0 1rem;
     box-sizing: border-box;
   }

@@ -25,16 +25,33 @@
 
 import * as THREE from "three";
 import { Player } from "../entities/Player.js";
+import { AllyShip } from "../entities/AllyShip.js";
 import {
+  applyEnemyShipEnvironmentMap,
+  applyEnemyShipEnvironmentMapToModels,
   loadShipModels,
   shipModels,
   reapplyShipMaterials,
 } from "../entities/Enemy.js";
-import { prefractureModelsAsync } from "../vfx/ShipDestruction.js";
+import {
+  applyEnvironmentAmbientToLight,
+  applyEnvironmentMapToObject,
+  getEnemyEnvMapConfigForLevel,
+  loadEnvironmentMap,
+} from "../utils/envMapAssets.js";
+import { initializeCockpitEnvZones } from "../utils/cockpitEnvZones.js";
+import {
+  cleanupDestruction,
+  getShipDestructionDebrisMaterials,
+  prefractureModelsAsync,
+  spawnDestruction,
+} from "../vfx/ShipDestruction.js";
+import { Explosion } from "../entities/Explosion.js";
 import { prewarmSpawnWarp } from "../vfx/spawnWarp.js";
 import { Missile } from "../entities/Missile.js";
 import { KineticMissile } from "../entities/KineticMissile.js";
 import { Projectile } from "../entities/Projectile.js";
+import { initLevelBoosters } from "./levelBoosters.js";
 import { GAME_STATES } from "../data/gameData.js";
 import MenuManager from "../ui/MenuManager.js";
 import engineAudio from "../audio/EngineAudio.js";
@@ -53,6 +70,131 @@ import {
   waitForFirstViewReady,
 } from "./gameFirstViewLoading.js";
 import { applyAuthoredPlayerSpawn } from "../utils/playerSpawnOrientation.js";
+import { createPathRailFromScene, closestDistanceOnPath, samplePath } from "../utils/pathRail.js";
+import { getPrimaryWeaponUnlocks } from "./weaponUnlocks.js";
+
+const _allySpawnPos = new THREE.Vector3();
+const _allySpawnTangent = new THREE.Vector3();
+const ALLY_ESCORT_MISSIONS = {
+  saturnalia: "saturnaliaLevelData",
+  "capital-ship-earth-defense": "earthdefenseLevelData",
+};
+const ALLY_PATH_LEAD_SPAWN_AHEAD = 24;
+import { stopCharonEscapeSequenceForLevelChange } from "./charonEscapeSequence.js";
+import { stopSaturnaliaCollapseForLevelChange } from "./saturnaliaCollapseSequence.js";
+
+function clearAlliedShips(game) {
+  if (!game.alliedShips) game.alliedShips = [];
+  for (const ally of game.alliedShips) {
+    ally.dispose?.(game.scene, game);
+  }
+  game.alliedShips.length = 0;
+}
+
+function unloadCampaignLevelAssets(game, levelId) {
+  for (const suffix of ["Level", "LevelData"]) {
+    const id = `${levelId}${suffix}`;
+    if (game.sceneManager?.hasObject?.(id)) {
+      game.sceneManager.removeObject(id);
+    }
+  }
+}
+
+export async function handoffSoloCampaign(game, missionId, levelId) {
+  stopCharonEscapeSequenceForLevelChange(game);
+  stopSaturnaliaCollapseForLevelChange(game);
+  cleanupDestruction(game.scene);
+  gameEnemies.resetSoloCampaignEnemyState(game);
+  clearAlliedShips(game);
+
+  for (const list of [
+    game.projectiles,
+    game.missiles,
+    game.explosions,
+  ]) {
+    if (!list?.length) continue;
+    for (let i = list.length - 1; i >= 0; i--) {
+      list[i]?.dispose?.();
+    }
+    list.length = 0;
+  }
+
+  game.missionManager?.stopMission();
+  game.levelTriggerManager?.resetSession?.();
+
+  const prevLevel = game.gameManager?.getState?.()?.currentLevel;
+  if (prevLevel && prevLevel !== levelId) {
+    unloadCampaignLevelAssets(game, prevLevel);
+  }
+  unloadCampaignLevelAssets(game, levelId);
+
+  game.levelLoadPromise = null;
+  game._levelSpawnCache = null;
+  game.trainingGoalPoints = [];
+  game.trainingGoalQuaternions = [];
+  game._saturnaliaChaseGpuWarmed = false;
+  game.player = null;
+
+  game.pendingMissionConfig = { missionId, levelId };
+  game.gameManager.setState({
+    currentLevel: levelId,
+    missionLevelId: levelId,
+    isRunning: false,
+  });
+
+  await startSoloDebug(game);
+}
+
+function spawnAlliedEscort(game, missionConfig = null) {
+  clearAlliedShips(game);
+  const missionId = missionConfig?.missionId;
+  const levelDataId = ALLY_ESCORT_MISSIONS[missionId];
+  if (!levelDataId) return;
+  const allyPreset = game.gameManager.getDifficultyPreset?.()?.ally;
+  if (allyPreset?.enabled === false) return;
+  const playerPos = game.xrManager?.isPresenting && game.xrManager.rig
+    ? game.xrManager.rig.position
+    : game.camera.position;
+  const offset = new THREE.Vector3(8, 3, -18).applyQuaternion(
+    game.camera.quaternion,
+  );
+  const pathRail = createPathRailFromScene(
+    game.sceneManager?.getObject?.(levelDataId),
+  );
+  let spawnPos = playerPos.clone().add(offset);
+  if (pathRail && missionId === "capital-ship-earth-defense") {
+    const playerAlong = closestDistanceOnPath(pathRail, playerPos);
+    samplePath(
+      pathRail,
+      Math.min(pathRail.total, playerAlong + ALLY_PATH_LEAD_SPAWN_AHEAD),
+      _allySpawnPos,
+      _allySpawnTangent,
+    );
+    spawnPos.copy(_allySpawnPos);
+  }
+  const enableLights =
+    game.gameManager.getPerformanceSetting("rendering", "enemyLights") ?? true;
+  const ally = new AllyShip(
+    game.scene,
+    spawnPos,
+    game.level,
+    game._levelBounds,
+    {
+      enableLights,
+      game,
+      fireRate: allyPreset?.fireRate ?? 1.1,
+      damage: allyPreset?.damage ?? 14,
+      cloneMaterials: false,
+      pathRail,
+    },
+  );
+  if (pathRail && missionId === "capital-ship-earth-defense") {
+    ally.pathAlong = closestDistanceOnPath(pathRail, spawnPos);
+    ally.pathRecovery = true;
+    ally.pathInfluence = 1;
+  }
+  game.alliedShips.push(ally);
+}
 
 export async function startSoloDebug(game) {
   game.isMultiplayer = false;
@@ -86,11 +228,15 @@ export async function startSoloDebug(game) {
 
   game.player = new Player(game.camera, game.input, game.level, game.scene, {
     game,
+    primaryWeaponUnlocks: getPrimaryWeaponUnlocks(),
   });
-  game.player.health = 100;
-  game.player.maxHealth = 100;
-  game.player.missiles = 6;
-  game.player.maxMissiles = 6;
+  const difficulty = game.gameManager.getDifficultyPreset?.();
+  const playerHealth = difficulty?.player?.maxHealth ?? 100;
+  const playerMissiles = difficulty?.player?.missiles ?? 6;
+  game.player.health = playerHealth;
+  game.player.maxHealth = playerHealth;
+  game.player.missiles = playerMissiles;
+  game.player.maxMissiles = playerMissiles;
   game.camera.quaternion.setFromAxisAngle(
     new THREE.Vector3(0, 1, 0),
     (-70 * Math.PI) / 180,
@@ -108,14 +254,13 @@ export async function startSoloDebug(game) {
   if (_soloGeomRoot) game.player.automap.setLevel(_soloGeomRoot);
 
   game._extractSpawnPoints();
+  initLevelBoosters(game);
 
   if (missionConfig?.missionId === "trainingGrounds") {
     await gameEnemies.initTrainingMissionEnemyPool(game);
   } else if (missionConfig?.missionId === "charon") {
     game._charonInitialEnemyPositions =
-      game.spawnPoints.length > 0
-        ? game.spawnPoints.map((p) => p.clone())
-        : [];
+      game.spawnPoints.length > 0 ? game.spawnPoints.map((p) => p.clone()) : [];
     const hf = game.enemySpawnHeavyFlags;
     game._charonEnemyPerSlotOptions =
       game._charonInitialEnemyPositions.length > 0
@@ -144,7 +289,10 @@ export async function startSoloDebug(game) {
 
   if (
     missionConfig?.missionId === "trainingGrounds" ||
-    missionConfig?.missionId === "charon"
+    missionConfig?.missionId === "charon" ||
+    missionConfig?.missionId === "saturnalia" ||
+    missionConfig?.missionId === "earthdefense" ||
+    missionConfig?.missionId === "capital-ship-earth-defense"
   ) {
     if (!applyAuthoredPlayerSpawn(game, debugSpawnIdx ?? 0)) {
       game.camera.position.set(0, 0, 0);
@@ -153,9 +301,14 @@ export async function startSoloDebug(game) {
   } else if (game.playerSpawnPoints.length > 0) {
     applyAuthoredPlayerSpawn(
       game,
-      debugSpawnIdx ?? Math.floor(Math.random() * game.playerSpawnPoints.length),
+      debugSpawnIdx ??
+        Math.floor(Math.random() * game.playerSpawnPoints.length),
     );
   }
+  spawnAlliedEscort(game, missionConfig);
+  void initializeCockpitEnvZones(game).then((zones) => {
+    if (!zones) void applyCockpitEnvironmentForCurrentLevel(game);
+  });
 
   const spawnN = game.spawnPoints?.length ?? 0;
   const extraPointLights = Math.min(48, Math.max(6, spawnN * 2));
@@ -180,6 +333,7 @@ export async function startSoloDebug(game) {
     gameEnemies.clearDeferredEnemySpawnState(game);
     await gameEnemies.spawnEnemiesFromLevelSpawnPointsWithPrewarm(game);
     gameEnemies.spawnMissilePickups(game);
+    gameEnemies.spawnWeaponPickups(game);
   } else {
     if (game._missilePickups) {
       for (const pickup of game._missilePickups) {
@@ -187,6 +341,13 @@ export async function startSoloDebug(game) {
       }
       game._missilePickups = [];
     }
+    if (game._weaponPickups) {
+      for (const pickup of game._weaponPickups) {
+        pickup.collectible?.dispose?.();
+      }
+      game._weaponPickups = [];
+    }
+    gameEnemies.spawnWeaponPickups(game);
     game.enemyRespawnQueue.length = 0;
     game.gameManager.clearMissionState({
       currentMissionId: missionConfig.missionId,
@@ -235,35 +396,113 @@ export async function startSoloDebug(game) {
     const debugSpawn = Boolean(
       game.gameManager?.getState?.()?.debugSpawnActive,
     );
-    let charonIntroMod = null;
-    if (missionId === "charon" && !debugSpawn) {
-      charonIntroMod = await import("./charonIntroSequence.js");
-      charonIntroMod.mountCharonOpeningOverlayBlack();
+    let introMod = null;
+    if (!debugSpawn) {
+      if (missionId === "charon") {
+        introMod = await import("./charonIntroSequence.js");
+        introMod.mountCharonOpeningOverlayBlack();
+      } else if (missionId === "saturnalia") {
+        introMod = await import("./saturnaliaIntroSequence.js");
+        introMod.mountSaturnaliaOpeningOverlayBlack();
+      }
     }
     hideFirstViewLoading();
     if (missionId === "charon") {
       if (debugSpawn) {
         game.gameManager.setState({ charonIntroTextDone: true });
-      } else {
-        await charonIntroMod.runCharonIntroTypewriterAndFade(game);
+      } else if (introMod) {
+        await introMod.runCharonIntroTypewriterAndFade(game);
+      }
+    } else if (missionId === "saturnalia") {
+      if (debugSpawn) {
+        game.gameManager.setState({ saturnaliaIntroTextDone: true });
+      } else if (introMod) {
+        await introMod.runSaturnaliaIntroTypewriterAndFade(game);
       }
     }
   })();
 }
 
+async function applyEnemyShipEnvironmentForCurrentLevel(game) {
+  const levelId = game.gameManager?.getState?.()?.currentLevel;
+  const config = getEnemyEnvMapConfigForLevel(levelId);
+  const loaded = config
+    ? await loadEnvironmentMap(config, game.renderer).catch((err) => {
+        console.warn(
+          `[EnemyEnvMap] Failed to load env map "${config.id}" for ${levelId}`,
+          err,
+        );
+        return null;
+      })
+    : null;
+  const envMap = loaded?.texture ?? null;
+  const intensity = loaded?.intensity ?? 1;
+
+  applyEnvironmentAmbientToLight(
+    game.lightManager?.getLight?.("ambient"),
+    loaded,
+    config,
+  );
+  applyEnemyShipEnvironmentMapToModels(envMap, intensity);
+  for (const enemy of game.enemies ?? []) {
+    applyEnemyShipEnvironmentMap(enemy.mesh, envMap, intensity);
+  }
+  for (const enemy of game._missionEnemyPool ?? []) {
+    applyEnemyShipEnvironmentMap(enemy.mesh, envMap, intensity);
+  }
+  for (const ally of game.alliedShips ?? []) {
+    applyEnemyShipEnvironmentMap(ally.mesh, envMap, intensity);
+  }
+  for (const entry of game._networkBotPool ?? []) {
+    applyEnemyShipEnvironmentMap(entry.mesh, envMap, intensity);
+  }
+}
+
+async function applyCockpitEnvironmentForCurrentLevel(game) {
+  const levelId = game.gameManager?.getState?.()?.currentLevel;
+  const config = getEnemyEnvMapConfigForLevel(levelId);
+  const loaded = config
+    ? await loadEnvironmentMap(config, game.renderer).catch((err) => {
+        console.warn(
+          `[CockpitEnvMap] Failed to load env map "${config.id}" for ${levelId}`,
+          err,
+        );
+        return null;
+      })
+    : null;
+  const envMap = loaded?.texture ?? null;
+  const intensity = loaded?.intensity ?? 1;
+
+  await game.player?.cockpitLoaded?.catch?.(() => {});
+  applyEnvironmentMapToObject(game.player?.cockpit, envMap, intensity);
+}
+
+function enemyShipAssetSourceKey() {
+  return `legacy:${shipModels.length}`;
+}
+
 export async function ensureEnemyShipAssetsLoaded(game, loadingTracker = null) {
-  if (game.enemyShipAssetsPromise) {
+  await loadShipModels();
+  const sourceKey = enemyShipAssetSourceKey();
+  if (
+    game.enemyShipAssetsPromise &&
+    game._enemyShipAssetSourceKey === sourceKey
+  ) {
     await game.enemyShipAssetsPromise;
+    await applyEnemyShipEnvironmentForCurrentLevel(game);
+    prewarmShipDestructionDebrisMaterials(game);
     if (!game._spawnWarpPrewarmed) {
       prewarmEnemySpawnWarp(game);
     }
     loadingTracker?.completeTask("solo-enemy-assets");
     return;
   }
+  game._enemyShipAssetSourceKey = sourceKey;
   game.enemyShipAssetsPromise = (async () => {
-    await loadShipModels();
     await prefractureModelsAsync(shipModels);
     await reapplyShipMaterials(shipModels);
+    await applyEnemyShipEnvironmentForCurrentLevel(game);
+    prewarmShipDestructionDebrisMaterials(game);
   })();
   await game.enemyShipAssetsPromise;
   prewarmEnemySpawnWarp(game);
@@ -316,6 +555,43 @@ function prewarmMissileVisuals(game) {
   m1.dispose(game.scene);
   m2.dispose(game.scene);
   p1.dispose(game.scene);
+}
+
+function prewarmShipDestructionDebrisMaterials(game) {
+  if (!game.renderer || !game.camera || !game.scene) return;
+  const materials = getShipDestructionDebrisMaterials();
+  const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const root = new THREE.Group();
+  root.position.set(0, -12000, 0);
+  for (let i = 0; i < materials.length; i++) {
+    const mesh = new THREE.Mesh(geometry, materials[i]);
+    mesh.position.x = i * 0.2;
+    root.add(mesh);
+  }
+  game.scene.add(root);
+  game.renderer.compile(game.scene, game.camera);
+  game.scene.remove(root);
+  geometry.dispose();
+
+  const pos = new THREE.Vector3(0, -12000, 0);
+  const quat = new THREE.Quaternion();
+  const explosion = new Explosion(game.scene, pos, 0xff8844, game.dynamicLights, {
+    big: true,
+  });
+  game.explosionEffect?.emitBigExplosion(pos);
+  if (shipModels.length > 0) {
+    spawnDestruction(game.scene, pos, quat, 0);
+  }
+  game.renderer.compile(game.scene, game.camera);
+  if (game.composer && game._bloomActive) {
+    game.composer.render();
+    game.composer.render();
+  } else {
+    game.renderer.render(game.scene, game.camera);
+    game.renderer.render(game.scene, game.camera);
+  }
+  explosion.dispose();
+  cleanupDestruction(game.scene);
 }
 
 function prewarmEnemySpawnWarp(game) {

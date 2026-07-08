@@ -8,7 +8,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
-const staticExtensions = /\.(mp3|wav|ogg|m4a|png|jpg|jpeg|gif|webp|svg|ico|glb|gltf|json|woff2?|ttf|eot|spz|rad)$/i;
+const staticExtensions = /\.(mp3|wav|ogg|m4a|png|jpg|jpeg|gif|webp|svg|ico|glb|gltf|json|woff2?|ttf|eot|spz|rad|radc)$/i;
 
 function rejectMissingStaticPlugin() {
   return {
@@ -66,10 +66,10 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         icons: [
-          { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
-          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'images/site/pwa-64x64.png', sizes: '64x64', type: 'image/png' },
+          { src: 'images/site/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'images/site/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'images/site/maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),

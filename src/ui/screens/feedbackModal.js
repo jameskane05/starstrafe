@@ -35,17 +35,19 @@ export function showFeedbackModal(manager, options = {}) {
     <div class="feedback-modal-overlay"></div>
     <div class="feedback-modal-content">
       <div class="feedback-modal-header">
+        <button type="button" class="feedback-modal-close" id="feedback-close" aria-label="Back">←</button>
         <h3>FEEDBACK</h3>
-        <button type="button" class="feedback-modal-close" id="feedback-close" aria-label="Close">×</button>
       </div>
       <form id="feedback-form" class="feedback-form">
-        <div class="form-group">
-          <label>NAME</label>
-          <input type="text" id="feedback-name" maxlength="64" />
-        </div>
-        <div class="form-group">
-          <label>CONTACT EMAIL</label>
-          <input type="email" id="feedback-email" maxlength="128" />
+        <div class="form-row feedback-form-row">
+          <div class="form-group">
+            <label>NAME</label>
+            <input type="text" id="feedback-name" maxlength="64" />
+          </div>
+          <div class="form-group">
+            <label>CONTACT EMAIL</label>
+            <input type="email" id="feedback-email" maxlength="128" />
+          </div>
         </div>
         <div class="form-group feedback-type-group">
           <label>TYPE</label>

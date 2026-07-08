@@ -33,6 +33,12 @@ import * as gameSolo from "./gameSolo.js";
 import * as gameMultiplayer from "./gameMultiplayer.js";
 import * as gameUpdate from "./gameUpdate.js";
 import { Prediction } from "../network/Prediction.js";
+import {
+  getUnlockedPrimaryWeaponList,
+  isPrimaryWeaponUnlocked,
+  PRIMARY_WEAPONS,
+  PRIMARY_WEAPON_LABELS,
+} from "./weaponUnlocks.js";
 
 
 export class Game {
@@ -53,14 +59,23 @@ export class Game {
     this.player = null;
     this.level = null;
     this.enemies = [];
+    this.enemyPortals = [];
+    this.alliedShips = [];
     this.spawnPoints = [];
     /** Parallel to spawnPoints: true for `Enemy.* - Heavy` authored spawns. */
     this.enemySpawnHeavyFlags = null;
+    /** Parallel to spawnPoints: true for `EnemyPortal*` authored spawns. */
+    this.enemySpawnPortalFlags = null;
+    /** Parallel to spawnPoints: world scale from authored Enemy markers (default 1). */
+    this.enemySpawnScales = null;
+    /** Parallel to spawnPoints: final ship scale (random × authored, stable per spawn). */
+    this.enemySpawnShipScales = null;
     this.playerSpawnPoints = [];
     this.playerSpawnMarkerQuaternions = [];
     this.enemyRespawnQueue = [];
     this.trainingGoalPoints = [];
     this.trainingGoalQuaternions = [];
+    this.weaponPickupPoints = [];
     this.projectiles = [];
     this.missiles = [];
     this.explosions = [];
@@ -69,9 +84,16 @@ export class Game {
     this.missileCooldown = 0.4;
     this.lastLaserTime = 0;
     this.laserCooldown = 0.1;
+    this.lastGatlingTime = 0;
+    this.gatlingCooldown = 0.045;
+    this.lastChargingLaserTime = -Infinity;
+    this.chargingLaserCooldown = 1.6;
+    this._primaryFireHeld = false;
     this.clock = new THREE.Clock();
     this.boundFireEnemy = (pos, dir, style) =>
       gameCombat.fireEnemyWeapon(this, pos, dir, style);
+    this.boundFireAlly = (pos, dir, style) =>
+      gameCombat.fireAllyWeapon(this, pos, dir, style);
 
     this.hud = null;
     this._hudLast = {
@@ -170,6 +192,46 @@ export class Game {
     return this.startSoloDebug();
   }
 
+  async startSaturnaliaCampaign() {
+    const levelId = "saturnalia";
+    const levelDataId = `${levelId}LevelData`;
+    if (this.sceneManager?.hasObject?.(levelDataId)) {
+      this.sceneManager.removeObject(levelDataId);
+    }
+    this._levelSpawnCache = null;
+    this.trainingGoalPoints = [];
+    this.trainingGoalQuaternions = [];
+    this.pendingMissionConfig = {
+      missionId: "saturnalia",
+      levelId,
+    };
+    this.gameManager.setState({
+      currentLevel: levelId,
+      missionLevelId: levelId,
+    });
+    return this.startSoloDebug();
+  }
+
+  async startEarthDefenseCampaign() {
+    const levelId = "earthdefense";
+    const levelDataId = `${levelId}LevelData`;
+    if (this.sceneManager?.hasObject?.(levelDataId)) {
+      this.sceneManager.removeObject(levelDataId);
+    }
+    this._levelSpawnCache = null;
+    this.trainingGoalPoints = [];
+    this.trainingGoalQuaternions = [];
+    this.pendingMissionConfig = {
+      missionId: "capital-ship-earth-defense",
+      levelId,
+    };
+    this.gameManager.setState({
+      currentLevel: levelId,
+      missionLevelId: levelId,
+    });
+    return this.startSoloDebug();
+  }
+
   async ensureEnemyShipAssetsLoaded() {
     return gameSolo.ensureEnemyShipAssetsLoaded(this);
   }
@@ -226,8 +288,13 @@ export class Game {
     gameNetworkProjectiles.showPickupMessage(this, text);
   }
 
-  showMissionCompleteOverlay() {
-    gameInGameUI.showMissionCompleteOverlay(this);
+  showMissionCompleteOverlay(options = {}) {
+    gameInGameUI.showMissionCompleteOverlay(this, options);
+  }
+
+  async continueToSaturnaliaCampaign() {
+    const { handoffSoloCampaign } = await import("./gameSolo.js");
+    return handoffSoloCampaign(this, "saturnalia", "saturnalia");
   }
 
   spawnNetworkProjectile(id, data) {
@@ -321,8 +388,8 @@ export class Game {
     gameEnemies.checkMissilePickups(this, playerPos, delta);
   }
 
-  spawnAtPoint(pos) {
-    gameEnemies.spawnAtPoint(this, pos);
+  spawnAtPoint(pos, spawnOpts = {}) {
+    return gameEnemies.spawnAtPoint(this, pos, spawnOpts);
   }
 
   tickEnemyRespawns(delta) {
@@ -389,9 +456,7 @@ export class Game {
     if (!this.input.isGamepadMode()) return;
 
     const gp = this.input.gamepad;
-    if (gp.fire) {
-      this.firePlayerWeapon();
-    }
+    this.setPrimaryFireHeld(gp.fire);
     if (gp.missileJustPressed) this.fireSelectedMissile();
     if (gp.kineticMissileJustPressed) {
       this.setMissileMode("kinetic");
@@ -409,7 +474,56 @@ export class Game {
 
   firePlayerWeapon() {
     if (!this.canFireLasers()) return false;
-    return gameCombat.firePlayerWeapon(this);
+    return gameCombat.firePlayerWeapon(this, this.getSelectedPrimaryWeapon());
+  }
+
+  setPrimaryFireHeld(held) {
+    const nextHeld = held === true;
+    const wasHeld = this._primaryFireHeld === true;
+    this._primaryFireHeld = nextHeld;
+    if (nextHeld && !wasHeld) {
+      this.firePlayerWeapon();
+    }
+    if (!nextHeld) {
+      gameCombat.cancelChargingLaser(this);
+    }
+  }
+
+  updatePrimaryFire(delta) {
+    gameCombat.updatePrimaryWeaponState(this, delta);
+    if (!this._primaryFireHeld) return;
+    const selected = this.getSelectedPrimaryWeapon();
+    if (
+      selected === PRIMARY_WEAPONS.GATLING ||
+      selected === PRIMARY_WEAPONS.CHARGING_LASER
+    ) {
+      this.firePlayerWeapon();
+    }
+  }
+
+  getSelectedPrimaryWeapon() {
+    const selected =
+      this.gameManager?.getState?.()?.selectedPrimaryWeapon ??
+      PRIMARY_WEAPONS.LASER;
+    return isPrimaryWeaponUnlocked(selected) ? selected : PRIMARY_WEAPONS.LASER;
+  }
+
+  setPrimaryWeapon(mode) {
+    const nextMode = isPrimaryWeaponUnlocked(mode) ? mode : PRIMARY_WEAPONS.LASER;
+    const prevMode = this.getSelectedPrimaryWeapon();
+    if (prevMode === nextMode) return false;
+    this.gameManager?.setState({ selectedPrimaryWeapon: nextMode });
+    this.player?.updateCockpitStatusDisplay?.({ primaryWeapon: nextMode });
+    this.showPickupMessage?.(`PRIMARY: ${PRIMARY_WEAPON_LABELS[nextMode]}`);
+    return true;
+  }
+
+  cyclePrimaryWeapon() {
+    const unlocked = getUnlockedPrimaryWeaponList();
+    const current = this.getSelectedPrimaryWeapon();
+    const idx = unlocked.indexOf(current);
+    const next = unlocked[(idx + 1) % unlocked.length] ?? PRIMARY_WEAPONS.LASER;
+    return this.setPrimaryWeapon(next);
   }
 
   getSelectedMissileMode() {

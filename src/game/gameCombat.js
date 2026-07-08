@@ -27,15 +27,16 @@ import {
 } from "@sparkjsdev/spark";
 import { castSphere, checkSphereCollision } from "../physics/Physics.js";
 import { Projectile, PLAYER_LASER_INTENSITY } from "../entities/Projectile.js";
+import { ChargingLaserBeam } from "../entities/ChargingLaserBeam.js";
 import { Missile } from "../entities/Missile.js";
 import { KineticMissile } from "../entities/KineticMissile.js";
 import { Explosion } from "../entities/Explosion.js";
 import { LaserImpact } from "../entities/LaserImpact.js";
+import { ENEMY_DEFAULT_SHIP_SCALE } from "../entities/Enemy.js";
 import { spawnDestruction } from "../vfx/ShipDestruction.js";
 import {
   beginCheckpointDissolve,
   ENEMY_SPAWN_DISSOLVE_DURATION,
-  stripCheckpointDissolveMaterials,
 } from "../vfx/checkpointDissolveWarp.js";
 import NetworkManager from "../network/NetworkManager.js";
 import proceduralAudio from "../audio/ProceduralAudio.js";
@@ -46,8 +47,26 @@ import {
   getCharonCoreHitDistanceAlongSegment,
 } from "./charonReactorCore.js";
 import { Collectible } from "../entities/Collectible.js";
+import { PRIMARY_WEAPONS } from "./weaponUnlocks.js";
+import { getMissionEnemyRemainingCount } from "./gameEnemies.js";
+import { isSoloPlayerCombatInactive } from "./gamePlayerLifecycle.js";
+import { findBarrierByCollider, destroyBarrier } from "./levelBarriers.js";
+import {
+  applyEarthBossChargingLaserHit,
+  applyEarthBossLaserHit,
+  applyEarthBossMissileHit,
+  getEarthBossHitDistanceAlongSegment,
+} from "./earthBossFight.js";
 
 const MISSILE_DROP_CHANCE = 0.15;
+const CHARGING_LASER_CHARGE_TIME = 1;
+const CHARGING_LASER_DURATION = 1;
+const CHARGING_LASER_RANGE = 340;
+const CHARGING_LASER_RADIUS = 6.4;
+const CHARGING_LASER_DAMAGE = 145;
+const CHARGING_LASER_DOWN_OFFSET = 4.25;
+const GATLING_DAMAGE = 6;
+const GATLING_SPREAD = 0.045;
 let _missileDropUid = 0;
 
 function tryDropMissilePickup(game, deathPos) {
@@ -55,10 +74,22 @@ function tryDropMissilePickup(game, deathPos) {
   if (!player || player.missiles >= player.maxMissiles) return;
   if (Math.random() > MISSILE_DROP_CHANCE) return;
   const id = `drop_missile_${++_missileDropUid}`;
-  const data = { id, type: "missile", x: deathPos.x, y: deathPos.y, z: deathPos.z };
+  const data = {
+    id,
+    type: "missile",
+    x: deathPos.x,
+    y: deathPos.y,
+    z: deathPos.z,
+  };
   const collectible = new Collectible(game.scene, data, game.dynamicLights);
   if (!game._missilePickups) game._missilePickups = [];
-  game._missilePickups.push({ id, collectible, pos: deathPos.clone(), respawnTimer: 0, active: true });
+  game._missilePickups.push({
+    id,
+    collectible,
+    pos: deathPos.clone(),
+    respawnTimer: 0,
+    active: true,
+  });
 }
 
 const _fireDir = new THREE.Vector3();
@@ -66,122 +97,179 @@ const _hitPos = new THREE.Vector3();
 const _hitNormal = new THREE.Vector3();
 const _sparkPos = new THREE.Vector3();
 const _colorScratch = new THREE.Color();
+const _right = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _beamEnd = new THREE.Vector3();
+const _beamClosest = new THREE.Vector3();
 
-function shouldQueueSoloEnemyRespawn(game) {
+function shouldQueueSoloEnemyRespawn(game, enemy = null) {
+  if (enemy?.summonedByPortal || enemy?.isPortalBot) return false;
   return (
     !game.isMultiplayer && !game.missionManager?.shouldSuppressRespawns?.()
   );
 }
 
-function destroyTrainingPoolEnemy(game, enemy, index, weaponType = "laser") {
-  const deathPos = enemy.mesh.position.clone();
-  const deathQuat = enemy.mesh.quaternion.clone();
+function getSoloDifficultySetting(game, category, key, fallback) {
+  if (game.isMultiplayer) return fallback;
+  const value = game.gameManager?.getDifficultySetting?.(category, key);
+  return value ?? fallback;
+}
+
+function isPortalDroneEnemy(enemy) {
+  return Boolean(
+    enemy?.summonedByPortal ||
+      enemy?.isPortalBot ||
+      enemy?.portalSummonPoolSlot != null,
+  );
+}
+
+const _portalDeathColor = new THREE.Color();
+
+function applyPortalDroneDeathVfx(game, enemy, deathPos) {
+  const tint = enemy.laserColor ?? enemy.glowColor ?? 0x58d8ff;
+  game.dynamicLights?.flash(deathPos, tint, {
+    intensity: 42,
+    distance: 38,
+    ttl: 0.14,
+    fade: 0.32,
+  });
+  sfxManager.play("ship-explosion", deathPos, 0.32);
+  if (!game.explosionEffect) return;
+  _portalDeathColor.set(tint);
+  game.explosionEffect.emitExplosionParticles(
+    deathPos,
+    { r: _portalDeathColor.r, g: _portalDeathColor.g, b: _portalDeathColor.b },
+    10,
+    0.75,
+  );
+}
+
+function applyStandardEnemyDeathVfx(game, enemy, deathPos, deathQuat) {
+  const shipScale = enemy.shipScale ?? ENEMY_DEFAULT_SHIP_SCALE;
   const explosion = new Explosion(
     game.scene,
     deathPos,
     enemy.glowColor,
     game.dynamicLights,
-    { big: true },
+    { big: true, scaleMult: shipScale / ENEMY_DEFAULT_SHIP_SCALE },
   );
   game.explosions.push(explosion);
   sfxManager.play("ship-explosion", deathPos, 0.6);
   if (game.particles) {
     game.explosionEffect.emitBigExplosion(deathPos);
   }
-  spawnDestruction(game.scene, deathPos, deathQuat, enemy.modelIndex);
+  spawnDestruction(game.scene, deathPos, deathQuat, enemy.modelIndex, shipScale);
   tryDropMissilePickup(game, deathPos);
   proceduralAudio.checkpointGoalSuccess();
+}
+
+function recyclePooledEnemyVisual(game, enemy, { lite = false } = {}) {
   enemy.spawnWarp?.dispose?.();
-  if (!enemy._enemyDissolvePrecooked) {
-    stripCheckpointDissolveMaterials(enemy.mesh);
+  enemy.spawnWarp = null;
+  if (lite) {
+    const precooked = enemy._enemyDissolvePrecooked;
+    if (precooked?.dissolveUniforms) {
+      precooked.dissolveUniforms.uProgress.value = -18;
+    }
+    return;
   }
-  enemy.spawnWarp = beginCheckpointDissolve(enemy.mesh, game, {
-    duration: ENEMY_SPAWN_DISSOLVE_DURATION,
-    edgeColor: enemy.laserColor,
-    particleColor: enemy.laserColor,
-    particleDecimation: 8,
-    particleSize: 26,
-    ...(enemy._enemyDissolvePrecooked
-      ? {
-          dissolvePrecooked: enemy._enemyDissolvePrecooked,
-          retainDissolveMaterials: true,
-        }
-      : {}),
-  });
-  enemy.spawnWarp.freeze();
+  if (enemy._enemyDissolvePrecooked) {
+    enemy.spawnWarp = beginCheckpointDissolve(enemy.mesh, game, {
+      duration: ENEMY_SPAWN_DISSOLVE_DURATION,
+      edgeColor: enemy.laserColor,
+      particleColor: enemy.laserColor,
+      particleDecimation: 8,
+      particleSize: 26,
+      dissolvePrecooked: enemy._enemyDissolvePrecooked,
+      retainDissolveMaterials: true,
+      particles: false,
+    });
+    enemy.spawnWarp.freeze();
+  }
+}
+
+function destroyTrainingPoolEnemy(game, enemy, index, weaponType = "laser") {
+  const deathPos = enemy.mesh.position.clone();
+  const deathQuat = enemy.mesh.quaternion.clone();
+  const lite = isPortalDroneEnemy(enemy);
+  if (lite) {
+    applyPortalDroneDeathVfx(game, enemy, deathPos);
+  } else {
+    applyStandardEnemyDeathVfx(game, enemy, deathPos, deathQuat);
+  }
+  enemy.portal?.onOwnerDestroyed?.();
+  recyclePooledEnemyVisual(game, enemy, { lite });
   enemy.mesh.visible = false;
   if (enemy.shipLight) enemy.shipLight.intensity = 0;
   game.enemies.splice(index, 1);
-  if (shouldQueueSoloEnemyRespawn(game)) {
+  if (shouldQueueSoloEnemyRespawn(game, enemy)) {
     game.enemyRespawnQueue.push({
-      timer: 20,
+      timer: getSoloDifficultySetting(game, "enemy", "respawnDelay", 20),
       pos: enemy.spawnPoint.clone(),
       ...(enemy.missionPoolSlot != null
         ? { missionPoolSlot: enemy.missionPoolSlot }
         : {}),
     });
   }
+  const remaining = getMissionEnemyRemainingCount(game);
   game.gameManager.setState({
-    enemiesRemaining: game.enemies.length,
+    enemiesRemaining: remaining,
     enemiesKilled: game.gameManager.getState().enemiesKilled + 1,
   });
   game.missionManager?.reportEvent("enemyDestroyed", {
     weaponType,
-    remaining: game.enemies.length,
+    remaining,
   });
-  if (game.enemies.length === 0) {
+  if (remaining === 0) {
     game.missionManager?.reportEvent("waveCleared", { weaponType });
   }
 }
 
 function destroyEnemy(game, enemy, index, weaponType = "laser") {
-  if (enemy.missionPoolSlot != null) {
+  if (enemy.missionPoolSlot != null || enemy.portalSummonPoolSlot != null) {
     destroyTrainingPoolEnemy(game, enemy, index, weaponType);
     return;
   }
   const deathPos = enemy.mesh.position.clone();
   const deathQuat = enemy.mesh.quaternion.clone();
-  const explosion = new Explosion(
-    game.scene,
-    deathPos,
-    enemy.glowColor,
-    game.dynamicLights,
-    { big: true },
-  );
-  game.explosions.push(explosion);
-  sfxManager.play("ship-explosion", deathPos, 0.6);
-  if (game.particles) {
-    game.explosionEffect.emitBigExplosion(deathPos);
+  const lite = isPortalDroneEnemy(enemy);
+  if (lite) {
+    applyPortalDroneDeathVfx(game, enemy, deathPos);
+  } else {
+    applyStandardEnemyDeathVfx(game, enemy, deathPos, deathQuat);
   }
-  spawnDestruction(game.scene, deathPos, deathQuat, enemy.modelIndex);
-  tryDropMissilePickup(game, deathPos);
   const respawnPos = enemy.spawnPoint;
+  enemy.portal?.onOwnerDestroyed?.();
   enemy.dispose(game.scene, game);
   game.enemies.splice(index, 1);
-  if (shouldQueueSoloEnemyRespawn(game)) {
+  if (shouldQueueSoloEnemyRespawn(game, enemy)) {
     game.enemyRespawnQueue.push({
-      timer: 20,
+      timer: getSoloDifficultySetting(game, "enemy", "respawnDelay", 20),
       pos: respawnPos,
       ...(enemy.missionPoolSlot != null
         ? { missionPoolSlot: enemy.missionPoolSlot }
         : {}),
     });
   }
+  const remaining = getMissionEnemyRemainingCount(game);
   game.gameManager.setState({
-    enemiesRemaining: game.enemies.length,
+    enemiesRemaining: remaining,
     enemiesKilled: game.gameManager.getState().enemiesKilled + 1,
   });
   game.missionManager?.reportEvent("enemyDestroyed", {
     weaponType,
-    remaining: game.enemies.length,
+    remaining,
   });
-  if (game.enemies.length === 0) {
+  if (remaining === 0) {
     game.missionManager?.reportEvent("waveCleared", { weaponType });
   }
 }
 
 function applyKineticExplosion(game, position, damage, radius, opts = {}) {
-  const hurtPlayer = opts.hurtPlayer === true && !game.isMultiplayer;
+  const hurtPlayer =
+    opts.hurtPlayer === true &&
+    !game.isMultiplayer &&
+    !isSoloPlayerCombatInactive(game);
   if (hurtPlayer) {
     const playerPos = game.xrManager?.isPresenting
       ? game.xrManager.rig.position
@@ -299,6 +387,13 @@ function getLocalPlayerLaserVisual(game) {
 }
 
 export function firePlayerWeapon(game) {
+  return firePlayerPrimaryWeapon(
+    game,
+    game.getSelectedPrimaryWeapon?.() ?? PRIMARY_WEAPONS.LASER,
+  );
+}
+
+function firePlayerPrimaryWeapon(game, weapon) {
   if (!game.gameManager.isPlaying()) return false;
   if (
     game.isMultiplayer &&
@@ -306,16 +401,55 @@ export function firePlayerWeapon(game) {
     !NetworkManager.getLocalPlayer().alive
   )
     return false;
-  if (!game.player.gunL || !game.player.gunR) return false;
+
+  if (weapon === PRIMARY_WEAPONS.CHARGING_LASER) {
+    return beginChargingLaser(game);
+  }
+  if (weapon === PRIMARY_WEAPONS.GATLING) {
+    return firePlayerGatling(game);
+  }
+  return firePlayerLaser(game);
+}
+
+function getFireDirection(game, target = _fireDir) {
+  const fireQuat = game.xrManager?.isPresenting
+    ? game.xrManager.rig.quaternion
+    : game.camera.quaternion;
+  return target.set(0, 0, -1).applyQuaternion(fireQuat).normalize();
+}
+
+function getCenterWeaponOrigin(game, direction) {
+  return getChargingLaserVisualOrigin(game, direction);
+}
+
+function getChargingLaserAimOrigin(game, direction) {
+  const base =
+    game.xrManager?.isPresenting && game.xrManager.rig
+      ? game.xrManager.rig.position
+      : game.camera.position;
+  const quat =
+    game.xrManager?.isPresenting && game.xrManager.rig
+      ? game.xrManager.rig.quaternion
+      : game.camera.quaternion;
+  _up.set(0, 1, 0).applyQuaternion(quat);
+  return base
+    .clone()
+    .addScaledVector(_up, -CHARGING_LASER_DOWN_OFFSET)
+    .addScaledVector(direction, 2.3);
+}
+
+function getChargingLaserVisualOrigin(game, direction) {
+  return getChargingLaserAimOrigin(game, direction);
+}
+
+function firePlayerLaser(game) {
+  if (!game.player) return false;
 
   const now = game.clock.elapsedTime;
   if (now - game.lastLaserTime < game.laserCooldown) return false;
   game.lastLaserTime = now;
 
-  const fireQuat = game.xrManager?.isPresenting
-    ? game.xrManager.rig.quaternion
-    : game.camera.quaternion;
-  _fireDir.set(0, 0, -1).applyQuaternion(fireQuat);
+  getFireDirection(game, _fireDir);
   game.player.camera.updateMatrixWorld(true);
   const fromLeft = game.player.fireFromLeft;
   const spawnPos = game.player.getWeaponSpawnPoint();
@@ -349,6 +483,264 @@ export function firePlayerWeapon(game) {
     fade: 0.12,
   });
   return true;
+}
+
+function firePlayerGatling(game) {
+  if (!game.player) return false;
+  const now = game.clock.elapsedTime;
+  if (now - game.lastGatlingTime < game.gatlingCooldown) return false;
+  game.lastGatlingTime = now;
+
+  getFireDirection(game, _fireDir);
+  _right.set(1, 0, 0).applyQuaternion(game.camera.quaternion);
+  _up.set(0, 1, 0).applyQuaternion(game.camera.quaternion);
+  _fireDir
+    .addScaledVector(_right, (Math.random() - 0.5) * GATLING_SPREAD)
+    .addScaledVector(_up, (Math.random() - 0.5) * GATLING_SPREAD)
+    .normalize();
+
+  game.player.camera.updateMatrixWorld(true);
+  const fromLeft = game.player.fireFromLeft;
+  const spawnPos = game.player.getWeaponSpawnPoint();
+  game.player.triggerGunRecoil(fromLeft);
+  spawnPos.addScaledVector(_fireDir, -3);
+
+  const visual = {
+    color: 0xffaa33,
+    intensity: 3.4,
+    energy: 3.1,
+    damage: GATLING_DAMAGE,
+    projectileLifetime: 0.75,
+  };
+  if (game.isMultiplayer) {
+    NetworkManager.sendFire("gatling", spawnPos, _fireDir);
+  }
+  const splatLight = createProjectileSplatLight(game, true, visual);
+  const projectile = new Projectile(
+    game.scene,
+    spawnPos,
+    _fireDir,
+    true,
+    275,
+    visual,
+    splatLight,
+  );
+  game.projectiles.push(projectile);
+  game.dynamicLights?.flash(spawnPos, 0xff7a18, {
+    intensity: 6,
+    distance: 10,
+    ttl: 0.035,
+    fade: 0.08,
+  });
+  sfxManager.play("laser", spawnPos, 0.55);
+  return true;
+}
+
+function beginChargingLaser(game) {
+  if (!game.player || game._chargingLaserState?.fired) return false;
+  const now = game.clock.elapsedTime;
+  if (now - game.lastChargingLaserTime < game.chargingLaserCooldown)
+    return false;
+  if (!game._chargingLaserState) {
+    const effect = new ChargingLaserBeam(game.scene);
+    game._chargingLaserState = {
+      elapsed: 0,
+      effect,
+      fired: false,
+    };
+  }
+  return true;
+}
+
+export function cancelChargingLaser(game) {
+  const state = game._chargingLaserState;
+  if (!state || state.fired) return;
+  state.effect?.dispose?.();
+  game._chargingLaserState = null;
+}
+
+export function updatePrimaryWeaponState(game, delta) {
+  const state = game._chargingLaserState;
+  if (state && !state.fired) {
+    state.elapsed += delta;
+    getFireDirection(game, _fireDir);
+    const origin = getCenterWeaponOrigin(game, _fireDir);
+    state.effect.updateCharge(
+      origin,
+      _fireDir,
+      state.elapsed / CHARGING_LASER_CHARGE_TIME,
+      game.clock.elapsedTime,
+    );
+    if (state.elapsed >= CHARGING_LASER_CHARGE_TIME) {
+      fireChargingLaser(game, state, origin, _fireDir.clone());
+    }
+  }
+
+  if (game._chargingLaserBeams?.length) {
+    for (let i = game._chargingLaserBeams.length - 1; i >= 0; i--) {
+      if (!game._chargingLaserBeams[i].update(delta)) {
+        game._chargingLaserBeams.splice(i, 1);
+      }
+    }
+  }
+}
+
+function closestPointDistanceSq(point, a, b, out) {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const abz = b.z - a.z;
+  const lenSq = abx * abx + aby * aby + abz * abz;
+  let t = 0;
+  if (lenSq > 1e-6) {
+    t =
+      ((point.x - a.x) * abx + (point.y - a.y) * aby + (point.z - a.z) * abz) /
+      lenSq;
+    t = THREE.MathUtils.clamp(t, 0, 1);
+  }
+  out.set(a.x + abx * t, a.y + aby * t, a.z + abz * t);
+  return out.distanceToSquared(point);
+}
+
+function emitChargingLaserImpact(game, position, normal) {
+  const impact = new LaserImpact(
+    game.scene,
+    position,
+    normal,
+    0xff5a12,
+    game.dynamicLights,
+  );
+  impact.mesh.scale.setScalar(2.2);
+  game.impacts.push(impact);
+  game.dynamicLights?.flash(position, 0xff5a12, {
+    intensity: 70,
+    distance: 55,
+    ttl: 0.18,
+    fade: 0.28,
+  });
+  if (game.particles) {
+    game.sparksEffect.emitElectricalSparks(position, normal, 190, 0xff5a12);
+    game.explosionEffect.emitExplosionParticles(
+      position,
+      { r: 1, g: 0.34, b: 0.04 },
+      95,
+      1.4,
+    );
+  }
+}
+
+function fireChargingLaser(game, state, origin, direction) {
+  state.fired = true;
+  game._chargingLaserState = null;
+  game.lastChargingLaserTime = game.clock.elapsedTime;
+
+  const aimOrigin = getChargingLaserAimOrigin(game, direction);
+  _beamEnd.copy(aimOrigin).addScaledVector(direction, CHARGING_LASER_RANGE);
+  let length = CHARGING_LASER_RANGE;
+  let wallNormal = null;
+  const wallHit = castSphere(
+    aimOrigin.x,
+    aimOrigin.y,
+    aimOrigin.z,
+    _beamEnd.x,
+    _beamEnd.y,
+    _beamEnd.z,
+    0.3,
+  );
+  if (wallHit) {
+    const toi = Number(wallHit.timeOfImpact ?? wallHit.toi) || 0;
+    if (toi > 4) {
+      length = toi;
+      _beamEnd.copy(aimOrigin).addScaledVector(direction, length);
+      wallNormal = wallHit.normal2
+        ? new THREE.Vector3(
+            wallHit.normal2.x,
+            wallHit.normal2.y,
+            wallHit.normal2.z,
+          )
+        : direction.clone().negate();
+      if (wallNormal.dot(direction) > 0) wallNormal.negate();
+    } else {
+      _beamEnd.copy(aimOrigin).addScaledVector(direction, length);
+    }
+  }
+
+  state.effect.fire(origin, direction, length);
+  state.effect.duration = CHARGING_LASER_DURATION;
+  if (!game._chargingLaserBeams) game._chargingLaserBeams = [];
+  game._chargingLaserBeams.push(state.effect);
+
+  if (game.isMultiplayer) {
+    NetworkManager.sendFire("chargingLaser", aimOrigin, direction, { length });
+  } else {
+    for (let j = game.enemies.length - 1; j >= 0; j--) {
+      const enemy = game.enemies[j];
+      if (
+        closestPointDistanceSq(
+          enemy.mesh.position,
+          aimOrigin,
+          _beamEnd,
+          _beamClosest,
+        ) <=
+        CHARGING_LASER_RADIUS * CHARGING_LASER_RADIUS
+      ) {
+        enemy.takeDamage(CHARGING_LASER_DAMAGE);
+        const normal = _hitNormal
+          .subVectors(_beamClosest, enemy.mesh.position)
+          .normalize();
+        if (normal.lengthSq() < 1e-6) normal.copy(direction).negate();
+        emitChargingLaserImpact(game, _beamClosest.clone(), normal.clone());
+        if (enemy.health <= 0) {
+          destroyEnemy(game, enemy, j, "chargingLaser");
+        }
+      }
+    }
+    const coreDist = getCharonCoreHitDistanceAlongSegment(
+      game,
+      aimOrigin,
+      _beamEnd,
+      1.2,
+    );
+    if (coreDist != null && coreDist <= length) {
+      applyCharonReactorCoreLaserHit(
+        game,
+        aimOrigin,
+        _beamEnd,
+        coreDist,
+        0xff5a12,
+      );
+    }
+    const bossDist = getEarthBossHitDistanceAlongSegment(
+      game,
+      aimOrigin,
+      _beamEnd,
+      1.2,
+    );
+    if (bossDist != null && bossDist <= length) {
+      applyEarthBossChargingLaserHit(
+        game,
+        aimOrigin,
+        _beamEnd,
+        bossDist,
+        0xff5a12,
+      );
+    }
+  }
+
+  if (wallNormal) {
+    emitChargingLaserImpact(game, _beamEnd.clone(), wallNormal);
+  }
+  if (wallHit) {
+    const barrier = findBarrierByCollider(game, wallHit.collider);
+    if (barrier) destroyBarrier(game, barrier);
+  }
+  game.dynamicLights?.flash(origin, 0xff7a18, {
+    intensity: 85,
+    distance: 60,
+    ttl: 0.2,
+    fade: 0.3,
+  });
+  game._levelBoostShake = { elapsed: 0, duration: 0.24, amplitude: 0.22 };
+  sfxManager.play("laser", origin, 1.0);
 }
 
 export function firePlayerMissile(game) {
@@ -466,7 +858,9 @@ export function fireEnemyWeapon(game, position, direction, style = null) {
 
   const splatLight = createProjectileSplatLight(game, false, style);
   const enemyLaserSpeed =
-    style && typeof style.projectileSpeed === "number" ? style.projectileSpeed : null;
+    style && typeof style.projectileSpeed === "number"
+      ? style.projectileSpeed
+      : null;
   const projectile = new Projectile(
     game.scene,
     position.clone(),
@@ -486,6 +880,31 @@ export function fireEnemyWeapon(game, position, direction, style = null) {
       fade: 0.1,
     });
   }
+}
+
+export function fireAllyWeapon(game, position, direction, style = null) {
+  const allyStyle = {
+    ...(style || {}),
+    team: "ally",
+  };
+  const splatLight = createProjectileSplatLight(game, true, allyStyle);
+  const projectile = new Projectile(
+    game.scene,
+    position.clone(),
+    direction,
+    true,
+    style?.projectileSpeed ?? null,
+    allyStyle,
+    splatLight,
+  );
+  game.projectiles.push(projectile);
+  sfxManager.play("laser", position);
+  game.dynamicLights?.flash(position, allyStyle.color ?? 0x66ccff, {
+    intensity: 8,
+    distance: 12,
+    ttl: 0.05,
+    fade: 0.1,
+  });
 }
 
 function fireEnemyHomingMissile(game, position, direction, style) {
@@ -542,11 +961,14 @@ export function checkCollisions(game) {
     const projColor = proj.impactColor;
 
     if (!game.isMultiplayer) {
-      if (proj.isPlayerOwned) {
+      if (proj.team !== "enemy") {
         for (let j = game.enemies.length - 1; j >= 0; j--) {
           const enemy = game.enemies[j];
           if (enemy.pointInHitbox(projPos)) {
-            enemy.takeDamage(25);
+            const damage =
+              proj.damage ??
+              getSoloDifficultySetting(game, "player", "laserDamage", 25);
+            enemy.takeDamage(damage);
 
             _hitNormal.subVectors(projPos, enemy.mesh.position).normalize();
             const impact = new LaserImpact(
@@ -575,10 +997,11 @@ export function checkCollisions(game) {
             break;
           }
         }
-      } else {
+      } else if (!isSoloPlayerCombatInactive(game)) {
         const distSq = projPos.distanceToSquared(playerPos);
         if (distSq < playerRadiusSq) {
-          game.player.health -= 10;
+          const damage = getSoloDifficultySetting(game, "enemy", "damage", 10);
+          game.player.health -= damage;
           game.player.lastDamageTime = game.clock.elapsedTime;
           game.showDamageIndicator(projPos);
           proceduralAudio.shieldHit();
@@ -649,7 +1072,25 @@ export function checkCollisions(game) {
         }
       }
 
-      if (coreWins) {
+      let bossWins = false;
+      if (!game.isMultiplayer && proj.isPlayerOwned && !coreWins) {
+        const bossDist = getEarthBossHitDistanceAlongSegment(
+          game,
+          proj.prevPosition,
+          projPos,
+        );
+        if (bossDist != null && bossDist < wallToi) {
+          bossWins = applyEarthBossLaserHit(
+            game,
+            proj.prevPosition,
+            projPos,
+            bossDist,
+            projColor,
+          );
+        }
+      }
+
+      if (coreWins || bossWins) {
         hitSomething = true;
       } else if (wallCounts) {
         wallHitDetected = true;
@@ -703,9 +1144,7 @@ export function checkCollisions(game) {
     }
 
     if (missile.isKinetic) {
-      const kineticHurtPlayer = missile.enemyOwned
-        ? { hurtPlayer: true }
-        : {};
+      const kineticHurtPlayer = missile.enemyOwned ? { hurtPlayer: true } : {};
       if (missile.lifetime <= 0) {
         applyKineticExplosion(
           game,
@@ -765,7 +1204,7 @@ export function checkCollisions(game) {
         );
         const wallToi =
           wallHit != null
-            ? Number(wallHit.timeOfImpact ?? wallHit.toi) ?? Infinity
+            ? (Number(wallHit.timeOfImpact ?? wallHit.toi) ?? Infinity)
             : Infinity;
 
         if (!game.isMultiplayer && !missile.enemyOwned) {
@@ -781,6 +1220,18 @@ export function checkCollisions(game) {
             _hitPos.copy(prev).lerp(missilePos, t);
             applyCharonReactorCoreMissileHit(game, _hitPos, missile.damage);
             exploded = true;
+          }
+          if (!exploded) {
+            const bossDist = getEarthBossHitDistanceAlongSegment(
+              game,
+              prev,
+              missilePos,
+              missile.collisionRadius,
+            );
+            if (bossDist != null && bossDist < wallToi) {
+              applyEarthBossMissileHit(game, prev, missilePos, bossDist);
+              exploded = true;
+            }
           }
         }
 
@@ -846,7 +1297,7 @@ export function checkCollisions(game) {
     let skipHomingExplosionVfx = false;
     const missilePos = missile.getPosition();
 
-    if (missile.enemyOwned && !game.isMultiplayer) {
+    if (missile.enemyOwned && !game.isMultiplayer && !isSoloPlayerCombatInactive(game)) {
       const pp = game.xrManager?.isPresenting
         ? game.xrManager.rig.position
         : game.camera.position;
@@ -908,7 +1359,7 @@ export function checkCollisions(game) {
         );
         const wallToi =
           wallHit != null
-            ? Number(wallHit.timeOfImpact ?? wallHit.toi) ?? Infinity
+            ? (Number(wallHit.timeOfImpact ?? wallHit.toi) ?? Infinity)
             : Infinity;
 
         if (!game.isMultiplayer && !missile.enemyOwned) {
@@ -925,6 +1376,19 @@ export function checkCollisions(game) {
             applyCharonReactorCoreMissileHit(game, _hitPos, missile.damage);
             exploded = true;
             skipHomingExplosionVfx = true;
+          }
+          if (!exploded) {
+            const bossDist = getEarthBossHitDistanceAlongSegment(
+              game,
+              prev,
+              missilePos,
+              missile.collisionRadius,
+            );
+            if (bossDist != null && bossDist < wallToi) {
+              applyEarthBossMissileHit(game, prev, missilePos, bossDist);
+              exploded = true;
+              skipHomingExplosionVfx = true;
+            }
           }
         }
         if (!exploded && (wallHit || missile.checkWallCollision())) {

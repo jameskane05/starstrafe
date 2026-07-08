@@ -22,6 +22,7 @@ import {
   PLAYER_LASER_INTENSITY,
   PLAYER_LASER_VISUAL,
 } from "../entities/Projectile.js";
+import { ChargingLaserBeam } from "../entities/ChargingLaserBeam.js";
 import { Missile } from "../entities/Missile.js";
 import { KineticMissile } from "../entities/KineticMissile.js";
 import { Explosion } from "../entities/Explosion.js";
@@ -59,6 +60,10 @@ function laserVisualForOwnerId(ownerId) {
 }
 import proceduralAudio from "../audio/ProceduralAudio.js";
 import sfxManager from "../audio/sfxManager.js";
+import {
+  PRIMARY_WEAPONS,
+  unlockPrimaryWeapon,
+} from "./weaponUnlocks.js";
 
 export function spawnCollectible(game, id, data) {
   if (game.collectibles.has(id)) return;
@@ -94,6 +99,10 @@ export function handleCollectiblePickup(game, data) {
       const color =
         data.type === "missile"
           ? { r: 1, g: 0.4, b: 0 }
+          : data.type === "charging_laser"
+            ? { r: 1, g: 0.25, b: 0.03 }
+            : data.type === "gatling"
+              ? { r: 1, g: 0.72, b: 0.08 }
           : { r: 0, g: 1, b: 0.3 };
       game.sparksEffect.emitHitSparks(pos, color, 30);
     }
@@ -104,6 +113,24 @@ export function handleCollectiblePickup(game, data) {
     if (data.type === "laser_upgrade") {
       game.player.hasLaserUpgrade = true;
       showPickupMessage(game, "LASER UPGRADE ACQUIRED");
+    } else if (data.type === "charging_laser") {
+      unlockPrimaryWeapon(PRIMARY_WEAPONS.CHARGING_LASER);
+      game.player.primaryWeaponUnlocks = {
+        ...(game.player.primaryWeaponUnlocks || {}),
+        [PRIMARY_WEAPONS.CHARGING_LASER]: true,
+      };
+      NetworkManager.sendWeaponUnlocks?.(game.player.primaryWeaponUnlocks);
+      game.setPrimaryWeapon?.(PRIMARY_WEAPONS.CHARGING_LASER);
+      showPickupMessage(game, "CHARGING CANNON ACQUIRED");
+    } else if (data.type === "gatling") {
+      unlockPrimaryWeapon(PRIMARY_WEAPONS.GATLING);
+      game.player.primaryWeaponUnlocks = {
+        ...(game.player.primaryWeaponUnlocks || {}),
+        [PRIMARY_WEAPONS.GATLING]: true,
+      };
+      NetworkManager.sendWeaponUnlocks?.(game.player.primaryWeaponUnlocks);
+      game.setPrimaryWeapon?.(PRIMARY_WEAPONS.GATLING);
+      showPickupMessage(game, "GATLING ACQUIRED");
     } else if (data.type === "missile") {
       showPickupMessage(game, "MISSILES REFILLED");
     }
@@ -148,7 +175,19 @@ export function spawnNetworkProjectile(game, id, data) {
   let position = new THREE.Vector3(data.x, data.y, data.z);
   const direction = new THREE.Vector3(data.dx, data.dy, data.dz);
 
-  if (data.type === "missile") {
+  if (data.type === "chargingLaser") {
+    const beam = new ChargingLaserBeam(game.scene);
+    beam.fire(position, direction.normalize(), data.length ?? 220);
+    beam.duration = 1;
+    game.networkProjectiles.set(id, { type: "chargingLaser", obj: beam });
+    game.dynamicLights?.flash(position, 0xff7a18, {
+      intensity: 70,
+      distance: 55,
+      ttl: 0.18,
+      fade: 0.3,
+    });
+    sfxManager.play("laser", position, 1.0);
+  } else if (data.type === "missile") {
     const remote = game.remotePlayers.get(data.ownerId);
     const missilePos = remote?.getMissileSpawnPoint?.();
     if (missilePos) position.copy(missilePos).addScaledVector(direction, -1);
@@ -188,9 +227,17 @@ export function spawnNetworkProjectile(game, id, data) {
       typeof data.ownerId === "string" && data.ownerId.startsWith("bot_");
     /** Other humans' bolts use enemy collision path + per-player accent. */
     const remoteHumanVisual =
-      !isPlayerOwned && !isBotOwner
-        ? laserVisualForOwnerId(data.ownerId)
-        : null;
+      data.type === "gatling"
+        ? {
+            color: 0xffaa33,
+            intensity: 3.4,
+            energy: 3.1,
+            damage: 6,
+            projectileLifetime: 0.75,
+          }
+        : !isPlayerOwned && !isBotOwner
+          ? laserVisualForOwnerId(data.ownerId)
+          : null;
 
     const remote = game.remotePlayers.get(data.ownerId);
     const gunPos = remote?.getWeaponSpawnPoint?.();
@@ -215,9 +262,12 @@ export function spawnNetworkProjectile(game, id, data) {
 
     if (remote?.triggerGunRecoil) remote.triggerGunRecoil();
 
-    const flashColor = isBotOwner
-      ? 0xff8800
-      : (remoteHumanVisual?.color ?? 0x00ffff);
+    const flashColor =
+      data.type === "gatling"
+        ? 0xffaa33
+        : isBotOwner
+          ? 0xff8800
+          : (remoteHumanVisual?.color ?? 0x00ffff);
     game.dynamicLights?.flash(position, flashColor, {
       intensity: 10,
       distance: 16,
@@ -249,6 +299,8 @@ export function updateNetworkProjectile(game, id, projectile) {
     data.targetDirection
       .set(projectile.dx, projectile.dy, projectile.dz)
       .normalize();
+  } else if (data.type === "chargingLaser") {
+    return;
   } else if (data.type === "missile") {
     data.obj.group.position.set(projectile.x, projectile.y, projectile.z);
     data.obj.direction
@@ -273,7 +325,8 @@ export function handleNetworkHit(game, data) {
       : new THREE.Vector3(0, 1, 0);
 
   const isOurShot = data.shooterId === NetworkManager.sessionId;
-  const hitColor = networkHitImpactColor(data);
+  const chargingHit = data.weapon === "chargingLaser";
+  const hitColor = chargingHit ? 0xff5a12 : networkHitImpactColor(data);
 
   const impact = new LaserImpact(
     game.scene,
@@ -282,10 +335,24 @@ export function handleNetworkHit(game, data) {
     hitColor,
     game.dynamicLights,
   );
+  if (chargingHit) impact.mesh.scale.setScalar(2.2);
   game.impacts.push(impact);
 
   if (game.particles) {
-    game.sparksEffect.emitElectricalSparks(hitPos, hitNormal, 100, hitColor);
+    game.sparksEffect.emitElectricalSparks(
+      hitPos,
+      hitNormal,
+      chargingHit ? 190 : 100,
+      hitColor,
+    );
+    if (chargingHit) {
+      game.explosionEffect.emitExplosionParticles(
+        hitPos,
+        { r: 1, g: 0.34, b: 0.04 },
+        95,
+        1.4,
+      );
+    }
   }
 
   if (isOurShot) {

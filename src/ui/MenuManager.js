@@ -21,6 +21,7 @@
 export const SCREENS = {
   INITIAL_LOADING: "initialLoading",
   MAIN_MENU: "mainMenu",
+  CAMPAIGN_MISSIONS: "campaignMissions",
   CREATE_GAME: "createGame",
   JOIN_GAME: "joinGame",
   LOBBY: "lobby",
@@ -50,6 +51,7 @@ import proceduralAudio from "../audio/ProceduralAudio.js";
 import sfxManager from "../audio/sfxManager.js";
 import sfxSounds from "../audio/sfxData.js";
 import { getPerformanceProfile } from "../data/performanceSettings.js";
+import { DIFFICULTY_PRESETS } from "../data/difficultySettings.js";
 import { getSystemInfo } from "../utils/systemInfo.js";
 import * as menuFocus from "./menuFocus.js";
 import * as menuNetwork from "./menuNetwork.js";
@@ -273,15 +275,39 @@ class MenuManager {
     setTimeout(() => this.resetFocus(), 50);
   }
 
+  async _rebuildStartScene() {
+    if (this.startScene || this._startSceneInitPromise || !this.menuBg) return;
+    const scene = new StartScreenScene();
+    this._startSceneInitPromise = scene
+      .init(this.menuBg)
+      .then(() => {
+        this.startScene = scene;
+        this.syncStartSceneState();
+      })
+      .catch((error) => {
+        console.warn("[Menu] Start scene rebuild failed:", error);
+        scene.dispose();
+      })
+      .finally(() => {
+        this._startSceneInitPromise = null;
+      });
+    await this._startSceneInitPromise;
+  }
+
   syncStartSceneState() {
-    if (!this.startScene) return;
     const showScene =
       this.currentScreen === SCREENS.INITIAL_LOADING ||
       this.currentScreen === SCREENS.MAIN_MENU ||
+      this.currentScreen === SCREENS.CAMPAIGN_MISSIONS ||
       this.currentScreen === SCREENS.CREATE_GAME ||
       this.currentScreen === SCREENS.JOIN_GAME ||
       this.currentScreen === SCREENS.LOADING ||
       this.currentScreen === SCREENS.OPTIONS;
+
+    if (!this.startScene) {
+      if (showScene) void this._rebuildStartScene();
+      return;
+    }
 
     this.startScene.setLoadingBackgroundOnly(
       this.backgroundOnlyLoading ||
@@ -428,6 +454,9 @@ class MenuManager {
       case SCREENS.MAIN_MENU:
         this.renderMainMenu();
         break;
+      case SCREENS.CAMPAIGN_MISSIONS:
+        this.renderCampaignMissions();
+        break;
       case SCREENS.CREATE_GAME:
         this.renderCreateGame();
         break;
@@ -454,6 +483,10 @@ class MenuManager {
 
   renderMainMenu() {
     mainMenuScreen.renderMainMenu(this);
+  }
+
+  renderCampaignMissions() {
+    mainMenuScreen.renderCampaignMissions(this);
   }
 
   showFeedbackModal(options = {}) {
@@ -590,10 +623,21 @@ class MenuManager {
     const lookSensitivity = gm?.getLookSensitivity?.() ?? 0.65;
     const shipAutoLevel = gm?.getShipAutoLeveling?.() !== false;
     const captionsEnabled = gm?.getCaptionsEnabled?.() !== false;
+    const currentDifficulty = gm?.getDifficultyKey?.() || "normal";
+    const difficulties = Object.keys(DIFFICULTY_PRESETS);
 
     return `
       <div class="options-section gameplay-section">
         <h3>GAMEPLAY</h3>
+        <div class="keybind-row" style="grid-template-columns: 1fr 1fr;">
+          <span class="keybind-action">Difficulty</span>
+          <select id="difficulty-select" class="preset-select">
+            ${difficulties.map((d) => `<option value="${d}" ${d === currentDifficulty ? "selected" : ""}>${DIFFICULTY_PRESETS[d].label.toUpperCase()}</option>`).join("")}
+          </select>
+        </div>
+        <p class="options-hint" style="margin-top: 8px; opacity: 0.5; font-size: 12px;">
+          Changes player survivability, enemy pressure, and allied wingman support. Takes effect on next mission.
+        </p>
         <div class="keybind-row" style="grid-template-columns: 1fr 1fr;">
           <span class="keybind-action">Look Sensitivity <span id="look-sensitivity-val" style="opacity:0.5">${lookSensitivity.toFixed(2)}</span></span>
           <input type="range" id="look-sensitivity" class="options-slider" min="0" max="1" step="0.05" value="${lookSensitivity}">
@@ -629,11 +673,6 @@ class MenuManager {
     const gm = window.gameManager;
     const currentProfile = gm?.state?.performanceProfile || "medium";
     const profiles = ["low", "medium", "high", "max"];
-    const bloomUserSetting = gm?.getSetting("bloomEnabled");
-    const profileBloom = gm
-      ? getPerformanceProfile(currentProfile).rendering?.bloom
-      : true;
-    const bloomEnabled = bloomUserSetting ?? profileBloom ?? true;
     const antialiasingEnabled = gm?.getSetting("antialiasingEnabled") !== false;
 
     return `
@@ -650,13 +689,6 @@ class MenuManager {
         </p>
 
         <div class="keybind-row" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
-          <span class="keybind-action">BLOOM</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="bloom-toggle" ${bloomEnabled ? "checked" : ""}>
-            <span class="toggle-label">${bloomEnabled ? "ON" : "OFF"}</span>
-          </label>
-        </div>
-        <div class="keybind-row" style="grid-template-columns: 1fr 1fr;">
           <span class="keybind-action">ANTIALIASING (FXAA)</span>
           <label class="toggle-switch">
             <input type="checkbox" id="antialiasing-toggle" ${antialiasingEnabled ? "checked" : ""}>
@@ -897,24 +929,6 @@ class MenuManager {
         const gm = window.gameManager;
         if (gm) {
           gm.setPerformanceProfile(select.value);
-          const bloomUser = gm.getSetting("bloomEnabled");
-          if (bloomUser === undefined) {
-            const profile = gm.getPerformanceProfile();
-            gm.emit("bloom:changed", profile.rendering?.bloom ?? true);
-          }
-        }
-      });
-    }
-
-    const bloomToggle = document.getElementById("bloom-toggle");
-    if (bloomToggle) {
-      bloomToggle.addEventListener("change", () => {
-        const enabled = bloomToggle.checked;
-        const label = bloomToggle.parentElement.querySelector(".toggle-label");
-        if (label) label.textContent = enabled ? "ON" : "OFF";
-        if (window.gameManager) {
-          window.gameManager.setSetting("bloomEnabled", enabled);
-          window.gameManager.emit("bloom:changed", enabled);
         }
       });
     }
@@ -946,6 +960,13 @@ class MenuManager {
   }
 
   setupGameplayListeners() {
+    const difficultySelect = document.getElementById("difficulty-select");
+    if (difficultySelect) {
+      difficultySelect.addEventListener("change", () => {
+        window.gameManager?.setDifficulty?.(difficultySelect.value);
+      });
+    }
+
     const slider = document.getElementById("look-sensitivity");
     const valSpan = document.getElementById("look-sensitivity-val");
     if (slider) {
@@ -1586,11 +1607,21 @@ class MenuManager {
     if (this.container) {
       this.container.classList.add("hidden");
     }
-    if (this.startScene) {
-      this.startScene.pause();
-      if (this.startScene.renderer) {
-        this.startScene.renderer.domElement.style.display = "none";
-      }
+    if (!this.startScene) return;
+
+    const gmState = window.gameManager?.state;
+    if (gmState?.isMobile || gmState?.isIOS) {
+      // Free the menu's whole WebGL context during play; a second live
+      // context is dead weight against Safari's tab memory limit. Rebuilt
+      // lazily by syncStartSceneState() when the menu returns.
+      this.startScene.dispose();
+      this.startScene = null;
+      return;
+    }
+
+    this.startScene.pause();
+    if (this.startScene.renderer) {
+      this.startScene.renderer.domElement.style.display = "none";
     }
   }
 

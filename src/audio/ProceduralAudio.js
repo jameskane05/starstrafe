@@ -36,6 +36,7 @@ class ProceduralAudio {
     this._duckRampDuration = 1;
     this._duckRampElapsed = 0;
     this._duckRampActive = false;
+    this._loadingSuppressed = false;
     
     // Listener position (camera position) for spatial audio
     this.listenerPosition = { x: 0, y: 0, z: 0 };
@@ -147,8 +148,23 @@ class ProceduralAudio {
 
   _syncMasterGain() {
     if (this.masterGain) {
-      this.masterGain.gain.value = this.sfxVolume * this._dialogDuckMul;
+      this.masterGain.gain.value = this._loadingSuppressed
+        ? 0
+        : this.sfxVolume * this._dialogDuckMul;
     }
+  }
+
+  setLoadingSuppressed(active) {
+    this._loadingSuppressed = active === true;
+    if (this._loadingSuppressed) {
+      this.shieldRechargeStop();
+      this.boosterRechargeStop();
+    }
+    this._syncMasterGain();
+  }
+
+  isLoadingSuppressed() {
+    return this._loadingSuppressed === true;
   }
 
   /**
@@ -367,6 +383,77 @@ class ProceduralAudio {
     
     osc.start(now);
     osc.stop(now + (final ? 0.3 : 0.15));
+  }
+
+  /**
+   * Ship computer chirp – objective tracker acquired (ascending beep-beep-boop).
+   */
+  objectiveTrackerOn() {
+    if (!this.ctx) return;
+    this.resume();
+
+    const now = this.ctx.currentTime;
+    const notes = [
+      { t: 0, freq: 740, type: "square", dur: 0.055 },
+      { t: 0.075, freq: 1180, type: "sine", dur: 0.05 },
+      { t: 0.14, freq: 1560, type: "square", dur: 0.075 },
+    ];
+    for (const n of notes) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = n.type;
+      osc.frequency.setValueAtTime(n.freq, now + n.t);
+      osc.frequency.exponentialRampToValueAtTime(
+        n.freq * 1.12,
+        now + n.t + n.dur,
+      );
+
+      gain.gain.setValueAtTime(0.0001, now + n.t);
+      gain.gain.exponentialRampToValueAtTime(0.1, now + n.t + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.dur);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now + n.t);
+      osc.stop(now + n.t + n.dur + 0.02);
+    }
+  }
+
+  /**
+   * Ship computer chirp – objective tracker dismissed (descending boop-boop).
+   */
+  objectiveTrackerOff() {
+    if (!this.ctx) return;
+    this.resume();
+
+    const now = this.ctx.currentTime;
+    const notes = [
+      { t: 0, freq: 1100, type: "sine", dur: 0.06 },
+      { t: 0.085, freq: 620, type: "square", dur: 0.1 },
+    ];
+    for (const n of notes) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = n.type;
+      osc.frequency.setValueAtTime(n.freq, now + n.t);
+      osc.frequency.exponentialRampToValueAtTime(
+        n.freq * 0.82,
+        now + n.t + n.dur,
+      );
+
+      gain.gain.setValueAtTime(0.0001, now + n.t);
+      gain.gain.exponentialRampToValueAtTime(0.09, now + n.t + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.dur);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now + n.t);
+      osc.stop(now + n.t + n.dur + 0.02);
+    }
   }
 
   // ============================================

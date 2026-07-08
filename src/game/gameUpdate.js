@@ -27,13 +27,29 @@ import proceduralAudio from "../audio/ProceduralAudio.js";
 import engineAudio from "../audio/EngineAudio.js";
 import * as gameInGameUI from "./gameInGameUI.js";
 import { syncNetworkBotsWithState } from "./gameMultiplayer.js";
-import { processDeferredProximityEnemySpawns } from "./gameEnemies.js";
+import {
+  checkWeaponPickups,
+  processDeferredAuthoredMissionSpawns,
+  processDeferredProximityEnemySpawns,
+} from "./gameEnemies.js";
 import { updateCharonReactorExplosionFlash, updateCharonReactorCoreHealthBar, updateCoreSplatFx } from "./charonReactorCore.js";
+import { updateEarthBossSplatFx } from "./earthBossFight.js";
 import {
   applyCharonEscapeShakeEndFrame,
   applyCharonEscapeShakeStartFrame,
   updateCharonReactorEscapeSequence,
 } from "./charonEscapeSequence.js";
+import {
+  applyEarthEscapeShakeEndFrame,
+  applyEarthEscapeShakeStartFrame,
+} from "./earthEscapeSequence.js";
+import {
+  applySaturnaliaCollapseShakeEndFrame,
+  updateSaturnaliaCollapseSequence,
+} from "./saturnaliaCollapseSequence.js";
+import { updateCockpitEnvZones } from "../utils/cockpitEnvZones.js";
+import { updateLevelBoosters } from "./levelBoosters.js";
+import { isSoloPlayerCombatInactive } from "./gamePlayerLifecycle.js";
 
 const _audioForward = new THREE.Vector3();
 const _audioUp = new THREE.Vector3();
@@ -52,11 +68,14 @@ function buildSoloPlayerHomingTarget(game) {
       alive: true,
     };
   }
+  const inactive = isSoloPlayerCombatInactive(game);
   const pos =
     game.xrManager?.isPresenting && game.xrManager.rig
       ? game.xrManager.rig.position
       : game.camera.position;
   game._soloPlayerHomingTarget.mesh.position.copy(pos);
+  game._soloPlayerHomingTarget.health = inactive ? 0 : game.player.health;
+  game._soloPlayerHomingTarget.alive = !inactive;
   return game._soloPlayerHomingTarget;
 }
 
@@ -179,19 +198,27 @@ export function tick(game, delta, timestamp, frame) {
     if (!game._soloRespawning && !multiplayerDead) {
       game.input.update(delta);
       game.handleGamepadFire();
+      game.updatePrimaryFire?.(delta);
 
       if (game.player) {
         applyCharonEscapeShakeStartFrame(game);
+        applyEarthEscapeShakeStartFrame(game);
         game.player.update(delta, game.clock.elapsedTime);
+        updateLevelBoosters(game, delta);
+        updateCockpitEnvZones(game, delta);
         game.dialogManager?.update(delta);
         updateCharonReactorExplosionFlash(game, delta);
         updateCoreSplatFx(game, delta);
+        updateEarthBossSplatFx(game, delta);
         updateCharonReactorCoreHealthBar(game);
         if (!game.isMultiplayer) {
           game.levelTriggerManager?.update();
         }
         updateCharonReactorEscapeSequence(game, delta);
         applyCharonEscapeShakeEndFrame(game, delta);
+        applyEarthEscapeShakeEndFrame(game);
+        updateSaturnaliaCollapseSequence(game, delta);
+        applySaturnaliaCollapseShakeEndFrame(game);
         if (game.isMultiplayer) {
           const localPlayer = NetworkManager.getLocalPlayer();
           if (localPlayer) {
@@ -279,9 +306,11 @@ export function tick(game, delta, timestamp, frame) {
         ? game.xrManager.rig.position
         : game.camera.position;
       game._checkMissilePickups(playerPos, delta);
+      checkWeaponPickups(game, playerPos, delta);
     }
 
     if (!game.isMultiplayer) {
+      processDeferredAuthoredMissionSpawns(game);
       processDeferredProximityEnemySpawns(game);
       // Respawns before enemy.update so pooled bots get spawnWarp.update() the same frame
       // they become visible (otherwise first paint can miss dissolve / look like a pop-in).
@@ -295,6 +324,14 @@ export function tick(game, delta, timestamp, frame) {
     if (!game.isMultiplayer) {
       const cullDist =
         game.gameManager.getPerformanceProfile().enemyCullDistance ?? 200;
+      for (let i = 0; i < game.alliedShips.length; i++) {
+        game.alliedShips[i].update(
+          delta,
+          game,
+          game.boundFireAlly,
+          game._frameCount,
+        );
+      }
       for (let i = 0; i < game.enemies.length; i++) {
         game.enemies[i].update(
           delta,
@@ -304,6 +341,14 @@ export function tick(game, delta, timestamp, frame) {
           cullDist,
           game,
         );
+      }
+      if (game.enemyPortals?.length) {
+        for (let i = game.enemyPortals.length - 1; i >= 0; i--) {
+          const keepAlive = game.enemyPortals[i].update(delta);
+          if (!keepAlive || game.enemyPortals[i].disposed) {
+            game.enemyPortals.splice(i, 1);
+          }
+        }
       }
     }
 
@@ -332,6 +377,10 @@ export function tick(game, delta, timestamp, frame) {
     game.networkProjectiles.forEach((data, id) => {
       if (data.type === "projectile") {
         data.obj.update(delta);
+      } else if (data.type === "chargingLaser") {
+        if (!data.obj.update(delta)) {
+          game.networkProjectiles.delete(id);
+        }
       } else if (data.type === "missile") {
         const serverProj = NetworkManager.getState()?.projectiles?.get(id);
         if (serverProj && data.targetPosition && data.targetDirection) {
@@ -448,7 +497,16 @@ export function tick(game, delta, timestamp, frame) {
 
 export function updateBoostDoF(game, delta) {
   if (!game.sparkRenderer || !game.player) return;
-  const target = game.player.isBoosting ? game._boostDoFAngleMax : 0;
+  let pulse = 0;
+  const boostPulse = game._levelBoostBlurPulse;
+  if (boostPulse) {
+    boostPulse.elapsed += delta;
+    const t = Math.min(1, boostPulse.elapsed / boostPulse.duration);
+    pulse = Math.sin(t * Math.PI) * (boostPulse.multiplier ?? 1);
+    if (t >= 1) game._levelBoostBlurPulse = null;
+  }
+  const boostTarget = game.player.isBoosting ? game._boostDoFAngleMax : 0;
+  const target = boostTarget + game._boostDoFAngleMax * pulse;
   const rate = 6;
   const t = 1 - Math.exp(-rate * delta);
   game._boostDoFApertureAngle += (target - game._boostDoFApertureAngle) * t;
@@ -456,7 +514,7 @@ export function updateBoostDoF(game, delta) {
 }
 
 export function updateBloomActive(game) {
-  game._bloomActive = game.bloomEnabled && game.bloomPass.strength > 0.01;
+  game._bloomActive = game.bloomPass.strength > 0.01;
   game.bloomPass.enabled = game._bloomActive;
   if (game.sparkRenderer) {
     game.sparkRenderer.encodeLinear = game._bloomActive;
@@ -470,6 +528,9 @@ export function onResize(game) {
   game.camera.fov = 70;
   game.camera.aspect = w / h;
   game.camera.updateProjectionMatrix();
+  const pixelRatio =
+    game.gameManager?.getPerformanceProfile?.()?.rendering?.pixelRatio;
+  if (pixelRatio) game.renderer.setPixelRatio(pixelRatio);
   game.renderer.setSize(w, h);
   game.composer?.setSize(w, h);
   game.bloomPass?.resolution?.set(w, h);

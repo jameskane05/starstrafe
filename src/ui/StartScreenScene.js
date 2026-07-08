@@ -331,13 +331,8 @@ export class StartScreenScene {
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
 
-    this.bloomEnabled = gm?.getSetting("bloomEnabled") ?? true;
     this._updateStartScreenBloomActive();
 
-    this._onBloomChanged = (enabled) => {
-      this.bloomEnabled = enabled;
-      this._updateStartScreenBloomActive();
-    };
     this._onBloomSettings = (settings) => {
       if (settings.strength !== undefined)
         this.bloomPass.strength = settings.strength;
@@ -350,7 +345,6 @@ export class StartScreenScene {
     this._onAntialiasingChanged = (enabled) => {
       this.fxaaPass.enabled = enabled;
     };
-    gm?.on("bloom:changed", this._onBloomChanged);
     gm?.on("bloom:settings", this._onBloomSettings);
     gm?.on("antialiasing:changed", this._onAntialiasingChanged);
 
@@ -388,8 +382,7 @@ export class StartScreenScene {
   }
 
   _updateStartScreenBloomActive() {
-    this.bloomPass.enabled =
-      this.bloomEnabled && this.bloomPass.strength > 0.01;
+    this.bloomPass.enabled = this.bloomPass.strength > 0.01;
   }
 
   setLoadingBackgroundOnly(enabled) {
@@ -633,7 +626,7 @@ export class StartScreenScene {
 
     return new Promise((resolve) => {
       loader.load(
-        "./Heavy_EXT_02.glb",
+        "./gltf/Heavy_EXT_02.glb",
         (gltf) => {
           if (onProgress) onProgress(1);
           this.ship = gltf.scene;
@@ -1049,7 +1042,6 @@ export class StartScreenScene {
     this.lightManager?.destroy();
 
     const gm = window.gameManager;
-    gm?.off("bloom:changed", this._onBloomChanged);
     gm?.off("bloom:settings", this._onBloomSettings);
     gm?.off("antialiasing:changed", this._onAntialiasingChanged);
 
@@ -1104,6 +1096,8 @@ export class StartScreenScene {
     }
     if (this.galaxyTexture) this.galaxyTexture.dispose();
 
+    this.composer?.dispose?.();
+    this.bloomPass?.dispose?.();
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer.domElement.remove();

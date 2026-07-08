@@ -72,6 +72,7 @@ class SFXManager {
 
   play(id, position = null, volumeScale = 1) {
     if (!this.ctx || !this.masterGain) return;
+    if (proceduralAudio.isLoadingSuppressed?.()) return;
     this._ensureLoaded();
     this._playOrQueue(id, position, volumeScale);
   }

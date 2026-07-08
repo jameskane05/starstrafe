@@ -22,6 +22,8 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 const fragmentCache = new Map();
 const activeDebris = [];
+const debrisOuterMaterials = [];
+const debrisInnerMaterials = [];
 
 const FRAGMENT_COUNT = 8;
 const DEBRIS_LIFETIME = 2.5;
@@ -39,6 +41,42 @@ const innerMaterial = new THREE.MeshStandardMaterial({
 });
 
 export const PLAYER_SHIP_MODEL_INDEX = 100;
+export const SENTINEL_BOSS_MODEL_INDEX = 101;
+export const BARRIER_MODEL_INDEX = 102;
+
+function createDebrisOuterMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: 0x333333,
+    metalness: 0.5,
+    roughness: 0.6,
+    transparent: true,
+  });
+}
+
+function getDebrisOuterMaterial(index) {
+  if (!debrisOuterMaterials[index]) {
+    debrisOuterMaterials[index] = createDebrisOuterMaterial();
+  }
+  debrisOuterMaterials[index].opacity = 1;
+  return debrisOuterMaterials[index];
+}
+
+function getDebrisInnerMaterial(index) {
+  if (!debrisInnerMaterials[index]) {
+    debrisInnerMaterials[index] = innerMaterial.clone();
+    debrisInnerMaterials[index].transparent = true;
+  }
+  debrisInnerMaterials[index].opacity = 1;
+  return debrisInnerMaterials[index];
+}
+
+export function getShipDestructionDebrisMaterials() {
+  const materials = [];
+  for (let i = 0; i < FRAGMENT_COUNT; i++) {
+    materials.push(getDebrisOuterMaterial(i), getDebrisInnerMaterial(i));
+  }
+  return materials;
+}
 
 function yieldToMain() {
   return new Promise((resolve) => {
@@ -68,6 +106,7 @@ export function prefractureModels(shipModels) {
 
 export async function prefractureModelsAsync(shipModels) {
   if (!shipModels?.length) return;
+
   await yieldToMain();
   for (let i = 0; i < shipModels.length; i++) {
     try {
@@ -92,6 +131,29 @@ export function prefracturePlayerShip(model) {
   }
 }
 
+export function prefractureBossModel(
+  model,
+  index = SENTINEL_BOSS_MODEL_INDEX,
+) {
+  if (!model) return;
+  try {
+    prefractureModel(index, model);
+    console.log("[ShipDestruction] Pre-fractured boss model");
+  } catch (e) {
+    console.warn("Failed to pre-fracture boss model:", e);
+  }
+}
+
+export function prefractureBarrierModel(model) {
+  if (!model) return;
+  try {
+    prefractureModel(BARRIER_MODEL_INDEX, model);
+    console.log("[ShipDestruction] Pre-fractured barrier model");
+  } catch (e) {
+    console.warn("Failed to pre-fracture barrier model:", e);
+  }
+}
+
 function prefractureModel(index, model) {
   const geometries = [];
   let outerMat = null;
@@ -100,7 +162,20 @@ function prefractureModel(index, model) {
   model.traverse((child) => {
     if (!child.isMesh || !child.geometry) return;
     const n = child.name?.toLowerCase?.() || "";
-    if (n.startsWith("thruster_") || n.startsWith("weapon_")) return;
+    if (
+      n.startsWith("thruster_") ||
+      n.startsWith("weapon_") ||
+      n.startsWith("turret_") ||
+      n.includes("collider")
+    ) {
+      return;
+    }
+    const mats = Array.isArray(child.material)
+      ? child.material
+      : child.material
+        ? [child.material]
+        : [];
+    if (mats.some((m) => m?.name === "Collider_Invisible")) return;
 
     const src = child.geometry.index
       ? child.geometry.toNonIndexed()
@@ -176,15 +251,10 @@ export function spawnDestruction(
   const cached = fragmentCache.get(modelIndex);
   if (!cached || cached.length === 0) return;
 
-  for (const frag of cached) {
-    const outerMat = new THREE.MeshStandardMaterial({
-      color: 0x333333,
-      metalness: 0.5,
-      roughness: 0.6,
-      transparent: true,
-    });
-    const innerClone = innerMaterial.clone();
-    innerClone.transparent = true;
+  for (let i = 0; i < cached.length; i++) {
+    const frag = cached[i];
+    const outerMat = getDebrisOuterMaterial(i);
+    const innerMat = getDebrisInnerMaterial(i);
 
     frag.geometry.computeBoundingBox();
     const bb = frag.geometry.boundingBox;
@@ -203,7 +273,7 @@ export function spawnDestruction(
     const offset = _center.clone().multiplyScalar(scale);
     offset.applyQuaternion(quaternion);
 
-    const mesh = new THREE.Mesh(frag.geometry, [outerMat, innerClone]);
+    const mesh = new THREE.Mesh(frag.geometry, [outerMat, innerMat]);
     mesh.position.copy(position).add(offset);
     mesh.quaternion.copy(quaternion);
     mesh.scale.setScalar(scale);
@@ -223,6 +293,7 @@ export function spawnDestruction(
 
     activeDebris.push({
       mesh,
+      materialIndex: i,
       velocity: vel,
       angularVelocity: angVel,
       life: DEBRIS_LIFETIME,
@@ -237,10 +308,6 @@ export function updateDestruction(delta) {
 
     if (d.life <= 0) {
       d.mesh.parent?.remove(d.mesh);
-      const mats = Array.isArray(d.mesh.material)
-        ? d.mesh.material
-        : [d.mesh.material];
-      for (const m of mats) m.dispose();
       activeDebris.splice(i, 1);
       continue;
     }
@@ -268,10 +335,6 @@ export function updateDestruction(delta) {
 export function cleanupDestruction(scene) {
   for (const d of activeDebris) {
     d.mesh.parent?.remove(d.mesh);
-    const mats = Array.isArray(d.mesh.material)
-      ? d.mesh.material
-      : [d.mesh.material];
-    for (const m of mats) m.dispose();
   }
   activeDebris.length = 0;
 }

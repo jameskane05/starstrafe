@@ -45,7 +45,7 @@ export class DialogManager {
       this._getResponsiveCaptionOffset();
     this.captionScale = options.captionScale ?? 0.3;
     this.fontSize = options.fontSize ?? 36;
-    this.fontFamily = options.fontFamily ?? "Arial, sans-serif";
+    this.fontFamily = options.fontFamily ?? '"Exo 2", Arial, sans-serif';
     this.maxWidth = options.maxWidth ?? 600;
     this.padding = options.padding ?? 14;
     this.captionTargetLines = options.captionTargetLines ?? 2;
@@ -591,6 +591,12 @@ export class DialogManager {
           charonMobiusReactorTauntDone: true,
         });
       }
+    }
+    if (dialog.id === "earthSignatureDetected") {
+      this.gameManager.emit?.("dialog:missionMilestone", {
+        dialogId: dialog.id,
+        event: "earthTrackChargingCannon",
+      });
     }
     const rawCaptions = dialog.captions || [];
     const preparedCaptions = this._prepareCaptions(rawCaptions, dialog);

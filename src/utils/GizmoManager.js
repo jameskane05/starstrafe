@@ -18,6 +18,8 @@
 import * as THREE from "three";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 
+const radToDeg = THREE.MathUtils.radToDeg;
+
 class GizmoManager {
   constructor(scene, camera, renderer) {
     this.scene = scene;
@@ -217,7 +219,7 @@ class GizmoManager {
     console.log(
       `[GizmoManager] "${target.id}"\n` +
       `  position: {x: ${p.x.toFixed(2)}, y: ${p.y.toFixed(2)}, z: ${p.z.toFixed(2)}}\n` +
-      `  rotation: {x: ${r.x.toFixed(4)}, y: ${r.y.toFixed(4)}, z: ${r.z.toFixed(4)}}\n` +
+      `  rotation: {x: ${radToDeg(r.x).toFixed(2)}, y: ${radToDeg(r.y).toFixed(2)}, z: ${radToDeg(r.z).toFixed(2)}}\n` +
       `  scale: {x: ${s.x.toFixed(2)}, y: ${s.y.toFixed(2)}, z: ${s.z.toFixed(2)}}`
     );
   }

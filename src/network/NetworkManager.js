@@ -474,7 +474,15 @@ class NetworkManager {
     this.room.send("setLobbyColor", { color });
   }
 
-  sendSpawnPoints({ enemySpawns, playerSpawns, missileSpawns, bounds }) {
+  sendWeaponUnlocks(unlocks = {}) {
+    if (!this.room) return;
+    this.room.send("weaponUnlocks", {
+      chargingLaser: unlocks.chargingLaser === true,
+      gatling: unlocks.gatling === true,
+    });
+  }
+
+  sendSpawnPoints({ enemySpawns, playerSpawns, missileSpawns, weaponSpawns, bounds }) {
     if (!this.room) return;
     const mapPts = (arr) =>
       (arr || []).map((p) => ({ x: p.x, y: p.y, z: p.z }));
@@ -498,6 +506,12 @@ class NetworkManager {
       points: mapPts(enemySpawns),
       playerSpawns: mapPlayerSpawns(playerSpawns),
       missileSpawns: mapPts(missileSpawns),
+      weaponSpawns: (weaponSpawns || []).map((p) => ({
+        type: p.type,
+        x: p.position?.x ?? p.x,
+        y: p.position?.y ?? p.y,
+        z: p.position?.z ?? p.z,
+      })),
     };
     if (bounds?.center && bounds?.size) {
       payload.bounds = {
