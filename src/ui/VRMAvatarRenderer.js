@@ -450,7 +450,7 @@ function applyFaceToExpressionManager(vrm, names, values) {
 
 export class VRMAvatarRenderer {
   constructor(options = {}) {
-    this.vrmUrl = options.vrmUrl ?? "./alcair-opt.vrm";
+    this.vrmUrl = options.vrmUrl ?? "./vrm/alcair-opt.vrm";
     /** Optional VRMA idle clip URL; omit or pass null to skip (no network fetch). */
     this.idleUrl = options.idleUrl ?? null;
     this.scene = new THREE.Scene();

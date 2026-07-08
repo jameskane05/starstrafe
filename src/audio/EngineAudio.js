@@ -49,6 +49,7 @@ class EngineAudio {
     this._duckRampDuration = 1;
     this._duckRampElapsed = 0;
     this._duckRampActive = false;
+    this._loadingSuppressed = false;
 
     // Smoothed values
     this.currentEngineVolume = 0;
@@ -74,7 +75,7 @@ class EngineAudio {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       if (this.ctx.state === "suspended") this.ctx.resume();
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = this.volume;
+      this._syncEngineMasterGain();
       this.masterGain.connect(this.ctx.destination);
       this.initialized = true;
       await this._loadEngine();
@@ -177,8 +178,23 @@ class EngineAudio {
 
   _syncEngineMasterGain() {
     if (this.masterGain) {
-      this.masterGain.gain.value = this.volume * this._dialogDuckMul;
+      this.masterGain.gain.value = this._loadingSuppressed
+        ? 0
+        : this.volume * this._dialogDuckMul;
     }
+  }
+
+  setLoadingSuppressed(active) {
+    this._loadingSuppressed = active === true;
+    if (this._loadingSuppressed) {
+      this.currentEngineVolume = 0;
+      this.currentAfterburnerVolume = 0;
+      this.targetEngineVolume = 0;
+      this.targetAfterburnerVolume = 0;
+      if (this.engineGain) this.engineGain.gain.value = 0;
+      if (this.afterburnerGain) this.afterburnerGain.gain.value = 0;
+    }
+    this._syncEngineMasterGain();
   }
 
   /** Call every frame (including menu) so dialog duck ramps while the engine graph is idle. */
@@ -188,6 +204,12 @@ class EngineAudio {
   }
 
   update(delta, player) {
+    if (this._loadingSuppressed) {
+      if (this.engineGain) this.engineGain.gain.value = 0;
+      if (this.afterburnerGain) this.afterburnerGain.gain.value = 0;
+      this._syncEngineMasterGain();
+      return;
+    }
     if (!this.initialized || !this.engineLoaded || !player) {
       this._syncEngineMasterGain();
       return;

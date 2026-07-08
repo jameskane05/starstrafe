@@ -1,130 +1,76 @@
 import { spawnAuthoredEnemiesFast } from "../game/gameEnemies.js";
-import * as THREE from "three";
-import proceduralAudio from "../audio/ProceduralAudio.js";
-import { stopSaturnaliaCollapseForLevelChange } from "../game/saturnaliaCollapseSequence.js";
+import {
+  enableWeaponPickupTracker,
+  updateWeaponPickupTracker,
+} from "./weaponPickupTracker.js";
+import {
+  stopSaturnaliaCollapseForLevelChange,
+  armSaturnaliaDestructionCountdown,
+  pauseSaturnaliaDestructionCountdown,
+  completeSaturnaliaEscape,
+} from "../game/saturnaliaCollapseSequence.js";
 import {
   createSaturnaliaChaseController,
   disposeSaturnaliaChase,
   prewarmSaturnaliaChase,
   startSaturnaliaChase,
   startSaturnaliaChaseEscape,
+  alignSaturnaliaDebugSpawn,
   updateSaturnaliaChase,
 } from "./saturnaliaChase.js";
 
-const CANNON_TRACK_MAX_DISTANCE = 150;
-const _trackWorld = new THREE.Vector3();
-const _trackProjected = new THREE.Vector3();
-
-function ensureCannonTrackerElement(manager) {
-  if (manager.runtime.cannonTrackerEl) return manager.runtime.cannonTrackerEl;
-  const el = document.createElement("div");
-  el.className = "objective-tracker";
-  el.innerHTML =
-    '<span class="objective-tracker-diamond">◇</span>CHARGING CANNON';
-  document.body.appendChild(el);
-  manager.runtime.cannonTrackerEl = el;
-  return el;
-}
-
-function getChargingCannonPickup(game) {
-  return game._weaponPickups?.find(
-    (pickup) => pickup.type === "charging_laser" && pickup.active,
-  );
-}
-
-function enableChargingCannonTracker(manager) {
-  manager.runtime.trackChargingCannon = true;
-  manager.runtime.cannonTrackerShown = false;
-  ensureCannonTrackerElement(manager);
-}
-
-/** Intro animation + acquisition chirp; no-op while already shown. */
-function showCannonTracker(manager) {
-  if (manager.runtime.cannonTrackerShown) return;
-  manager.runtime.cannonTrackerShown = true;
-  ensureCannonTrackerElement(manager).classList.add("visible");
-  proceduralAudio.objectiveTrackerOn();
-}
-
-/** Outro (CSS transition back to faded/shrunk) + dismissal chirp. */
-function dismissCannonTracker(manager, { silent = false } = {}) {
-  if (!manager.runtime.cannonTrackerShown) return;
-  manager.runtime.cannonTrackerShown = false;
-  manager.runtime.cannonTrackerEl?.classList.remove("visible");
-  if (!silent) proceduralAudio.objectiveTrackerOff();
-}
-
-function updateChargingCannonTracker(manager) {
-  if (!manager.runtime.trackChargingCannon) return;
-  const game = manager.game;
-  const pickup = getChargingCannonPickup(game);
-  if (!pickup?.collectible?.group || !game.camera) {
-    // Picked up (or gone) — dismiss for good.
-    dismissCannonTracker(manager);
-    manager.runtime.trackChargingCannon = false;
-    return;
-  }
-
-  pickup.collectible.group.getWorldPosition(_trackWorld);
-  const dist = _trackWorld.distanceTo(game.camera.position);
-  if (dist > CANNON_TRACK_MAX_DISTANCE) {
-    // Out of range — dismiss but keep tracking so it returns in range.
-    dismissCannonTracker(manager);
-    return;
-  }
-
-  const el = ensureCannonTrackerElement(manager);
-  _trackProjected.copy(_trackWorld).project(game.camera);
-  const inFront = _trackProjected.z < 1;
-  if (!inFront) {
-    // Behind the camera: hide without outro/beeps, stays "shown" logically.
-    el.style.visibility = "hidden";
-    return;
-  }
-  el.style.visibility = "";
-
-  const vp = window.visualViewport;
-  const width = vp ? Math.round(vp.width) : window.innerWidth;
-  const height = vp ? Math.round(vp.height) : window.innerHeight;
-  const x = THREE.MathUtils.clamp((_trackProjected.x * 0.5 + 0.5) * width, 32, width - 32);
-  const y = THREE.MathUtils.clamp((-_trackProjected.y * 0.5 + 0.5) * height, 32, height - 32);
-  el.style.left = `${x}px`;
-  el.style.top = `${y}px`;
-  showCannonTracker(manager);
-}
+const SATURNALIA_WEAPON_TRACKER_ID = "saturnaliaGatlingGun";
 
 export const saturnaliaMission = {
   id: "saturnalia",
   defaultLevelId: "saturnalia",
   startStepId: "arrival",
 
-  async start(manager) {
+  async start(manager, options = {}) {
     const game = manager.game;
     disposeSaturnaliaChase(game);
     stopSaturnaliaCollapseForLevelChange(game);
+    game._saturnaliaEscapeCompleted = false;
     game.enemyRespawnQueue.length = 0;
     game.gameManager.setState({
       selectedMissileMode: "homing",
       playerLaserEnabled: true,
       playerMissilesEnabled: true,
+      saturnaliaCollapseActive: false,
+      saturnaliaEscapeSucceeded: false,
+      saturnaliaIntroTextDone: false,
     });
 
     const positions = game.spawnPoints?.map((p) => p.clone()) ?? [];
     if (positions.length) {
       await spawnAuthoredEnemiesFast(game, positions);
     }
-    game._saturnaliaChase = createSaturnaliaChaseController(game);
+    game._saturnaliaChase = await createSaturnaliaChaseController(game);
     prewarmSaturnaliaChase(game);
+    if (options.debugSpawnIndex != null) {
+      const chase = startSaturnaliaChase(game);
+      alignSaturnaliaDebugSpawn(game);
+      if (chase?.enemy?.mesh) {
+        manager.setDirectionalHelperTarget({
+          type: "saturnaliaChase",
+          object3D: chase.enemy.mesh,
+        });
+      }
+      manager.runtime.debugChaseStarted = true;
+    }
   },
 
   steps: {
     arrival: {
       title: "Saturnalia",
       enter(manager) {
+        const chaseStarted = manager.runtime.debugChaseStarted === true;
         manager.setObjectives("Saturnalia", [
           {
             id: "arrive",
-            text: "Reach Saturnalia.",
+            text: chaseStarted
+              ? "Pursue the fleeing signal through Saturnalia."
+              : "Reach Saturnalia.",
             completed: false,
           },
         ]);
@@ -142,13 +88,20 @@ export const saturnaliaMission = {
             text: "Pursue the fleeing signal through Saturnalia.",
           });
         } else if (type === "saturnaliaTrackChargingCannon") {
-          enableChargingCannonTracker(manager);
+          enableWeaponPickupTracker(manager, {
+            id: SATURNALIA_WEAPON_TRACKER_ID,
+            pickupType: "gatling",
+            label: "GATLING GUN",
+          });
+        } else if (type === "saturnaliaArmDestructionCountdown") {
+          armSaturnaliaDestructionCountdown(manager.game, { paused: true });
         } else if (
           type === "dialogMissionMilestone" &&
           payload?.event === "saturnaliaChaseEscape" &&
           !manager.runtime.chaseEscapeStarted
         ) {
           manager.runtime.chaseEscapeStarted = true;
+          pauseSaturnaliaDestructionCountdown(manager.game);
           startSaturnaliaChaseEscape(manager.game);
         } else if (type === "saturnaliaChaseEscaped") {
           manager.updateObjective("arrive", {
@@ -156,11 +109,13 @@ export const saturnaliaMission = {
           });
           // Let the departure explosion play out before Starspeed reacts.
           manager.runtime.fuseDialogTimer = 2;
+        } else if (type === "saturnaliaEscapeComplete") {
+          void completeSaturnaliaEscape(manager.game, manager);
         }
       },
       update(manager, delta) {
         updateSaturnaliaChase(manager.game, delta);
-        updateChargingCannonTracker(manager);
+        updateWeaponPickupTracker(manager, SATURNALIA_WEAPON_TRACKER_ID);
         if (manager.runtime.fuseDialogTimer != null) {
           manager.runtime.fuseDialogTimer -= delta;
           if (manager.runtime.fuseDialogTimer <= 0) {

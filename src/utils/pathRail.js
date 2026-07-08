@@ -18,6 +18,16 @@ export function findByPrefix(root, prefix) {
   return found;
 }
 
+export function hideChaseMetadataVolumes(root) {
+  if (!root) return;
+  root.traverse((object) => {
+    const name = object.name || "";
+    if (name.startsWith("ChasePath") || name.startsWith("ChaseEnemy")) {
+      object.visible = false;
+    }
+  });
+}
+
 export function extractPathPoints(pathObject) {
   if (!pathObject?.geometry?.attributes?.position) return [];
   pathObject.updateWorldMatrix(true, false);
@@ -154,13 +164,13 @@ export function createPathRailFromScene(root, options = {}) {
   const points = extractPathPoints(pathObject);
   if (!pathObject || points.length < 2) return null;
 
+  hideChaseMetadataVolumes(root);
+
   if (marker) {
     marker.updateWorldMatrix(true, false);
     marker.getWorldPosition(_tmp);
     orientPathFromStart(points, _tmp);
-    marker.visible = false;
   }
-  pathObject.visible = false;
 
   return buildPath(points);
 }

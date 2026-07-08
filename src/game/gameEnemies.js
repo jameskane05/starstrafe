@@ -38,7 +38,8 @@
  */
 
 import * as THREE from "three";
-import { Enemy, shipModels } from "../entities/Enemy.js";
+import { Enemy, shipModels, computeEnemyShipScale, randomNormalEnemyShipScaleFactor } from "../entities/Enemy.js";
+import { EnemyPortal } from "../entities/EnemyPortal.js";
 import { Collectible } from "../entities/Collectible.js";
 import {
   allocateCheckpointDissolveBatchSerial,
@@ -57,6 +58,49 @@ import {
   unlockPrimaryWeapon,
 } from "./weaponUnlocks.js";
 
+/**
+ * DEBUG: when true, all enemy/portal-bot spawning is suppressed. Used to isolate
+ * whether gameplay lag spikes come from the splat asset vs. enemy instantiation.
+ * Flip back to false to restore normal spawning.
+ */
+export const DEBUG_DISABLE_ENEMY_SPAWNS = false;
+
+export function enemyShipScaleForSpawnIndex(game, spawnIndex) {
+  const cached = game.enemySpawnShipScales?.[spawnIndex];
+  if (cached != null) return cached;
+  return computeEnemyShipScale({
+    isHeavy: game.enemySpawnHeavyFlags?.[spawnIndex] === true,
+    isPortalBot: game.enemySpawnPortalFlags?.[spawnIndex] === true,
+    authoredScale: game.enemySpawnScales?.[spawnIndex] ?? 1,
+    randomFactor: game._enemySpawnRandomFactors?.[spawnIndex],
+  });
+}
+
+export function finalizeEnemySpawnScales(game) {
+  const n = game.spawnPoints?.length ?? 0;
+  if (!game.enemySpawnScales) game.enemySpawnScales = [];
+  while (game.enemySpawnScales.length < n) {
+    game.enemySpawnScales.push(1);
+  }
+  if (!game._enemySpawnRandomFactors) game._enemySpawnRandomFactors = [];
+  for (let i = 0; i < n; i++) {
+    if (game._enemySpawnRandomFactors[i] == null) {
+      game._enemySpawnRandomFactors[i] = randomNormalEnemyShipScaleFactor();
+    }
+  }
+  game.enemySpawnShipScales = [];
+  for (let i = 0; i < n; i++) {
+    game.enemySpawnShipScales.push(
+      computeEnemyShipScale({
+        isHeavy: game.enemySpawnHeavyFlags?.[i] === true,
+        isPortalBot: game.enemySpawnPortalFlags?.[i] === true,
+        authoredScale: game.enemySpawnScales[i] ?? 1,
+        randomFactor: game._enemySpawnRandomFactors[i],
+      }),
+    );
+  }
+}
+
 function enemySpawnOptions(game) {
   const enableLights =
     game.gameManager.getPerformanceSetting("rendering", "enemyLights") ?? true;
@@ -71,22 +115,70 @@ function enemySpawnOptions(game) {
   };
 }
 
+function enemyOptionsForAuthoredSpawn(game, i) {
+  return {
+    isHeavy: game.enemySpawnHeavyFlags?.[i] === true,
+    isPortalBot: game.enemySpawnPortalFlags?.[i] === true,
+    shipScale: enemyShipScaleForSpawnIndex(game, i),
+  };
+}
+
+/** No dissolve VFX, shared materials — Saturnalia / Earth large-level path. */
+function cheapEnemySpawnCtorOpts(spawnOpts = {}) {
+  if (spawnOpts.cheapSpawn !== true && spawnOpts.lite !== true) return {};
+  return {
+    deferSpawnWarp: true,
+    disableRevealWarp: true,
+    cloneMaterials: false,
+  };
+}
+
+function linkPortalForEnemy(game, enemy, position) {
+  if (!enemy?.isPortalBot || game.isMultiplayer) return null;
+  if (!game.enemyPortals) game.enemyPortals = [];
+  if (enemy.portal && !enemy.portal.disposed) return enemy.portal;
+  const portal = new EnemyPortal(game, position, enemy, {
+    spawnEnemy: (spawnPos, spawnOpts = {}) =>
+      spawnPortalSummonedEnemy(game, spawnPos, spawnOpts),
+  });
+  enemy.portal = portal;
+  game.enemyPortals.push(portal);
+  return portal;
+}
+
+export function disposeEnemyPortals(game) {
+  if (!game.enemyPortals?.length) {
+    game.enemyPortals = [];
+    return;
+  }
+  for (const portal of game.enemyPortals) {
+    portal.dispose?.();
+  }
+  game.enemyPortals.length = 0;
+}
+
 export function spawnEnemies(game) {
+  if (DEBUG_DISABLE_ENEMY_SPAWNS) return;
   if (game.spawnPoints.length === 0) {
     console.warn("[Game] No spawn points found in level mesh");
     return;
   }
 
   const opts = enemySpawnOptions(game);
-  for (const pos of game.spawnPoints) {
+  for (let i = 0; i < game.spawnPoints.length; i++) {
+    const pos = game.spawnPoints[i];
     const enemy = new Enemy(
       game.scene,
       pos.clone(),
       game.level,
       game._levelBounds,
-      opts,
+      {
+        ...opts,
+        ...enemyOptionsForAuthoredSpawn(game, i),
+      },
     );
     game.enemies.push(enemy);
+    linkPortalForEnemy(game, enemy, pos);
   }
 
   console.log(
@@ -102,31 +194,81 @@ export async function spawnEnemiesFromLevelSpawnPointsWithPrewarm(game) {
     return;
   }
   const positions = game.spawnPoints.map((p) => p.clone());
-  await spawnEnemiesAtPointsWithPrewarm(game, positions);
+  await spawnEnemiesAtPointsWithPrewarm(game, positions, (i) =>
+    enemyOptionsForAuthoredSpawn(game, i),
+  );
   console.log(
     `[Game] Spawned ${game.enemies.length} enemies at authored positions (prewarmed)`,
   );
   game.updateHUD();
 }
 
+/** Reusable solo campaign enemy instances (authored missions share one small pool). */
+export const AUTHORED_MISSION_POOL_SIZE = 24;
+/** Earth Defense has ~80 authored spawns; keep a large concurrent pool for the boss arena. */
+export const EARTH_DEFENSE_POOL_SIZE = 24;
+export const BOSS_ARENA_SPAWN_RADIUS = 220;
+
 export function clearDeferredEnemySpawnState(game) {
   if (game._deferredEnemySpawnQueue?.length) {
     game._deferredEnemySpawnQueue.length = 0;
   }
   game._proximityEnemySpawnConfig = null;
+  if (game._authoredEnemySpawnQueue?.length) {
+    game._authoredEnemySpawnQueue.length = 0;
+  }
+  game._authoredEnemySpawnConfig = null;
 }
 
-/**
- * Spawn enemies near `anchor` across animation frames (avoids batch prewarm / compileAsync).
- * Queue the rest until the player enters `activateRadius` of each spawn.
- */
-export async function spawnEnemiesByProximity(game, anchor, options = {}) {
-  clearDeferredEnemySpawnState(game);
-  if (!game.spawnPoints?.length) {
-    console.warn("[Game] No spawn points for proximity spawn");
-    return;
+/** Drop live solo enemies and mission pools before a fresh campaign start. */
+export function resetSoloCampaignEnemyState(game) {
+  disposeEnemyPortals(game);
+  if (game.enemies?.length) {
+    for (let i = game.enemies.length - 1; i >= 0; i--) {
+      try {
+        game.enemies[i]?.dispose?.(game.scene, game);
+      } catch (err) {
+        console.warn("[gameEnemies] resetSoloCampaignEnemyState:", err);
+      }
+    }
+    game.enemies.length = 0;
   }
+  disposeMissionEnemyPool(game);
+  disposePortalSummonEnemyPool(game);
+  clearDeferredEnemySpawnState(game);
+  game.enemyRespawnQueue.length = 0;
+}
 
+export function getMissionEnemyRemainingCount(game) {
+  const queued = game._authoredEnemySpawnQueue?.length ?? 0;
+  return (game.enemies?.length ?? 0) + queued;
+}
+
+function syncMissionEnemyHud(game) {
+  game.gameManager.setState({
+    enemiesRemaining: getMissionEnemyRemainingCount(game),
+  });
+  game.updateHUD?.();
+}
+
+function soloPlayerAnchor(game) {
+  return game.xrManager?.isPresenting && game.xrManager.rig
+    ? game.xrManager.rig.position
+    : game.camera?.position;
+}
+
+function takeAvailableMissionPoolEnemy(game) {
+  const pool = game._missionEnemyPool;
+  if (!pool?.length) return null;
+  for (const enemy of pool) {
+    if (enemy && !enemy.disposed && !game.enemies.includes(enemy)) {
+      return enemy;
+    }
+  }
+  return null;
+}
+
+function planProximitySpawnEntries(game, anchor, options = {}) {
   const immediateRadius = options.immediateRadius ?? 350;
   const activateRadius = options.activateRadius ?? 320;
   const minInitialIfNoneInRange = Math.max(
@@ -147,26 +289,31 @@ export async function spawnEnemiesByProximity(game, anchor, options = {}) {
     options.maxImmediateSpawns ?? 12,
   );
 
-  const positions = game.spawnPoints.map((p) => p.clone());
-  positions.sort(
-    (a, b) => a.distanceToSquared(anchor) - b.distanceToSquared(anchor),
+  const entries = game.spawnPoints.map((p, i) => ({
+    pos: p.clone(),
+    poolSlot: i,
+    spawnOpts: enemyOptionsForAuthoredSpawn(game, i),
+  }));
+  entries.sort(
+    (a, b) =>
+      a.pos.distanceToSquared(anchor) - b.pos.distanceToSquared(anchor),
   );
 
   let split = 0;
   while (
-    split < positions.length &&
-    positions[split].distanceTo(anchor) <= immediateRadius
+    split < entries.length &&
+    entries[split].pos.distanceTo(anchor) <= immediateRadius
   ) {
     split++;
   }
 
-  let immediate = positions.slice(0, split);
-  let deferred = positions.slice(split);
+  let immediate = entries.slice(0, split);
+  let deferred = entries.slice(split);
 
-  if (immediate.length === 0 && positions.length > 0) {
-    const n = Math.min(minInitialIfNoneInRange, positions.length);
-    immediate = positions.slice(0, n);
-    deferred = positions.slice(n);
+  if (immediate.length === 0 && entries.length > 0) {
+    const n = Math.min(minInitialIfNoneInRange, entries.length);
+    immediate = entries.slice(0, n);
+    deferred = entries.slice(n);
   }
 
   if (immediate.length > maxImmediateSpawns) {
@@ -175,20 +322,91 @@ export async function spawnEnemiesByProximity(game, anchor, options = {}) {
     deferred = [...overflow, ...deferred];
   }
 
-  game._deferredEnemySpawnQueue = deferred;
-  game._proximityEnemySpawnConfig = { activateRadius, maxSpawnsPerFrame };
+  return {
+    immediate,
+    deferred,
+    activateRadius,
+    maxSpawnsPerFrame,
+    staggerFramesBetween,
+    staggerIdleMs,
+    totalPlanned: immediate.length + deferred.length,
+  };
+}
 
-  if (immediate.length > 0) {
-    await spawnEnemiesAtPointsStaggered(game, immediate, {
-      lite: true,
-      framesBetween: staggerFramesBetween,
-      idleMs: staggerIdleMs,
+/**
+ * Spawn enemies near `anchor` across animation frames (avoids batch prewarm / compileAsync).
+ * Queue the rest until the player enters `activateRadius` of each spawn.
+ * Preserves per-spawn authored flags (heavy/portal) through the distance sort.
+ */
+export async function spawnEnemiesByProximity(game, anchor, options = {}) {
+  clearDeferredEnemySpawnState(game);
+  if (DEBUG_DISABLE_ENEMY_SPAWNS) return;
+  if (!game.spawnPoints?.length) {
+    console.warn("[Game] No spawn points for proximity spawn");
+    return;
+  }
+
+  const plan = planProximitySpawnEntries(game, anchor, options);
+  game._deferredEnemySpawnQueue = plan.deferred;
+  game._proximityEnemySpawnConfig = {
+    activateRadius: plan.activateRadius,
+    maxSpawnsPerFrame: plan.maxSpawnsPerFrame,
+  };
+
+  if (plan.immediate.length > 0) {
+    await spawnEnemiesAtPointsStaggered(
+      game,
+      plan.immediate.map((e) => e.pos),
+      {
+        lite: true,
+        framesBetween: plan.staggerFramesBetween,
+        idleMs: plan.staggerIdleMs,
+        spawnOptsForIndex: (i) => plan.immediate[i].spawnOpts,
+      },
+    );
+  }
+
+  console.log(
+    `[Game] Proximity spawn: ${plan.immediate.length} staggered now, ${plan.deferred.length} deferred (${plan.totalPlanned} total)`,
+  );
+  game.updateHUD();
+}
+
+/**
+ * Proximity spawn from a precooked mission pool (Earth Defense). Dissolve shaders are
+ * precompiled during loading; activation restarts the held warp without per-bot compile.
+ */
+export async function spawnEnemiesByProximityFromPool(game, anchor, options = {}) {
+  clearDeferredEnemySpawnState(game);
+  if (DEBUG_DISABLE_ENEMY_SPAWNS) return;
+  const pool = game._missionEnemyPool;
+  if (!pool?.length || !game.spawnPoints?.length) {
+    console.warn("[Game] No mission enemy pool for proximity spawn");
+    return;
+  }
+  if (pool.length < game.spawnPoints.length) {
+    console.warn(
+      `[Game] Mission pool (${pool.length}) smaller than spawn points (${game.spawnPoints.length})`,
+    );
+  }
+
+  const plan = planProximitySpawnEntries(game, anchor, options);
+  game._deferredEnemySpawnQueue = plan.deferred;
+  game._proximityEnemySpawnConfig = {
+    activateRadius: plan.activateRadius,
+    maxSpawnsPerFrame: plan.maxSpawnsPerFrame,
+    usePool: true,
+  };
+
+  if (plan.immediate.length > 0) {
+    await activatePoolSlotsStaggered(game, plan.immediate, {
+      framesBetween: plan.staggerFramesBetween,
+      idleMs: plan.staggerIdleMs,
     });
   }
 
-  const totalPlanned = immediate.length + deferred.length;
   console.log(
-    `[Game] Proximity spawn: ${immediate.length} staggered now, ${deferred.length} deferred (${totalPlanned} total)`,
+    `[Game] Proximity pool spawn: ${plan.immediate.length} activated now, ${plan.deferred.length} deferred (${plan.totalPlanned} total)`,
   );
   game.updateHUD();
 }
@@ -208,11 +426,24 @@ export function processDeferredProximityEnemySpawns(game) {
       : game.camera?.position;
   if (!playerPos) return;
 
+  const usePool = cfg?.usePool === true && game._missionEnemyPool?.length > 0;
+  const pool = game._missionEnemyPool;
+
   let spawned = 0;
   let i = 0;
   while (i < queue.length && spawned < maxN) {
-    if (playerPos.distanceToSquared(queue[i]) <= rSq) {
-      spawnAtPoint(game, queue[i], { lite: true });
+    if (playerPos.distanceToSquared(queue[i].pos) <= rSq) {
+      if (usePool && queue[i].poolSlot != null) {
+        const enemy = pool?.[queue[i].poolSlot];
+        if (enemy && !enemy.disposed && !game.enemies.includes(enemy)) {
+          activatePooledMissionEnemy(game, enemy, queue[i].pos);
+        }
+      } else {
+        spawnAtPoint(game, queue[i].pos, {
+          lite: true,
+          ...(queue[i].spawnOpts ?? {}),
+        });
+      }
       queue.splice(i, 1);
       spawned++;
     } else {
@@ -258,7 +489,7 @@ function pickupTypeToWeapon(type) {
 }
 
 function pickupMessageForWeapon(weapon) {
-  if (weapon === PRIMARY_WEAPONS.CHARGING_LASER) return "CHARGING LASER ACQUIRED";
+  if (weapon === PRIMARY_WEAPONS.CHARGING_LASER) return "CHARGING CANNON ACQUIRED";
   if (weapon === PRIMARY_WEAPONS.GATLING) return "GATLING ACQUIRED";
   return "WEAPON ACQUIRED";
 }
@@ -274,7 +505,16 @@ export function spawnWeaponPickups(game) {
   for (let i = 0; i < game.weaponPickupPoints.length; i++) {
     const entry = game.weaponPickupPoints[i];
     const weapon = pickupTypeToWeapon(entry.type);
-    if (!weapon || isPrimaryWeaponUnlocked(weapon)) continue;
+    const missionId =
+      game.gameManager?.getState?.()?.currentMissionId ??
+      game.pendingMissionConfig?.missionId;
+    const forceMissionPickup =
+      missionId === "saturnalia" ||
+      missionId === "capital-ship-earth-defense" ||
+      missionId === "earthdefense";
+    if (!weapon || (!forceMissionPickup && isPrimaryWeaponUnlocked(weapon))) {
+      continue;
+    }
     const pos = entry.position;
     const id = `weapon_solo_${entry.type}_${i}`;
     const data = { id, type: entry.type, x: pos.x, y: pos.y, z: pos.z };
@@ -378,6 +618,10 @@ export function checkWeaponPickups(game, playerPos, delta) {
     game.setPrimaryWeapon?.(pickup.weapon);
     game.showPickupMessage(pickupMessageForWeapon(pickup.weapon));
     game.updateHUD();
+    game.missionManager?.reportEvent?.("weaponPickupCollected", {
+      weapon: pickup.weapon,
+      type: pickup.type,
+    });
   }
 }
 
@@ -394,13 +638,18 @@ export async function spawnEnemiesAtPointsStaggered(
   positions,
   opts = {},
 ) {
+  if (DEBUG_DISABLE_ENEMY_SPAWNS) return;
   if (!positions?.length) return;
   const lite = opts.lite !== false;
   const framesBetween = Math.max(0, opts.framesBetween ?? 1);
   const idleMs = Math.max(0, opts.idleMs ?? 0);
+  const spawnOptsForIndex = opts.spawnOptsForIndex ?? null;
 
   for (let i = 0; i < positions.length; i++) {
-    spawnAtPoint(game, positions[i], { lite });
+    spawnAtPoint(game, positions[i], {
+      lite,
+      ...(spawnOptsForIndex ? spawnOptsForIndex(i) || {} : {}),
+    });
     if (i + 1 >= positions.length) break;
     for (let f = 0; f < framesBetween; f++) {
       await nextAnimationFrame();
@@ -413,8 +662,32 @@ export async function spawnEnemiesAtPointsStaggered(
   game.updateHUD?.();
 }
 
+async function activatePoolSlotsStaggered(game, entries, opts = {}) {
+  const framesBetween = Math.max(0, opts.framesBetween ?? 1);
+  const idleMs = Math.max(0, opts.idleMs ?? 0);
+  const pool = game._missionEnemyPool;
+  if (!pool?.length || !entries?.length) return;
+
+  for (let i = 0; i < entries.length; i++) {
+    const slot = entries[i].poolSlot;
+    const enemy = slot != null ? pool[slot] : null;
+    if (enemy && !enemy.disposed && !game.enemies.includes(enemy)) {
+      activatePooledMissionEnemy(game, enemy, entries[i].pos);
+    }
+    if (i + 1 >= entries.length) break;
+    for (let f = 0; f < framesBetween; f++) {
+      await nextAnimationFrame();
+    }
+    if (idleMs > 0) {
+      await new Promise((r) => setTimeout(r, idleMs));
+    }
+  }
+  game.gameManager.setState({ enemiesRemaining: game.enemies.length });
+  game.updateHUD?.();
+}
+
 export function spawnAtPoint(game, pos, spawnOpts = {}) {
-  const lite = spawnOpts.lite === true;
+  if (DEBUG_DISABLE_ENEMY_SPAWNS) return null;
   const enemy = new Enemy(
     game.scene,
     pos.clone(),
@@ -422,15 +695,21 @@ export function spawnAtPoint(game, pos, spawnOpts = {}) {
     game._levelBounds,
     {
       ...enemySpawnOptions(game),
-      ...(lite ? { deferSpawnWarp: true } : {}),
-      ...(spawnOpts.cloneMaterials === false ? { cloneMaterials: false } : {}),
+      ...cheapEnemySpawnCtorOpts(spawnOpts),
+      ...(spawnOpts.isHeavy === true ? { isHeavy: true } : {}),
+      ...(spawnOpts.isPortalBot === true ? { isPortalBot: true } : {}),
+      ...(spawnOpts.shipScale != null ? { shipScale: spawnOpts.shipScale } : {}),
     },
   );
+  enemy.summonedByPortal = spawnOpts.summoned === true;
   game.enemies.push(enemy);
+  linkPortalForEnemy(game, enemy, pos);
   game.gameManager.setState({ enemiesRemaining: game.enemies.length });
+  return enemy;
 }
 
 export async function spawnAuthoredEnemiesFast(game, positions, options = {}) {
+  if (DEBUG_DISABLE_ENEMY_SPAWNS) return;
   if (!positions?.length) return;
   const compile = options.compile !== false;
   const opts = {
@@ -449,10 +728,12 @@ export async function spawnAuthoredEnemiesFast(game, positions, options = {}) {
       game._levelBounds,
       {
         ...opts,
+        ...enemyOptionsForAuthoredSpawn(game, i),
         ...(nModels > 0 ? { modelIndex: i % nModels } : {}),
       },
     );
     game.enemies.push(enemy);
+    linkPortalForEnemy(game, enemy, positions[i]);
     if (i % ENEMY_CONSTRUCT_RAF_CHUNK === ENEMY_CONSTRUCT_RAF_CHUNK - 1) {
       await nextAnimationFrame();
     }
@@ -470,7 +751,10 @@ export async function spawnAuthoredEnemiesFast(game, positions, options = {}) {
   game.updateHUD?.();
 }
 
-function activateEnemyAtSpawn(game, enemy, position, { skipHud = false } = {}) {
+function activateEnemyAtSpawn(game, enemy, position, { skipHud = false, spawnIndex = null } = {}) {
+  if (spawnIndex != null) {
+    enemy.setShipScale(enemyShipScaleForSpawnIndex(game, spawnIndex));
+  }
   enemy.health = enemy.baseHealth ?? (enemy.isHeavy ? 300 : 100);
   enemy.state = "wander";
   enemy.fireCooldown = 0;
@@ -534,10 +818,15 @@ export async function spawnEnemiesAtPointsWithPrewarm(
   positions,
   enemyOptionsForIndex = null,
 ) {
+  if (DEBUG_DISABLE_ENEMY_SPAWNS) return;
   if (!positions?.length) return;
   if (!game.renderer || !game.camera) {
-    for (const position of positions) {
-      spawnAtPoint(game, position);
+    for (let i = 0; i < positions.length; i++) {
+      const extra =
+        typeof enemyOptionsForIndex === "function"
+          ? enemyOptionsForIndex(i) || {}
+          : enemyOptionsForIndex || {};
+      spawnAtPoint(game, positions[i], extra);
     }
     return;
   }
@@ -594,7 +883,11 @@ export async function spawnEnemiesAtPointsWithPrewarm(
   await prewarmEnemyMeshesInPlace(game, enemies, positions);
 
   for (let i = 0; i < enemies.length; i++) {
-    activateEnemyAtSpawn(game, enemies[i], positions[i], { skipHud: true });
+    activateEnemyAtSpawn(game, enemies[i], positions[i], {
+      skipHud: true,
+      spawnIndex: i,
+    });
+    linkPortalForEnemy(game, enemies[i], positions[i]);
   }
   game.gameManager.setState({ enemiesRemaining: game.enemies.length });
 }
@@ -609,7 +902,10 @@ function getTrainingMissionPoolCount(game) {
 }
 
 export function disposeMissionEnemyPool(game) {
-  if (!game._missionEnemyPool?.length) return;
+  if (!game._missionEnemyPool?.length) {
+    game._missionEnemyPool = null;
+    return;
+  }
   for (const enemy of game._missionEnemyPool) {
     try {
       enemy.spawnWarp?.dispose?.();
@@ -620,6 +916,158 @@ export function disposeMissionEnemyPool(game) {
     }
   }
   game._missionEnemyPool = null;
+}
+
+/** Max portal-summoned drones alive across all portals (4 portals × 4 each + headroom). */
+const PORTAL_SUMMON_POOL_SIZE = 32;
+const PORTAL_SUMMON_POOL_HIDE_Y = -201000;
+
+function getPortalSummonPrewarmPositions(game) {
+  const positions = [];
+  const flags = game.enemySpawnPortalFlags;
+  const spawns = game.spawnPoints;
+  if (flags?.length && spawns?.length) {
+    for (let i = 0; i < spawns.length; i++) {
+      if (flags[i] === true) positions.push(spawns[i].clone());
+    }
+  }
+  if (positions.length === 0 && spawns?.length) {
+    positions.push(spawns[0].clone());
+  }
+  return positions;
+}
+
+function takeAvailablePortalSummonPoolEnemy(game) {
+  const pool = game._portalSummonEnemyPool;
+  if (!pool?.length) return null;
+  for (const enemy of pool) {
+    if (enemy && !enemy.disposed && !game.enemies.includes(enemy)) {
+      return enemy;
+    }
+  }
+  return null;
+}
+
+export function disposePortalSummonEnemyPool(game) {
+  if (!game._portalSummonEnemyPool?.length) {
+    game._portalSummonEnemyPool = null;
+    return;
+  }
+  for (const enemy of game._portalSummonEnemyPool) {
+    try {
+      enemy.spawnWarp?.dispose?.();
+      stripCheckpointDissolveMaterials(enemy.mesh);
+      enemy.dispose(game.scene, null);
+    } catch (err) {
+      console.warn("[gameEnemies] disposePortalSummonEnemyPool:", err);
+    }
+  }
+  game._portalSummonEnemyPool = null;
+}
+
+async function buildPortalSummonEnemyPool(game, poolCount) {
+  const base = new THREE.Vector3(0, PORTAL_SUMMON_POOL_HIDE_Y, 0);
+  const opts = {
+    ...enemySpawnOptions(game),
+    deferSpawnWarp: true,
+    disableRevealWarp: true,
+    cloneMaterials: true,
+  };
+  const pool = [];
+  const nModels = shipModels.length;
+  const dissolveBatchSerial = allocateCheckpointDissolveBatchSerial();
+  for (let i = 0; i < poolCount; i++) {
+    const modelIndex = nModels > 0 ? i % nModels : undefined;
+    const enemy = new Enemy(
+      game.scene,
+      base.clone(),
+      game.level,
+      game._levelBounds,
+      {
+        ...opts,
+        portalSummonPoolSlot: i,
+        ...(modelIndex !== undefined ? { modelIndex } : {}),
+      },
+    );
+    enemy.mesh.visible = false;
+    if (enemy.shipLight) enemy.shipLight.intensity = 0;
+    enemy._enemyDissolvePrecooked = precookCheckpointDissolveMaterials(
+      enemy.mesh,
+      {
+        edgeColor: enemy.laserColor,
+        edgeColor2: enemy.laserColor,
+        sharedDissolveBatchSerial: dissolveBatchSerial,
+      },
+    );
+    enemy.spawnWarp = beginCheckpointDissolve(enemy.mesh, game, {
+      duration: ENEMY_SPAWN_DISSOLVE_DURATION,
+      edgeColor: enemy.laserColor,
+      particleColor: enemy.laserColor,
+      particleDecimation: 8,
+      particleSize: 26,
+      dissolvePrecooked: enemy._enemyDissolvePrecooked,
+      retainDissolveMaterials: true,
+    });
+    while (!enemy.spawnWarp.finished) {
+      enemy.spawnWarp.update(0.25);
+    }
+    enemy.spawnWarp.restart({ hold: true });
+    pool.push(enemy);
+    if (i % ENEMY_CONSTRUCT_RAF_CHUNK === ENEMY_CONSTRUCT_RAF_CHUNK - 1) {
+      await nextAnimationFrame();
+    }
+  }
+  game._portalSummonEnemyPool = pool;
+}
+
+/**
+ * Precooked pool for drones summoned by EnemyPortal (not portal-bot owners).
+ * Built during Earth Defense load; activation reuses precompiled dissolve shaders.
+ */
+export async function initPortalSummonEnemyPool(game, options = {}) {
+  disposePortalSummonEnemyPool(game);
+  const poolCount = Math.max(1, options.poolSize ?? PORTAL_SUMMON_POOL_SIZE);
+  await buildPortalSummonEnemyPool(game, poolCount);
+  const prewarmPositions =
+    options.prewarmPositions ?? getPortalSummonPrewarmPositions(game);
+  const padded = prewarmPositions.map((p) => p.clone());
+  const padRef = padded[padded.length - 1] ?? new THREE.Vector3(0, 4, -45);
+  while (padded.length < poolCount) {
+    padded.push(padRef.clone());
+  }
+  await prewarmEnemyMeshesInPlace(game, game._portalSummonEnemyPool, padded);
+  console.log(
+    `[Game] Portal summon pool: ${poolCount} precooked drones prewarmed`,
+  );
+}
+
+/**
+ * Portal summons reuse the small mission pool when a slot is free.
+ */
+export function spawnPortalSummonedEnemy(game, position, spawnOpts = {}) {
+  if (DEBUG_DISABLE_ENEMY_SPAWNS) return null;
+  const portalPooled = takeAvailablePortalSummonPoolEnemy(game);
+  if (portalPooled) {
+    activatePooledMissionEnemy(game, portalPooled, position, {
+      summoned: true,
+      ...spawnOpts,
+    });
+    return portalPooled;
+  }
+  const pooled = takeAvailableMissionPoolEnemy(game);
+  if (pooled) {
+    activatePooledMissionEnemy(game, pooled, position, {
+      summoned: true,
+      ...spawnOpts,
+    });
+    return pooled;
+  }
+  return spawnAtPoint(game, position, {
+    summoned: true,
+    cheapSpawn: true,
+    shipScale: computeEnemyShipScale({}),
+    ...spawnOpts,
+  });
 }
 
 function renderPrewarmFrame(game) {
@@ -759,11 +1207,12 @@ async function prewarmMissionEnemyPoolInPlace(game, worldPositions) {
   await prewarmEnemyMeshesInPlace(game, pool, padded);
 }
 
-function buildMissionEnemyPoolOfSize(game, poolCount, perSlotOptions = null) {
+async function buildMissionEnemyPoolOfSize(game, poolCount, perSlotOptions = null) {
   const base = new THREE.Vector3(0, MISSION_POOL_HIDE_Y, 0);
   const opts = {
     ...enemySpawnOptions(game),
     deferSpawnWarp: true,
+    disableRevealWarp: true,
   };
   const pool = [];
   const nModels = shipModels.length;
@@ -807,6 +1256,9 @@ function buildMissionEnemyPoolOfSize(game, poolCount, perSlotOptions = null) {
     }
     enemy.spawnWarp.restart({ hold: true });
     pool.push(enemy);
+    if (i % ENEMY_CONSTRUCT_RAF_CHUNK === ENEMY_CONSTRUCT_RAF_CHUNK - 1) {
+      await nextAnimationFrame();
+    }
   }
   game._missionEnemyPool = pool;
 }
@@ -814,33 +1266,295 @@ function buildMissionEnemyPoolOfSize(game, poolCount, perSlotOptions = null) {
 export async function initTrainingMissionEnemyPool(game) {
   disposeMissionEnemyPool(game);
   const poolCount = getTrainingMissionPoolCount(game);
-  buildMissionEnemyPoolOfSize(game, poolCount);
+  await buildMissionEnemyPoolOfSize(game, poolCount);
   await prewarmMissionEnemyPoolInPlace(game, null);
 }
 
 /**
- * Same pooled + precooked + narrow prewarm path as training; pass authored positions for GPU prewarm.
- * Activate with spawnMissionWaveFromPool(game, samePositions) in mission start.
+ * Charon / Saturnalia / Earth: small reusable pool (no per-spawn-point precook).
+ * Extra authored spawns queue until a pool slot frees or player enters range.
  */
-export async function initCharonMissionEnemyPool(game, prewarmPositions) {
+export async function initAuthoredMissionEnemyPool(game) {
   disposeMissionEnemyPool(game);
-  const n = prewarmPositions?.length ?? 0;
-  if (n === 0) return;
-  buildMissionEnemyPoolOfSize(game, n, game._charonEnemyPerSlotOptions);
-  await prewarmMissionEnemyPoolInPlace(game, prewarmPositions);
+  await buildAuthoredMissionEnemyPool(game, AUTHORED_MISSION_POOL_SIZE);
+  console.log(
+    `[Game] Authored mission pool: ${AUTHORED_MISSION_POOL_SIZE} reusable enemies`,
+  );
 }
 
-export function spawnMissionWaveFromPool(game, positions) {
-  const pool = game._missionEnemyPool;
-  if (!pool?.length || positions.length > pool.length) return false;
-  for (let i = 0; i < positions.length; i++) {
-    activatePooledMissionEnemy(game, pool[i], positions[i]);
+async function buildAuthoredMissionEnemyPool(game, poolCount) {
+  const base = new THREE.Vector3(0, MISSION_POOL_HIDE_Y, 0);
+  const opts = {
+    ...enemySpawnOptions(game),
+    deferSpawnWarp: true,
+    disableRevealWarp: true,
+    cloneMaterials: true,
+  };
+  const pool = [];
+  const nModels = shipModels.length;
+  for (let i = 0; i < poolCount; i++) {
+    const modelIndex = nModels > 0 ? i % nModels : undefined;
+    const enemy = new Enemy(
+      game.scene,
+      base.clone(),
+      game.level,
+      game._levelBounds,
+      {
+        ...opts,
+        missionPoolSlot: i,
+        ...(modelIndex !== undefined ? { modelIndex } : {}),
+      },
+    );
+    enemy.mesh.visible = false;
+    if (enemy.shipLight) enemy.shipLight.intensity = 0;
+    pool.push(enemy);
+    if (i % ENEMY_CONSTRUCT_RAF_CHUNK === ENEMY_CONSTRUCT_RAF_CHUNK - 1) {
+      await nextAnimationFrame();
+    }
   }
+  game._missionEnemyPool = pool;
+}
+
+function authoredSpawnEntriesFromPositions(game, positions) {
+  const perSlot = game._missionEnemyPerSlotOptions;
+  const anchor = soloPlayerAnchor(game);
+  const entries = positions.map((pos, i) => ({
+    pos: pos.clone(),
+    spawnIndex: i,
+    spawnOpts: {
+      isHeavy: perSlot?.[i]?.isHeavy === true,
+      isPortalBot: perSlot?.[i]?.isPortalBot === true,
+      shipScale: enemyShipScaleForSpawnIndex(game, i),
+    },
+  }));
+  if (anchor) {
+    entries.sort(
+      (a, b) =>
+        a.pos.distanceToSquared(anchor) - b.pos.distanceToSquared(anchor),
+    );
+  }
+  return entries;
+}
+
+function fillAuthoredMissionSpawns(game, maxActivate) {
+  const queue = game._authoredEnemySpawnQueue;
+  if (!queue?.length || maxActivate <= 0) return 0;
+  let activated = 0;
+  while (activated < maxActivate && queue.length > 0) {
+    const enemy = takeAvailableMissionPoolEnemy(game);
+    if (!enemy) break;
+    const entry = queue.shift();
+    activatePooledMissionEnemy(game, enemy, entry.pos, entry.spawnOpts);
+    enemy._authoredSpawnIndex = entry.spawnIndex;
+    activated++;
+  }
+  if (activated > 0) syncMissionEnemyHud(game);
+  return activated;
+}
+
+/**
+ * Activate nearest authored spawns up to pool capacity; queue the rest.
+ */
+export function spawnAuthoredMissionEnemiesFromPool(game, options = {}) {
+  const positions =
+    game._missionInitialEnemyPositions ??
+    game.spawnPoints?.map((p) => p.clone()) ??
+    [];
+  if (!positions.length || !game._missionEnemyPool?.length) return false;
+
+  game._authoredEnemySpawnQueue = authoredSpawnEntriesFromPositions(
+    game,
+    positions,
+  );
+  game._authoredEnemySpawnConfig = {
+    activateRadius: options.activateRadius ?? 340,
+    maxSpawnsPerFrame: Math.max(1, options.maxSpawnsPerFrame ?? 2),
+  };
+
+  const poolCap = game._missionEnemyPool?.length ?? AUTHORED_MISSION_POOL_SIZE;
+  const initialCap = Math.min(
+    options.initialCount ?? poolCap,
+    poolCap,
+    positions.length,
+  );
+  fillAuthoredMissionSpawns(game, initialCap);
+  console.log(
+    `[Game] Authored spawn: ${game.enemies.length} active, ${game._authoredEnemySpawnQueue.length} queued (${positions.length} total)`,
+  );
+  syncMissionEnemyHud(game);
   return true;
 }
 
-function activatePooledMissionEnemy(game, enemy, position) {
-  activateEnemyAtSpawn(game, enemy, position);
+export function processDeferredAuthoredMissionSpawns(game) {
+  const queue = game._authoredEnemySpawnQueue;
+  if (!queue?.length) return;
+
+  const cfg = game._authoredEnemySpawnConfig;
+  const playerPos = soloPlayerAnchor(game);
+  if (!playerPos) return;
+
+  const rSq = (cfg?.activateRadius ?? 340) ** 2;
+  const maxN = cfg?.maxSpawnsPerFrame ?? 2;
+  let spawned = 0;
+  let i = 0;
+  while (i < queue.length && spawned < maxN) {
+    const enemy = takeAvailableMissionPoolEnemy(game);
+    if (!enemy) break;
+    if (playerPos.distanceToSquared(queue[i].pos) <= rSq) {
+      const entry = queue.splice(i, 1)[0];
+      activatePooledMissionEnemy(game, enemy, entry.pos, entry.spawnOpts);
+      enemy._authoredSpawnIndex = entry.spawnIndex;
+      spawned++;
+    } else {
+      i++;
+    }
+  }
+  if (spawned > 0) syncMissionEnemyHud(game);
+}
+
+export async function initEarthDefenseMissionEnemyPool(game) {
+  disposeMissionEnemyPool(game);
+  await buildAuthoredMissionEnemyPool(game, EARTH_DEFENSE_POOL_SIZE);
+  console.log(
+    `[Game] Earth Defense mission pool: ${EARTH_DEFENSE_POOL_SIZE} reusable enemies`,
+  );
+}
+
+/**
+ * Activate queued (or never-started) authored spawns near a world point.
+ * Never removes active enemies — only fills free pool slots.
+ */
+export function activateAuthoredSpawnsNearPoint(game, center, options = {}) {
+  if (!center) return 0;
+  const radius = options.radius ?? BOSS_ARENA_SPAWN_RADIUS;
+  const maxActivate = options.maxActivate ?? Infinity;
+  const radiusSq = radius * radius;
+  let activated = 0;
+
+  const queue = game._authoredEnemySpawnQueue;
+  if (queue?.length) {
+    for (let i = queue.length - 1; i >= 0 && activated < maxActivate; i--) {
+      if (queue[i].pos.distanceToSquared(center) > radiusSq) continue;
+      const enemy = takeAvailableMissionPoolEnemy(game);
+      if (!enemy) break;
+      const entry = queue.splice(i, 1)[0];
+      activatePooledMissionEnemy(game, enemy, entry.pos, entry.spawnOpts);
+      enemy._authoredSpawnIndex = entry.spawnIndex;
+      activated++;
+    }
+  }
+
+  const positions = game._missionInitialEnemyPositions;
+  const perSlot = game._missionEnemyPerSlotOptions;
+  if (positions?.length && activated < maxActivate) {
+    for (let i = 0; i < positions.length && activated < maxActivate; i++) {
+      const pos = positions[i];
+      if (pos.distanceToSquared(center) > radiusSq) continue;
+      if (
+        game.enemies.some(
+          (enemy) => enemy?._authoredSpawnIndex === i && !enemy.disposed,
+        )
+      ) {
+        continue;
+      }
+      const enemy = takeAvailableMissionPoolEnemy(game);
+      if (!enemy) break;
+      activatePooledMissionEnemy(
+        game,
+        enemy,
+        pos,
+        perSlot?.[i]
+          ? { ...perSlot[i], shipScale: enemyShipScaleForSpawnIndex(game, i) }
+          : enemyOptionsForAuthoredSpawn(game, i),
+      );
+      enemy._authoredSpawnIndex = i;
+      activated++;
+    }
+  }
+
+  if (activated > 0) {
+    syncMissionEnemyHud(game);
+    console.log(
+      `[Game] Activated ${activated} authored spawn(s) near (${center.x.toFixed(0)}, ${center.y.toFixed(0)}, ${center.z.toFixed(0)})`,
+    );
+  }
+  return activated;
+}
+
+/** @deprecated Use {@link initAuthoredMissionEnemyPool} */
+export async function initCharonMissionEnemyPool(game, prewarmPositions) {
+  await initAuthoredMissionEnemyPool(game);
+}
+
+/** @deprecated Use {@link initAuthoredMissionEnemyPool} */
+export async function initEarthMissionEnemyPool(game, prewarmPositions) {
+  await initAuthoredMissionEnemyPool(game);
+}
+
+export function spawnMissionWaveFromPool(game, positions, options = {}) {
+  const pool = game._missionEnemyPool;
+  if (!pool?.length || !positions?.length) return false;
+  if (positions.length > pool.length) {
+    game._missionInitialEnemyPositions = positions.map((p) => p.clone());
+    return spawnAuthoredMissionEnemiesFromPool(game, options);
+  }
+  for (let i = 0; i < positions.length; i++) {
+    activatePooledMissionEnemy(
+      game,
+      pool[i],
+      positions[i],
+      game._missionEnemyPerSlotOptions?.[i] ??
+        enemyOptionsForAuthoredSpawn(game, i),
+    );
+  }
+  syncMissionEnemyHud(game);
+  return true;
+}
+
+function activatePooledMissionEnemy(game, enemy, position, spawnOpts = {}) {
+  if (spawnOpts.isPortalBot === true) enemy.isPortalBot = true;
+  if (spawnOpts.isHeavy === true) {
+    enemy.isHeavy = true;
+    enemy.health = enemy.baseHealth ?? 300;
+  } else {
+    enemy.isHeavy = false;
+    enemy.health = enemy.baseHealth ?? 100;
+  }
+  const shipScale =
+    spawnOpts.shipScale ??
+    (spawnOpts.spawnIndex != null
+      ? enemyShipScaleForSpawnIndex(game, spawnOpts.spawnIndex)
+      : null);
+  if (shipScale != null) {
+    enemy.setShipScale(shipScale);
+  }
+  enemy.state = "wander";
+  enemy.fireCooldown = 0;
+  enemy.hasLOS = false;
+  enemy.losCheckCounter = 0;
+  enemy.velocity.set(0, 0, 0);
+  enemy.disposed = false;
+  enemy.summonedByPortal = spawnOpts.summoned === true;
+  enemy.spawnPoint.copy(position);
+  enemy.mesh.position.copy(position);
+  enemy.mesh.frustumCulled = true;
+  stripCheckpointDissolveMaterials(enemy.mesh);
+  enemy.spawnWarp?.dispose?.();
+  enemy.spawnWarp = null;
+  enemy.mesh.visible = true;
+  if (enemy.shipLight) {
+    enemy.shipLight.intensity = enemy.shipLightIntensity;
+    enemy.shipLight.position.copy(position);
+    enemy.shipLight.position.y += 0.3;
+    enemy.shipLight.position.z += 6;
+  }
+  enemy._pickNewWaypoint();
+  if (!game.enemies.includes(enemy)) {
+    game.enemies.push(enemy);
+  }
+  if (enemy.isPortalBot) {
+    linkPortalForEnemy(game, enemy, position);
+  }
 }
 
 export function tickEnemyRespawns(game, delta) {
@@ -857,7 +1571,7 @@ export function tickEnemyRespawns(game, delta) {
       ) {
         const pooled = pool[missionPoolSlot];
         if (pooled && !game.enemies.includes(pooled)) {
-          activateEnemyAtSpawn(game, pooled, pos);
+          activatePooledMissionEnemy(game, pooled, pos);
           continue;
         }
       }
@@ -868,15 +1582,19 @@ export function tickEnemyRespawns(game, delta) {
 
 export function respawnCharonEscapeEnemies(game) {
   const pool = game._missionEnemyPool;
-  const positions = game._charonInitialEnemyPositions;
+  const positions =
+    game._missionInitialEnemyPositions ?? game._charonInitialEnemyPositions;
   if (!pool?.length || !positions?.length) return;
 
-  for (let i = 0; i < pool.length; i++) {
-    const enemy = pool[i];
-    if (game.enemies.includes(enemy)) continue;
+  for (let i = 0; i < positions.length; i++) {
+    const enemy = takeAvailableMissionPoolEnemy(game);
+    if (!enemy) break;
     const pos = positions[i] ?? positions[0];
-    activateEnemyAtSpawn(game, enemy, pos, { skipHud: true });
+    activatePooledMissionEnemy(game, enemy, pos, {
+      isHeavy: game._missionEnemyPerSlotOptions?.[i]?.isHeavy === true,
+      isPortalBot: game._missionEnemyPerSlotOptions?.[i]?.isPortalBot === true,
+      shipScale: enemyShipScaleForSpawnIndex(game, i),
+    });
   }
-  game.gameManager.setState({ enemiesRemaining: game.enemies.length });
-  game.updateHUD?.();
+  syncMissionEnemyHud(game);
 }

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { flushRetainedEnemyMeshes, loadSharedShipMaterials } from "../entities/Enemy.js";
 import {
   disposeMissionEnemyPool,
+  disposePortalSummonEnemyPool,
   spawnEnemiesAtPointsWithPrewarm,
   spawnMissionWaveFromPool,
 } from "../game/gameEnemies.js";
@@ -15,6 +16,7 @@ import {
   stripCheckpointDissolveMaterials,
 } from "../vfx/checkpointDissolveWarp.js";
 import proceduralAudio from "../audio/ProceduralAudio.js";
+import { disposeWeaponPickupTrackers } from "./weaponPickupTracker.js";
 /** Beyond this world distance from checkpoint, spokes stay dull (HUD xu ≈ dist * 10). */
 const RIM_BLOOM_FAR = 92;
 /** Within this world distance, all six spokes reach full bloom (≈70 xu). */
@@ -326,11 +328,13 @@ export class MissionManager {
     flushRetainedEnemyMeshes(this.game);
     if (!options.preserveState) {
       disposeMissionEnemyPool(this.game);
+      disposePortalSummonEnemyPool(this.game);
     }
     this.game._enemyReticleEnemy = null;
     this.game._checkpointDissolvePrewarmed = false;
     this.clearCheckpoints();
     this.clearDirectionalHelperTarget();
+    disposeWeaponPickupTrackers(this);
     this.runtime.cannonTrackerEl?.remove();
     this.currentMission = null;
     this.currentStep = null;
@@ -344,6 +348,7 @@ export class MissionManager {
 
   destroy() {
     disposeMissionEnemyPool(this.game);
+    disposePortalSummonEnemyPool(this.game);
     this.stopMission({ preserveState: true });
     this.gameManager.off("dialog:completed", this._dialogCompleteHandler);
     this.gameManager.off(
@@ -809,6 +814,7 @@ export class MissionManager {
     flushRetainedEnemyMeshes(this.game);
     if (!options.preserveEnemyPool) {
       disposeMissionEnemyPool(this.game);
+      disposePortalSummonEnemyPool(this.game);
     }
     this.clearCheckpoints();
     this.clearDirectionalHelperTarget();
@@ -819,12 +825,12 @@ export class MissionManager {
     }));
     this.gameManager.setState({
       missionStatus: "complete",
-      missionStepTitle: "Training Complete",
+      missionStepTitle: options.stepTitle ?? "Training Complete",
       currentObjectives: [...this.currentObjectives],
     });
     if (options.missionCompleteOverlay) {
-      this.game.showMissionCompleteOverlay?.();
-    } else {
+      this.game.showMissionCompleteOverlay?.(options.missionCompleteOverlayOptions);
+    } else if (!options.suppressCompleteMessage) {
       this.game.showPickupMessage?.(message);
     }
   }

@@ -213,6 +213,85 @@ export const saturnaliaLevelTriggerBindings = [
     },
     onEnter: {
       playDialog: "saturnaliaIDontLikeThis",
+      emitMissionEvent: "saturnaliaArmDestructionCountdown",
+    },
+  },
+  {
+    objectName: "Trigger.009",
+    id: "saturnalia-trigger-009-escape",
+    once: true,
+    criteria: {
+      currentMissionId: "saturnalia",
+      currentState: GAME_STATES.PLAYING,
+      saturnaliaCollapseActive: true,
+    },
+    onEnter: {
+      emitMissionEvent: "saturnaliaEscapeComplete",
+    },
+  },
+];
+
+/** @type {LevelTriggerBinding[]} */
+export const earthDefenseLevelTriggerBindings = [
+  {
+    objectName: "Trigger.000",
+    id: "earthdefense-trigger-000-primean-at-core",
+    once: true,
+    criteria: {
+      currentMissionId: "capital-ship-earth-defense",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "earthPrimeanAtShipsCore",
+    },
+  },
+  {
+    objectName: "Trigger.001",
+    id: "earthdefense-trigger-001-warp-portal-drone",
+    once: true,
+    criteria: {
+      currentMissionId: "capital-ship-earth-defense",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "earthSirThatDrone",
+    },
+  },
+  {
+    objectName: "Trigger.002",
+    id: "earthdefense-trigger-002-whole-fleet-fragged",
+    once: true,
+    criteria: {
+      currentMissionId: "capital-ship-earth-defense",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "earthJesusTheWholeFleet",
+    },
+  },
+  {
+    objectName: "Trigger.003",
+    id: "earthdefense-trigger-003-blocked-off-core",
+    once: true,
+    criteria: {
+      currentMissionId: "capital-ship-earth-defense",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "earthHesBlockedOffTheCore",
+    },
+  },
+  {
+    objectName: "Trigger.005",
+    id: "earthdefense-trigger-005-you-are-too-late",
+    once: true,
+    criteria: {
+      currentMissionId: "capital-ship-earth-defense",
+      currentState: GAME_STATES.PLAYING,
+    },
+    onEnter: {
+      playDialog: "earthYouAreTooLate",
+      emitMissionEvent: "earthBossFightStart",
     },
   },
 ];
@@ -220,6 +299,7 @@ export const saturnaliaLevelTriggerBindings = [
 const byLevel = {
   charon: charonLevelTriggerBindings,
   saturnalia: saturnaliaLevelTriggerBindings,
+  earthdefense: earthDefenseLevelTriggerBindings,
 };
 
 /**

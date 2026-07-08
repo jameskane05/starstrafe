@@ -1,7 +1,7 @@
 /**
  * missileModelCache.js - SHARED CACHE FOR missile.glb
  *
- * Loads ./missile.glb once, normalizes orientation so its longest axis points
+ * Loads ./gltf/missile.glb once, normalizes orientation so its longest axis points
  * along local +Z (forward) and centers it at the origin, then exposes a
  * cloneMissileModel(targetLength) helper for projectiles and pickups.
  */
@@ -9,7 +9,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const MODEL_URL = "./missile.glb";
+const MODEL_URL = "./gltf/missile.glb";
 
 /**
  * Set to true if the loaded GLB happens to point its nose along -Z (i.e. the

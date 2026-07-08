@@ -20,12 +20,18 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { castSphere, castRay } from "../physics/Physics.js";
+import { updateObjectEnvZoneBlend } from "../utils/cockpitEnvZones.js";
 import {
   beginCheckpointDissolve,
   ENEMY_SPAWN_DISSOLVE_DURATION,
 } from "../vfx/checkpointDissolveWarp.js";
 import { beginSpawnWarp } from "../vfx/spawnWarp.js";
 import { applyEnvironmentMapToObject } from "../utils/envMapAssets.js";
+import {
+  getFleetShipIndexById,
+  isDroneFleetActive,
+  setupFleetDroneCloneMarkers,
+} from "./droneFleetLoader.js";
 
 const _direction = new THREE.Vector3();
 const _targetQuat = new THREE.Quaternion();
@@ -34,15 +40,59 @@ const _upVec = new THREE.Vector3(0, 1, 0);
 const _newPos = new THREE.Vector3();
 const _wanderDir = new THREE.Vector3();
 const _toWaypoint = new THREE.Vector3();
-const _shipForward = new THREE.Vector3();
 const _muzzlePos = new THREE.Vector3();
-const _thrusterPos = new THREE.Vector3();
 const _strafeDir = new THREE.Vector3();
 const _combatMoveDir = new THREE.Vector3();
 const _textureLoader = new THREE.TextureLoader();
 
+export const ENEMY_NORMAL_SHIP_SCALE_MIN = 0.9;
+export const ENEMY_NORMAL_SHIP_SCALE_MAX = 1.25;
+export const ENEMY_HEAVY_SHIP_SCALE = 4.0;
+export const ENEMY_DEFAULT_SHIP_SCALE = 2.5;
+export const ENEMY_SHIP_SCALE_HIT_REFERENCE = 2.5;
+
+export function randomNormalEnemyShipScaleFactor() {
+  return (
+    ENEMY_NORMAL_SHIP_SCALE_MIN +
+    Math.random() * (ENEMY_NORMAL_SHIP_SCALE_MAX - ENEMY_NORMAL_SHIP_SCALE_MIN)
+  );
+}
+
+const _authoredScaleVec = new THREE.Vector3();
+const _levelRootScaleVec = new THREE.Vector3();
+
+/** World scale of the marker relative to the placed level root (excludes level placement scale). */
+export function readAuthoredEnemyMarkerScale(object, levelRoot = null) {
+  if (!object) return 1;
+  object.getWorldScale(_authoredScaleVec);
+  let avg =
+    (_authoredScaleVec.x + _authoredScaleVec.y + _authoredScaleVec.z) / 3;
+  if (levelRoot) {
+    levelRoot.getWorldScale(_levelRootScaleVec);
+    const rootAvg =
+      (_levelRootScaleVec.x + _levelRootScaleVec.y + _levelRootScaleVec.z) / 3;
+    if (rootAvg > 0) avg /= rootAvg;
+  }
+  return avg > 0 ? avg : 1;
+}
+
+export function computeEnemyShipScale({
+  isHeavy = false,
+  isPortalBot = false,
+  authoredScale = 1,
+  randomFactor,
+} = {}) {
+  const authored = authoredScale > 0 ? authoredScale : 1;
+  if (isHeavy) return ENEMY_HEAVY_SHIP_SCALE * authored;
+  if (isPortalBot) return ENEMY_DEFAULT_SHIP_SCALE * authored;
+  const random = randomFactor ?? randomNormalEnemyShipScaleFactor();
+  return ENEMY_DEFAULT_SHIP_SCALE * random * authored;
+}
+
 let shipModels = [];
 let loadPromise = null;
+let portalDroneModel = null;
+let portalDroneModelPromise = null;
 const _deadLights = [];
 
 export function flushRetainedEnemyMeshes(game) {
@@ -64,6 +114,82 @@ export function flushRetainedEnemyMeshes(game) {
 }
 let sharedShipMaterials = null;
 let sharedShipMaterialsPromise = null;
+
+function publicUrl(path) {
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "") || "";
+  const clean = path.replace(/^\//, "");
+  return base ? `${base}/${clean}` : `/${clean}`;
+}
+
+function loadPortalDroneModel() {
+  if (portalDroneModel) return Promise.resolve(portalDroneModel);
+  if (portalDroneModelPromise) return portalDroneModelPromise;
+  const loader = new GLTFLoader();
+  portalDroneModelPromise = new Promise((resolve, reject) => {
+    loader.load(
+      publicUrl("gltf/portal-drone.glb"),
+      (gltf) => {
+        portalDroneModel = gltf.scene;
+        resolve(portalDroneModel);
+      },
+      undefined,
+      reject,
+    );
+  }).catch((error) => {
+    portalDroneModelPromise = null;
+    console.warn("[Enemy] Failed to load portal-drone.glb:", error);
+    return null;
+  });
+  return portalDroneModelPromise;
+}
+
+function setupPortalDroneClone(enemy, template, scale = 2.4) {
+  if (!template || enemy.disposed || enemy._portalDroneModelRoot) return;
+  const clone = template.clone();
+  clone.scale.setScalar(scale);
+  clone.rotation.set(0, Math.PI, 0);
+  enemy.engineMarkers.length = 0;
+  enemy.weaponMarkers.length = 0;
+  clone.traverse((child) => {
+    if (!child.isMesh) return;
+    const n = child.name?.toLowerCase?.() || "";
+    if (n.startsWith("thruster_")) {
+      child.visible = false;
+      enemy.engineMarkers.push(child);
+    } else if (
+      n.startsWith("weapon_") ||
+      n.includes("laser") ||
+      n.includes("cannon") ||
+      n.includes("muzzle")
+    ) {
+      child.visible = false;
+      enemy.weaponMarkers.push(child);
+    }
+    if (Array.isArray(child.material)) {
+      child.material = child.material.map((m) => (m?.clone ? m.clone() : m));
+    } else if (child.material?.clone) {
+      child.material = child.material.clone();
+    }
+  });
+
+  if (enemy._fallbackShipRoot) enemy._fallbackShipRoot.visible = false;
+  enemy.usesPortalDroneModel = true;
+  enemy._portalDroneModelRoot = clone;
+  enemy.mesh.add(clone);
+}
+
+export async function applyPortalDroneModel(enemy, scale = 2.4, game = null) {
+  const template = await loadPortalDroneModel();
+  if (!template || enemy.disposed) return false;
+  setupPortalDroneClone(enemy, template, scale);
+  if (enemy._portalDroneModelRoot) {
+    enemy.mesh.userData.envZoneSampleObject = enemy._portalDroneModelRoot;
+    if (game?.cockpitEnvZones) {
+      updateObjectEnvZoneBlend(enemy.mesh, game);
+    }
+  }
+  return true;
+}
 
 function hlsToRgb(h, l, s) {
   let r;
@@ -104,12 +230,15 @@ export async function loadSharedShipMaterials() {
 
   sharedShipMaterialsPromise = (async () => {
     const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "") || "";
-    const texUrl = (p) => (base ? `${base}/${p}` : `./${p}`).replace(/\/+/g, "/");
+    const texUrl = (p) =>
+      (base ? `${base}/${p}` : `./${p}`).replace(/\/+/g, "/");
     let normalMap = null;
     let hullLightsDiffuse = null;
     let hullLightsEmit = null;
     try {
-      normalMap = await _textureLoader.loadAsync(texUrl("ships/hull_normal.png"));
+      normalMap = await _textureLoader.loadAsync(
+        texUrl("ships/hull_normal.png"),
+      );
       normalMap.colorSpace = THREE.NoColorSpace;
       normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
       normalMap.repeat.set(3, 3);
@@ -120,18 +249,25 @@ export async function loadSharedShipMaterials() {
     }
 
     try {
-      hullLightsDiffuse = await _textureLoader.loadAsync(texUrl("ships/hull_lights_diffuse.png"));
+      hullLightsDiffuse = await _textureLoader.loadAsync(
+        texUrl("ships/hull_lights_diffuse.png"),
+      );
       hullLightsDiffuse.colorSpace = THREE.SRGBColorSpace;
       hullLightsDiffuse.wrapS = hullLightsDiffuse.wrapT = THREE.RepeatWrapping;
       hullLightsDiffuse.repeat.set(3, 3);
       hullLightsDiffuse.anisotropy = 4;
     } catch (err) {
       hullLightsDiffuse = null;
-      console.warn("[Enemy] Failed to load ./ships/hull_lights_diffuse.png", err);
+      console.warn(
+        "[Enemy] Failed to load ./ships/hull_lights_diffuse.png",
+        err,
+      );
     }
 
     try {
-      hullLightsEmit = await _textureLoader.loadAsync(texUrl("ships/hull_lights_emit.png"));
+      hullLightsEmit = await _textureLoader.loadAsync(
+        texUrl("ships/hull_lights_emit.png"),
+      );
       hullLightsEmit.colorSpace = THREE.SRGBColorSpace;
       hullLightsEmit.wrapS = hullLightsEmit.wrapT = THREE.RepeatWrapping;
       hullLightsEmit.repeat.set(3, 3);
@@ -203,7 +339,9 @@ function createShipMaterialSet(index, sharedTex) {
   });
 
   const laserColor = glowColor.clone();
-  const hasHullLightMaps = !!(sharedTex.hullLightsDiffuse && sharedTex.hullLightsEmit);
+  const hasHullLightMaps = !!(
+    sharedTex.hullLightsDiffuse && sharedTex.hullLightsEmit
+  );
   return {
     hull,
     hullLights,
@@ -217,7 +355,8 @@ function createShipMaterialSet(index, sharedTex) {
 
 function applyRuntimeShipMaterials(root, mats, index) {
   const ensureUv = (geometry) => {
-    if (!geometry || geometry.attributes?.uv || !geometry.attributes?.position) return;
+    if (!geometry || geometry.attributes?.uv || !geometry.attributes?.position)
+      return;
     const pos = geometry.attributes.position;
     if (!pos || pos.count < 3) return;
     geometry.computeBoundingBox();
@@ -226,8 +365,20 @@ function applyRuntimeShipMaterials(root, mats, index) {
     const sy = Math.max(1e-5, bb.max.y - bb.min.y);
     const sz = Math.max(1e-5, bb.max.z - bb.min.z);
     const uAxis = sx >= sy && sx >= sz ? 0 : sy >= sz ? 1 : 2;
-    const vAxis = uAxis === 0 ? (sy >= sz ? 1 : 2) : uAxis === 1 ? (sx >= sz ? 0 : 2) : sx >= sy ? 0 : 1;
-    const get = (i, axis) => axis === 0 ? pos.getX(i) : axis === 1 ? pos.getY(i) : pos.getZ(i);
+    const vAxis =
+      uAxis === 0
+        ? sy >= sz
+          ? 1
+          : 2
+        : uAxis === 1
+          ? sx >= sz
+            ? 0
+            : 2
+          : sx >= sy
+            ? 0
+            : 1;
+    const get = (i, axis) =>
+      axis === 0 ? pos.getX(i) : axis === 1 ? pos.getY(i) : pos.getZ(i);
     const uv = new Float32Array(pos.count * 2);
     for (let i = 0; i < pos.count; i++) {
       const su = Math.max(1e-5, [sx, sy, sz][uAxis]);
@@ -311,7 +462,7 @@ async function loadShipModels() {
 
     if (results.length === 0) {
       try {
-        const gltf = await loader.loadAsync("./Heavy_EXT_02.glb");
+        const gltf = await loader.loadAsync("./gltf/Heavy_EXT_02.glb");
         shipModels = [gltf.scene];
         console.log("Fallback: loaded Heavy_EXT_02.glb");
       } catch (err) {
@@ -333,7 +484,8 @@ async function loadShipModels() {
       });
       return found;
     };
-    const useEmbedded = results.length > 0 && hasEmbeddedTextures(results[0].scene);
+    const useEmbedded =
+      results.length > 0 && hasEmbeddedTextures(results[0].scene);
 
     for (const result of results) {
       const mats = createShipMaterialSet(result.index, sharedTex);
@@ -373,7 +525,13 @@ async function reapplyShipMaterials(models) {
   }
 }
 
-export { loadShipModels, shipModels, reapplyShipMaterials };
+export {
+  loadShipModels,
+  shipModels,
+  reapplyShipMaterials,
+  isDroneFleetActive,
+  getFleetShipIndexById,
+};
 
 function randomInBounds(center, size, margin = 0.7) {
   return new THREE.Vector3(
@@ -394,23 +552,36 @@ function biasedWaypoint(currentPos, center, size, centroidBias = 0.35) {
 export class Enemy {
   constructor(scene, position, level, bounds, options = {}) {
     this.level = level;
+    this.isPortalBot = !!options.isPortalBot;
     this.isHeavy = !!options.isHeavy;
     const enemyHealthMultiplier = options.healthMultiplier ?? 1;
-    this.baseHealth = Math.round((options.isHeavy ? 300 : 100) * enemyHealthMultiplier);
+    this.baseHealth = Math.round(
+      (options.isHeavy || this.isPortalBot ? 300 : 100) * enemyHealthMultiplier,
+    );
     this.health = this.baseHealth;
     this.invulnerable = options.invulnerable === true;
-    this.speed = (3 + Math.random() * 3) * 1.25 * (options.speedMultiplier ?? 1);
+    this.speed =
+      (3 + Math.random() * 3) * 1.25 * (options.speedMultiplier ?? 1);
     this.detectionRange = 100;
     this.detectionRangeSq = 10000;
     this.fireRate = 2 * (options.fireRateMultiplier ?? 1);
     this.fireCooldown = 0;
     this.collisionRadius = 3;
     this.hitExtents = { x: 8, y: 4, z: 8 };
+    this._collisionBaseRadius = 3;
+    this._collisionBaseHitExtents = { x: 8, y: 4, z: 8 };
+    this.shipScale =
+      options.shipScale ??
+      (this.isHeavy ? ENEMY_HEAVY_SHIP_SCALE : ENEMY_DEFAULT_SHIP_SCALE);
     this.disposed = false;
 
     // Level bounds for wander
     this.boundsCenter = bounds?.center?.clone() || position.clone();
     this.boundsSize = bounds?.size?.clone() || new THREE.Vector3(40, 20, 40);
+    if (this.isPortalBot) {
+      this.boundsCenter.copy(position);
+      this.boundsSize.set(30, 18, 30);
+    }
 
     this.spawnPoint = position.clone();
     this.state = "wander";
@@ -441,9 +612,6 @@ export class Enemy {
 
     this.mesh = new THREE.Group();
     this.mesh.position.copy(position);
-    this.trailsEffect = options.trailsEffect || null;
-    this.engineTrailTimer = 0;
-    this.engineTrailRate = 0.025;
     this.weaponMarkerIndex = 0;
     this.engineMarkers = [];
     this.weaponMarkers = [];
@@ -453,54 +621,56 @@ export class Enemy {
     this.laserColor = 0xff8800;
     this.laserIntensity = 1.0;
     this.usesSharedTemplateModel = false;
+    this.usesPortalDroneModel = false;
     this.spawnWarp = null;
     this.missionPoolSlot = options.missionPoolSlot ?? null;
+    this.portalSummonPoolSlot = options.portalSummonPoolSlot ?? null;
     this.disableRevealWarp = options.disableRevealWarp === true;
 
     this.modelIndex =
-      options.modelIndex != null &&
-      options.modelIndex >= 0 &&
-      options.modelIndex < shipModels.length
-        ? options.modelIndex
-        : shipModels.length > 0
-          ? Math.floor(Math.random() * shipModels.length)
-          : -1;
+      options.fleetShipId != null && isDroneFleetActive()
+        ? getFleetShipIndexById(options.fleetShipId)
+        : options.modelIndex != null &&
+            options.modelIndex >= 0 &&
+            options.modelIndex < shipModels.length
+          ? options.modelIndex
+          : shipModels.length > 0
+            ? Math.floor(Math.random() * shipModels.length)
+            : -1;
     const shipTemplate =
       this.modelIndex >= 0 ? shipModels[this.modelIndex] : null;
+    const useFleetTemplate = !!shipTemplate?.userData?.droneFleetShip;
+    const cloneMaterials =
+      options.cloneMaterials !== undefined
+        ? options.cloneMaterials !== false
+        : !useFleetTemplate;
 
     if (shipTemplate) {
       const clone = shipTemplate.clone();
       this.usesSharedTemplateModel = true;
-      const shipScale = options.shipScale ?? (this.isHeavy ? 4.0 : 2.0);
-      clone.scale.setScalar(shipScale);
+      clone.scale.setScalar(this.shipScale);
       clone.rotation.set(0, Math.PI, 0);
-      if (this.isHeavy) {
-        this.collisionRadius *= 2;
-        this.hitExtents.x *= 2;
-        this.hitExtents.y *= 2;
-        this.hitExtents.z *= 2;
+      this._syncShipScaleCollision();
+      this.laserColor =
+        shipTemplate.userData?.enemyLaserColor ?? this.laserColor;
+      this.laserIntensity =
+        shipTemplate.userData?.enemyLaserIntensity ?? this.laserIntensity;
+      if (useFleetTemplate) {
+        setupFleetDroneCloneMarkers(this, clone);
       }
-      if (options.shipScale != null) {
-        const normalScale = 2.0;
-        const hitScale = Math.max(0.1, options.shipScale / normalScale);
-        this.collisionRadius *= hitScale;
-        this.hitExtents.x *= hitScale;
-        this.hitExtents.y *= hitScale;
-        this.hitExtents.z *= hitScale;
-      }
-      this.laserColor = shipTemplate.userData?.enemyLaserColor ?? this.laserColor;
-      this.laserIntensity = shipTemplate.userData?.enemyLaserIntensity ?? this.laserIntensity;
       clone.traverse((child) => {
         if (!child.isMesh) return;
-        const n = child.name?.toLowerCase?.() || "";
-        if (n.startsWith("thruster_")) {
-          child.visible = false;
-          this.engineMarkers.push(child);
-        } else if (n.startsWith("weapon_")) {
-          child.visible = false;
-          this.weaponMarkers.push(child);
+        if (!useFleetTemplate) {
+          const n = child.name?.toLowerCase?.() || "";
+          if (n.startsWith("thruster_")) {
+            child.visible = false;
+            this.engineMarkers.push(child);
+          } else if (n.startsWith("weapon_")) {
+            child.visible = false;
+            this.weaponMarkers.push(child);
+          }
         }
-        if (child.material && options.cloneMaterials !== false) {
+        if (child.material && cloneMaterials) {
           if (Array.isArray(child.material)) {
             child.material = child.material.map((m) =>
               m?.clone ? m.clone() : m,
@@ -518,6 +688,7 @@ export class Enemy {
         }
       });
       this.mesh.add(clone);
+      this._fallbackShipRoot = clone;
       if (options.enableLights !== false) {
         this.shipLightIntensity = 7;
         if (_deadLights.length > 0) {
@@ -546,7 +717,8 @@ export class Enemy {
         metalness: 0.8,
         roughness: 0.2,
       });
-      this.mesh.add(new THREE.Mesh(fallbackGeo, fallbackMat));
+      this._fallbackShipRoot = new THREE.Mesh(fallbackGeo, fallbackMat);
+      this.mesh.add(this._fallbackShipRoot);
     }
 
     scene.add(this.mesh);
@@ -567,6 +739,33 @@ export class Enemy {
         });
       }
     }
+  }
+
+  setShipScale(shipScale) {
+    if (this.disposed || shipScale == null || !Number.isFinite(shipScale))
+      return;
+    this.shipScale = shipScale;
+    if (this._fallbackShipRoot) {
+      this._fallbackShipRoot.scale.setScalar(shipScale);
+    }
+    this._syncShipScaleCollision();
+  }
+
+  _syncShipScaleCollision() {
+    let radius = this._collisionBaseRadius;
+    let ex = this._collisionBaseHitExtents;
+    if (this.isHeavy) {
+      radius *= 2;
+      ex = { x: ex.x * 2, y: ex.y * 2, z: ex.z * 2 };
+    }
+    const hitScale = Math.max(
+      0.1,
+      this.shipScale / ENEMY_SHIP_SCALE_HIT_REFERENCE,
+    );
+    this.collisionRadius = radius * hitScale;
+    this.hitExtents.x = ex.x * hitScale;
+    this.hitExtents.y = ex.y * hitScale;
+    this.hitExtents.z = ex.z * hitScale;
   }
 
   _pickNewWaypoint() {
@@ -643,9 +842,9 @@ export class Enemy {
     // when the spawn point is beyond the normal cull radius.
     const spawnVfxActive = Boolean(
       this.spawnWarp &&
-        !this.spawnWarp.disposed &&
-        !this.spawnWarp.finished &&
-        !this.spawnWarp.frozen,
+      !this.spawnWarp.disposed &&
+      !this.spawnWarp.finished &&
+      !this.spawnWarp.frozen,
     );
     const wasCulled = !this.mesh.visible;
     const cullOutSq = (cullDistance * 1.1) ** 2;
@@ -679,7 +878,11 @@ export class Enemy {
             materialEffect: false,
           });
         }
-        if (this.spawnWarp && !this.spawnWarp.disposed && !this.spawnWarp.finished) {
+        if (
+          this.spawnWarp &&
+          !this.spawnWarp.disposed &&
+          !this.spawnWarp.finished
+        ) {
           this.spawnWarp.update(1 / 60);
           revealWarpTriggered = true;
         }
@@ -692,8 +895,19 @@ export class Enemy {
 
     this.physicsFrame++;
 
+    const playerInactive =
+      game &&
+      !game.isMultiplayer &&
+      (game._soloRespawning || (game.player?.health ?? 0) <= 0);
+
     // Keep distant wanderers cheap until the player is inside engage range.
-    if (distToPlayerSq > this.detectionRangeSq && this.state === "wander") return;
+    if (
+      !playerInactive &&
+      distToPlayerSq > this.detectionRangeSq &&
+      this.state === "wander"
+    ) {
+      return;
+    }
 
     // Scale LOS check frequency by distance — fewer checks at range.
     // Stagger by _physicsSlot so not all enemies do physics the same frame.
@@ -701,7 +915,11 @@ export class Enemy {
       distToPlayerSq < 400 ? 8 : distToPlayerSq < 1600 ? 16 : 32;
     const physicsFrame = (frameCount + this._physicsSlot) % 3 === 0;
     this.losCheckCounter++;
-    if (physicsFrame && this.losCheckCounter >= losInterval) {
+    if (
+      !playerInactive &&
+      physicsFrame &&
+      this.losCheckCounter >= losInterval
+    ) {
       this.losCheckCounter = 0;
       if (distToPlayerSq < this.detectionRangeSq) {
         this.hasLOS = this.checkLOS(playerPos);
@@ -710,7 +928,13 @@ export class Enemy {
       }
     }
 
-    if (this.hasLOS) {
+    if (playerInactive) {
+      if (this.state !== "wander") {
+        this.state = "wander";
+        this.hasLOS = false;
+        this._pickNewWaypoint();
+      }
+    } else if (this.hasLOS) {
       this.state = "attack";
     } else if (
       this.state === "attack" &&
@@ -747,12 +971,17 @@ export class Enemy {
       }
 
       _combatMoveDir.set(0, 0, 0);
-      const tooFar = distToPlayer > this.idealAttackRange + this.attackRangeBand;
-      const tooClose = distToPlayer < this.idealAttackRange - this.attackRangeBand;
+      const tooFar =
+        distToPlayer > this.idealAttackRange + this.attackRangeBand;
+      const tooClose =
+        distToPlayer < this.idealAttackRange - this.attackRangeBand;
       if (tooFar) {
         _combatMoveDir.addScaledVector(_direction, this.isHeavy ? 0.75 : 0.95);
       } else if (tooClose) {
-        _combatMoveDir.addScaledVector(_direction, this.isHeavy ? -0.25 : -0.65);
+        _combatMoveDir.addScaledVector(
+          _direction,
+          this.isHeavy ? -0.25 : -0.65,
+        );
       }
       _combatMoveDir.addScaledVector(_strafeDir, this.isHeavy ? 0.45 : 0.85);
       if (this.evadeTimer > 0) {
@@ -779,7 +1008,11 @@ export class Enemy {
       }
 
       const laserRangeSq = this.isHeavy ? this.detectionRangeSq : 8100;
-      if (this.hasLOS && this.fireCooldown <= 0 && distToPlayerSq < laserRangeSq) {
+      if (
+        this.hasLOS &&
+        this.fireCooldown <= 0 &&
+        distToPlayerSq < laserRangeSq
+      ) {
         let firePos = this.mesh.position;
         if (this.weaponMarkers.length > 0) {
           const marker =
@@ -831,21 +1064,6 @@ export class Enemy {
       }
     } else {
       this._updateWander(delta, frameCount);
-    }
-
-    if (this.trailsEffect && this.engineMarkers.length > 0) {
-      this.engineTrailTimer += delta;
-      while (this.engineTrailTimer >= this.engineTrailRate) {
-        this.engineTrailTimer -= this.engineTrailRate;
-        _shipForward
-          .set(0, 0, -1)
-          .applyQuaternion(this.mesh.quaternion)
-          .normalize();
-        for (const marker of this.engineMarkers) {
-          marker.getWorldPosition(_thrusterPos);
-          this.trailsEffect.emitEngineExhaust(_thrusterPos, _shipForward);
-        }
-      }
     }
   }
 
@@ -921,6 +1139,7 @@ export class Enemy {
     const ms = game?.gameManager?.getState?.()?.missionStatus;
     const retainDuringMission =
       this.usesSharedTemplateModel &&
+      !this.usesPortalDroneModel &&
       (ms === "active" || ms === "starting");
     if (retainDuringMission) {
       if (!game._retainedEnemyRootMeshes) game._retainedEnemyRootMeshes = [];
@@ -930,13 +1149,19 @@ export class Enemy {
 
     this.mesh.traverse((child) => {
       if (!child.isMesh) return;
-      if (!this.usesSharedTemplateModel && child.geometry) child.geometry.dispose();
+      const portalUnique =
+        this.usesPortalDroneModel &&
+        this._portalDroneModelRoot?.getObjectById?.(child.id);
+      if ((!this.usesSharedTemplateModel || portalUnique) && child.geometry) {
+        child.geometry.dispose();
+      }
       if (child.material) {
         const mats = Array.isArray(child.material)
           ? child.material
           : [child.material];
         for (const m of mats) {
-          if (m?.userData?.enemySharedTemplateMaterial) continue;
+          if (!portalUnique && m?.userData?.enemySharedTemplateMaterial)
+            continue;
           m?.dispose?.();
         }
       }

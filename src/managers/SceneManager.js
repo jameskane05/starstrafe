@@ -19,12 +19,14 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { SplatMesh } from "@sparkjsdev/spark";
+import { readAuthoredEnemyMarkerScale } from "../entities/Enemy.js";
 import {
   createTrimeshCollider,
   createKinematicTrimeshCollider,
   removeRigidBody,
 } from "../physics/Physics.js";
 import { loadSharedShipMaterials } from "../entities/Enemy.js";
+import { hideChaseMetadataVolumes } from "../utils/pathRail.js";
 
 function applyRotationDegrees(target, rotation) {
   target.rotation.set(
@@ -50,6 +52,30 @@ function isLevelTriggerMeshName(raw) {
   if (name === "Trigger") return true;
   if (name.startsWith("Trigger.")) return true;
   return /^Trigger\d+$/.test(name);
+}
+
+/** Level markers for weapon pickups: ChargingCannon, GatlingGun, Charging*, Gatling* */
+function isWeaponPickupMarkerName(raw) {
+  const name = (raw || "").trim();
+  if (!name) return false;
+  if (name === "ChargingCannon" || name === "GatlingGun") return true;
+  return name.startsWith("Charging") || name.startsWith("Gatling");
+}
+
+function weaponPickupTypeFromMarkerName(raw) {
+  const name = (raw || "").trim();
+  if (name === "GatlingGun" || name.startsWith("Gatling")) return "gatling";
+  return "charging_laser";
+}
+
+function resolveWeaponPickupMarkerName(object) {
+  let current = object;
+  while (current) {
+    const name = (current.name || "").trim();
+    if (name && isWeaponPickupMarkerName(name)) return name;
+    current = current.parent;
+  }
+  return null;
 }
 
 function isEnvMapZoneMeshName(raw) {
@@ -101,6 +127,19 @@ function canonicalLevelTriggerVolumeId(raw) {
     return `Trigger.${padded}`;
   }
   return name;
+}
+
+function resolveLevelTriggerDebugMode(options) {
+  if (options?.debugLevelTriggers === true) return "all";
+  const ids = options?.debugLevelTriggerIds;
+  if (!Array.isArray(ids) || ids.length === 0) return null;
+  return new Set(ids.map((id) => canonicalLevelTriggerVolumeId(id)));
+}
+
+function isLevelTriggerDebugVisible(triggerName, debugMode) {
+  if (!debugMode) return false;
+  if (debugMode === "all") return true;
+  return debugMode.has(canonicalLevelTriggerVolumeId(triggerName));
 }
 
 let _levelTriggerHiddenMaterial = null;
@@ -361,8 +400,17 @@ class SceneManager {
               this._extractSpawnPointsFromModel(container);
             if (dynamicElements.length > 0) container.userData.dynamicSceneElements = dynamicElements;
 
-            const spawnMeshesToRemove = [];
+            const spawnMeshesToRemove = new Set();
             container.traverse((child) => {
+              const markerName = resolveWeaponPickupMarkerName(child);
+              if (markerName) {
+                let owner = child;
+                while (owner?.parent && (owner.name || "").trim() !== markerName) {
+                  owner = owner.parent;
+                }
+                spawnMeshesToRemove.add(owner);
+                return;
+              }
               const n = child.name || "";
               if (
                 n.startsWith("Enemy") ||
@@ -372,7 +420,7 @@ class SceneManager {
                 n === "Goal" ||
                 n.startsWith("Goal.")
               ) {
-                spawnMeshesToRemove.push(child);
+                spawnMeshesToRemove.add(child);
               }
             });
             for (const obj of spawnMeshesToRemove) {
@@ -390,13 +438,11 @@ class SceneManager {
             container.userData.levelTriggerVolumes =
               this._extractTriggerVolumesFromPlacedRoot(container);
 
+            hideChaseMetadataVolumes(container);
             if (options.occluder) {
               this._applyOccluderMaterial(container, options.debugWireframe);
             }
-            this._configureLevelTriggerMeshes(
-              container,
-              options?.debugLevelTriggers === true,
-            );
+            this._configureLevelTriggerMeshes(container, options);
             if (dynamicElements.length > 0) {
               await this._applyDynamicElementMaterial(dynamicElements, dynConfig);
             } else if (pillarPrefix && !animateDynamicMeshes) {
@@ -460,6 +506,7 @@ class SceneManager {
             if (options.visible === false) {
               model.visible = false;
             }
+            hideChaseMetadataVolumes(model);
             if (options.occluder) {
               this._applyOccluderMaterial(model, options.debugWireframe);
             }
@@ -467,10 +514,7 @@ class SceneManager {
               this._createPhysicsCollider(id, model, position);
             }
           }
-          this._configureLevelTriggerMeshes(
-            model,
-            options?.debugLevelTriggers === true,
-          );
+          this._configureLevelTriggerMeshes(model, options);
 
           this.scene.add(model);
           if (onProgress) onProgress(1);
@@ -482,11 +526,43 @@ class SceneManager {
     });
   }
 
+  _extractWeaponPickupPointsFromModel(model) {
+    const weaponPickups = [];
+    const seen = new Set();
+    model.updateMatrixWorld(true);
+    model.traverse((child) => {
+      const markerName = resolveWeaponPickupMarkerName(child);
+      if (!markerName || seen.has(markerName)) return;
+      let owner = child;
+      while (owner?.parent && (owner.name || "").trim() !== markerName) {
+        owner = owner.parent;
+      }
+      const pos = new THREE.Vector3();
+      owner.getWorldPosition(pos);
+      seen.add(markerName);
+      weaponPickups.push({
+        markerName,
+        type: weaponPickupTypeFromMarkerName(markerName),
+        position: pos.clone(),
+      });
+    });
+    if (weaponPickups.length > 0) {
+      console.log(
+        `[SceneManager] Weapon pickup markers (${weaponPickups.length}): [${weaponPickups.map((w) => w.markerName).join(", ")}]`,
+      );
+    }
+    return weaponPickups;
+  }
+
+  extractWeaponPickupPoints(root) {
+    if (!root) return [];
+    return this._extractWeaponPickupPointsFromModel(root);
+  }
+
   _extractSpawnPointsFromModel(model) {
     const enemyEntries = [];
     const playerEntries = [];
     const missile = [];
-    const weaponPickups = [];
     const goals = [];
     const boosts = [];
     const goalOrder = { Goal: 0, "Goal.001": 1, "Goal.002": 2 };
@@ -496,7 +572,11 @@ class SceneManager {
       if (name.startsWith("Enemy")) {
         const pos = new THREE.Vector3();
         child.getWorldPosition(pos);
-        enemyEntries.push({ name, position: pos.clone() });
+        enemyEntries.push({
+          name,
+          position: pos.clone(),
+          scale: readAuthoredEnemyMarkerScale(child, model),
+        });
       } else if (name.startsWith("Spawn")) {
         const pos = new THREE.Vector3();
         child.getWorldPosition(pos);
@@ -511,13 +591,6 @@ class SceneManager {
         const pos = new THREE.Vector3();
         child.getWorldPosition(pos);
         missile.push(pos.clone());
-      } else if (name.startsWith("ChargingLaser") || name.startsWith("Gatling")) {
-        const pos = new THREE.Vector3();
-        child.getWorldPosition(pos);
-        weaponPickups.push({
-          type: name.startsWith("ChargingLaser") ? "charging_laser" : "gatling",
-          position: pos.clone(),
-        });
       } else if (name === "Goal" || name.startsWith("Goal.")) {
         const pos = new THREE.Vector3();
         child.getWorldPosition(pos);
@@ -540,6 +613,7 @@ class SceneManager {
         });
       }
     });
+    const weaponPickups = this._extractWeaponPickupPointsFromModel(model);
     playerEntries.sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { numeric: true }),
     );
@@ -547,8 +621,12 @@ class SceneManager {
       a.name.localeCompare(b.name, undefined, { numeric: true }),
     );
     const enemy = enemyEntries.map((e) => e.position);
+    const enemyScales = enemyEntries.map((e) => e.scale ?? 1);
     const enemyIsHeavy = enemyEntries.map((e) =>
       /(?:\s-\s*|-\s*)Heavy\s*$/i.test((e.name || "").trim()),
+    );
+    const enemyIsPortal = enemyEntries.map((e) =>
+      /^EnemyPortal(?:$|[.\s_-])/i.test((e.name || "").trim()),
     );
     const player = playerEntries.map((e) => e.position);
     const playerMarkerQuaternions = playerEntries.map((e) => e.quaternion);
@@ -563,7 +641,9 @@ class SceneManager {
     );
     return {
       enemy,
+      enemyScales,
       enemyIsHeavy,
+      enemyIsPortal,
       player,
       playerMarkerQuaternions,
       missile,
@@ -580,25 +660,54 @@ class SceneManager {
    * Labels after the first `-` are ignored; volumes use canonical ids (`Trigger`, `Trigger.001`, …).
    * World-space AABB via Box3.setFromObject. Run after container transform + updateMatrixWorld.
    */
+  _resolveLevelTriggerObjectName(object) {
+    let current = object;
+    while (current) {
+      const name = (current.name || "").trim();
+      if (name && isLevelTriggerMeshName(name)) return name;
+      current = current.parent;
+    }
+    return null;
+  }
+
   _extractTriggerVolumesFromPlacedRoot(root) {
-    const volumes = [];
+    const merged = new Map();
     const box = new THREE.Box3();
     root.updateMatrixWorld(true);
     root.traverse((child) => {
-      const name = (child.name || "").trim();
-      if (!isLevelTriggerMeshName(name)) return;
+      if (!child.isMesh) return;
+      const triggerName = this._resolveLevelTriggerObjectName(child);
+      if (!triggerName) return;
       box.setFromObject(child);
       if (box.isEmpty()) return;
-      volumes.push({
-        objectName: canonicalLevelTriggerVolumeId(name),
-        worldMin: box.min.clone(),
-        worldMax: box.max.clone(),
-      });
+      const objectName = canonicalLevelTriggerVolumeId(triggerName);
+      const prev = merged.get(objectName);
+      if (prev) {
+        prev.worldMin.min(box.min);
+        prev.worldMax.max(box.max);
+      } else {
+        merged.set(objectName, {
+          objectName,
+          worldMin: box.min.clone(),
+          worldMax: box.max.clone(),
+        });
+      }
     });
-    volumes.sort((a, b) =>
+    const volumes = [...merged.values()].sort((a, b) =>
       a.objectName.localeCompare(b.objectName, undefined, { numeric: true }),
     );
+    if (volumes.length > 0) {
+      console.log(
+        `[SceneManager] Trigger volumes (${volumes.length}): [${volumes.map((v) => v.objectName).join(", ")}]`,
+      );
+    }
     return volumes;
+  }
+
+  /** Re-read trigger AABBs from a loaded combined-level container (live scene graph). */
+  extractLevelTriggerVolumes(root) {
+    if (!root) return [];
+    return this._extractTriggerVolumesFromPlacedRoot(root);
   }
 
   _extractMarkerGroupFromModel(model) {
@@ -758,35 +867,35 @@ class SceneManager {
   /**
    * Level trigger volumes (Trigger / Trigger.001 / …): never use authored GLTF materials,
    * never participate in splat occlusion (see _applyOccluderMaterial skip). Hidden by default;
-   * set `options.debugLevelTriggers: true` on the GLTF object in sceneData to show magenta wireframes.
+   * set `options.debugLevelTriggers: true` on the GLTF object in sceneData to show magenta wireframes,
+   * or `options.debugLevelTriggerIds: ["Trigger.008"]` to show specific volumes only.
    */
-  _configureLevelTriggerMeshes(root, debugLevelTriggers = false) {
+  _configureLevelTriggerMeshes(root, options = null) {
+    const debugMode = resolveLevelTriggerDebugMode(options);
     const roots = [];
     root.updateMatrixWorld(true);
     root.traverse((child) => {
       if (isLevelTriggerMeshName(child.name)) roots.push(child);
     });
     const hiddenMat = getLevelTriggerHiddenMaterial();
+    const debugMat = new THREE.MeshBasicMaterial({
+      color: 0xff00ff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+      depthTest: true,
+    });
     for (const tr of roots) {
+      const showDebug = isLevelTriggerDebugVisible(tr.name, debugMode);
       tr.traverse((desc) => {
         if (!desc.isMesh) return;
         disposeMeshMaterials(desc);
-        if (debugLevelTriggers) {
-          desc.material = new THREE.MeshBasicMaterial({
-            color: 0xff00ff,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.45,
-            depthWrite: false,
-            depthTest: true,
-          });
-        } else {
-          desc.material = hiddenMat;
-        }
+        desc.material = showDebug ? debugMat : hiddenMat;
         desc.castShadow = false;
         desc.receiveShadow = false;
       });
-      tr.visible = debugLevelTriggers;
+      tr.visible = showDebug;
     }
   }
 
@@ -797,7 +906,7 @@ class SceneManager {
    */
   _applyOccluderMaterial(model, debugWireframe = false) {
     model.traverse((child) => {
-      if (child.isMesh) {
+      if (child.isMesh || child.isLine || child.isLineSegments) {
         if (isLevelTriggerMeshName(child.name)) return;
         if (isMetadataVolumeObject(child)) {
           child.visible = false;
@@ -805,6 +914,7 @@ class SceneManager {
           child.receiveShadow = false;
           return;
         }
+        if (!child.isMesh) return;
         if (Array.isArray(child.material)) {
           child.material.forEach((m) => m.dispose());
         } else if (child.material) {
@@ -861,7 +971,9 @@ class SceneManager {
   setLevelTriggerDebug(id, debugLevelTriggers) {
     const object = this.objects.get(id);
     if (object) {
-      this._configureLevelTriggerMeshes(object, debugLevelTriggers === true);
+      this._configureLevelTriggerMeshes(object, {
+        debugLevelTriggers: debugLevelTriggers === true,
+      });
     }
   }
 

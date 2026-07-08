@@ -3,6 +3,7 @@ import { sayAs } from "./dialogDataHelpers.js";
 import { trainingGroundsDialogTracks } from "./dialogDataTraining.js";
 import { charonDialogTracks } from "./dialogDataCharon.js";
 import { saturnaliaDialogTracks } from "./dialogDataSaturnalia.js";
+import { earthDialogTracks } from "./dialogDataEarth.js";
 
 export { sayAs };
 
@@ -10,35 +11,35 @@ export const dialogSpeakers = {
   alcair: {
     id: "alcair",
     label: "ALCAIR",
-    vrmUrl: "./alcair-opt.vrm",
+    vrmUrl: "./vrm/alcair-opt.vrm",
   },
   flightControl: {
     id: "flightControl",
     label: "FLIGHT CONTROL",
-    vrmUrl: "./flightControl-opt.vrm",
+    vrmUrl: "./vrm/flightControl-opt.vrm",
   },
   leader: {
     id: "leader",
     label: "LEADER",
-    vrmUrl: "./leader-opt.vrm",
+    vrmUrl: "./vrm/leader-opt.vrm",
     cameraOffset: { z: 0.12 },
   },
   starspeed: {
     id: "starspeed",
     label: "STARSPEED",
-    vrmUrl: "./starspeed-opt.vrm",
+    vrmUrl: "./vrm/starspeed-opt.vrm",
     cameraOffset: { z: 0.12 },
   },
   mobius: {
     id: "mobius",
     label: "MOBIUS",
-    vrmUrl: "./mobius-opt.vrm",
+    vrmUrl: "./vrm/mobius-opt.vrm",
     cameraOffset: { z: 0.22 },
   },
   colonist: {
     id: "colonist",
     label: "COLONIST",
-    vrmUrl: "./colonist.vrm",
+    vrmUrl: "./vrm/colonist.vrm",
     cameraOffset: { z: 0.12 },
   },
 };
@@ -47,6 +48,7 @@ export const dialogTracks = {
   ...trainingGroundsDialogTracks,
   ...charonDialogTracks,
   ...saturnaliaDialogTracks,
+  ...earthDialogTracks,
 };
 
 export function getDialogsForState(state, playedDialogs = new Set()) {

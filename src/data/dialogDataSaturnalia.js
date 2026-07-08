@@ -14,12 +14,14 @@ export const saturnaliaDialogTracks = {
     captions: [
       say("Look at this place.", 1.14, 0.36),
       say("All the wealth of the universe", 1.5, 3.18),
-      say("concentrated in one space station", 2.48, 4.72),
+      say("concentrated in one space station.", 2.48, 4.72),
     ],
     criteria: {
       currentState: GAME_STATES.PLAYING,
       currentMissionId: "saturnalia",
       missionStepId: "arrival",
+      saturnaliaIntroTextDone: true,
+      debugSpawnActive: { $ne: true },
     },
     autoPlay: true,
     priority: 200,
@@ -290,12 +292,12 @@ export const saturnaliaDialogTracks = {
     id: "saturnaliaChargingCannonUpgrade",
     speakerId: "alcair",
     audio: dialogPublicUrl(
-      "audio/dialog/saturnalia/saturn-14-charging-cannon-upgrade.audio.mp3",
+      "audio/dialog/saturnalia/saturn-14-a-gatling-gun-up-ahead.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/saturnalia/saturn-14-charging-cannon-upgrade.json",
+      "audio/dialog/saturnalia/saturn-14-a-gatling-gun-up-ahead.json",
     ),
-    captions: [say("Sir, there's a charging cannon upgrade ahead", 2.84, 0.31)],
+    captions: [say("Sir, there's a Gatling gun upgrade ahead", 2.68, 0.18)],
     criteria: {
       currentState: GAME_STATES.PLAYING,
       currentMissionId: "saturnalia",
@@ -307,7 +309,7 @@ export const saturnaliaDialogTracks = {
   },
   saturnaliaPickItUpStarspeed: {
     id: "saturnaliaPickItUpStarspeed",
-    speakerId: "alcair",
+    speakerId: "flightControl",
     audio: dialogPublicUrl(
       "audio/dialog/saturnalia/saturn-15-pick-it-up-starspeed.audio.mp3",
     ),
@@ -315,10 +317,9 @@ export const saturnaliaDialogTracks = {
       "audio/dialog/saturnalia/saturn-15-pick-it-up-starspeed.json",
     ),
     captions: [
-      say("Pick it up, Starspeed!", 1.04, 0.3),
-      say("Hold your fire button to charge,", 1.64, 2.06),
-      say("release to fire.", 1.1, 3.98),
-      say("This will tear through them like butter.", 1.62, 5.62),
+      say("Pick it up, Starspeed!", 1.3, 0.54),
+      say("Just hold your fire button", 1.36, 2.68),
+      say("and the rounds will tear through them like butter", 2.7, 4.26),
     ],
     criteria: {
       currentState: GAME_STATES.PLAYING,

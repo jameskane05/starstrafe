@@ -58,7 +58,8 @@ async function typeLine(element, fullText, onChar) {
   }
 }
 
-export async function runCharonOutroTypewriterAndFade() {
+export async function runCharonOutroTypewriterAndFade(options = {}) {
+  const retainBlackScreen = options.retainBlackScreen === true;
   const overlay = document.getElementById(OVERLAY_ID);
   if (!overlay) return;
 
@@ -86,6 +87,16 @@ export async function runCharonOutroTypewriterAndFade() {
   await sleep(PAUSE_BEFORE_LINE2_MS);
   await typeLine(line2, LINE2, beep);
   await sleep(PAUSE_AFTER_TYPE_MS);
+
+  if (retainBlackScreen) {
+    if (panel) {
+      panel.style.transition = "";
+      panel.style.opacity = "0";
+    }
+    line1.textContent = "";
+    line2.textContent = "";
+    return;
+  }
 
   if (panel) {
     panel.style.transition = "";

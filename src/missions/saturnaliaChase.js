@@ -1,8 +1,13 @@
 import * as THREE from "three";
-import { Enemy, shipModels } from "../entities/Enemy.js";
+import { Enemy, applyPortalDroneModel } from "../entities/Enemy.js";
 import { castRay } from "../physics/Physics.js";
 import { Explosion } from "../entities/Explosion.js";
 import sfxManager from "../audio/sfxManager.js";
+import {
+  EngineTrail,
+  ENGINE_TRAIL_FIXED_STEP,
+  trackEngineTrailSegment,
+} from "../vfx/EngineTrail.js";
 import { startSaturnaliaCollapseSequence } from "../game/saturnaliaCollapseSequence.js";
 import {
   createNameTagSprite,
@@ -21,13 +26,11 @@ const CHASE_MAX_SPEED = 220;
 const CHASE_MIN_SPEED = 12;
 const CHASE_ACCEL_RESPONSE = 4.5;
 const CHASE_ACCEL_RATE = 38;
-const TRAIL_RATE = 0.025;
 const CENTERLINE_BIN_SIZE = 0.75;
 const CHASE_START_VERTEX_INDEX = 78;
 const CHASE_START_TRANSITION_DURATION = 2.2;
 const ESCAPE_MAX_SPEED = 520;
 const ESCAPE_ACCEL_RATE = 240;
-const ESCAPE_TRAIL_RATE = 0.012;
 
 const _tmp = new THREE.Vector3();
 const _tmp2 = new THREE.Vector3();
@@ -36,8 +39,16 @@ const _look = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
 const _up = new THREE.Vector3(0, 1, 0);
 const _enginePos = new THREE.Vector3();
-const _trailBack = new THREE.Vector3();
 const _labelWorldPos = new THREE.Vector3();
+
+const CHASE_ENGINE_TRAIL_OPTS = {
+  maxPoints: 60,
+  trailTime: 0.625,
+  width: 1.0,
+  colorStart: 0xfff0aa,
+  colorEnd: 0x88ddff,
+  emissiveIntensity: 2.8,
+};
 
 function pointFromAttribute(attribute, index, matrixWorld) {
   return new THREE.Vector3()
@@ -180,25 +191,55 @@ function closestDistanceOnPath(path, point) {
   return bestAlong;
 }
 
-function emitChaseTrail(game, controller, delta) {
-  const rate = controller.escape ? ESCAPE_TRAIL_RATE : TRAIL_RATE;
-  controller.trailTimer += delta;
-  _trailBack.copy(controller.tangent).negate();
-  while (controller.trailTimer >= rate) {
-    controller.trailTimer -= rate;
-    const markers = controller.enemy.engineMarkers;
-    if (markers.length > 0) {
-      for (const marker of markers) {
-        marker.getWorldPosition(_enginePos);
-        game.trailsEffect?.emitPlasmaExhaust(_enginePos, _trailBack);
-        game.trailsEffect?.emitEngineExhaust(_enginePos, _trailBack);
-      }
-    } else {
-      _enginePos.copy(controller.enemy.mesh.position).addScaledVector(controller.tangent, -6);
-      game.trailsEffect?.emitPlasmaExhaust(_enginePos, _trailBack);
-      game.trailsEffect?.emitEngineExhaust(_enginePos, _trailBack);
-    }
+function createChaseEngineTrails(game, enemy) {
+  const markerCount =
+    enemy.engineMarkers.length > 0 ? Math.min(2, enemy.engineMarkers.length) : 2;
+  const trails = [];
+  for (let i = 0; i < markerCount; i++) {
+    trails.push(new EngineTrail(game.scene, CHASE_ENGINE_TRAIL_OPTS));
   }
+  return trails;
+}
+
+function updateChaseEngineTrails(game, chase) {
+  const trails = chase.engineTrails;
+  if (!trails?.length) return;
+  const enemy = chase.enemy;
+  const now = game.clock?.elapsedTime ?? performance.now() / 1000;
+  const markers = enemy.engineMarkers;
+  if (!chase._trailLastEnginePos) {
+    chase._trailLastEnginePos = trails.map(() => new THREE.Vector3());
+    chase._trailEnginePosReady = false;
+  }
+
+  for (let i = 0; i < trails.length; i++) {
+    if (markers[i]) {
+      markers[i].getWorldPosition(_enginePos);
+    } else {
+      _enginePos
+        .copy(enemy.mesh.position)
+        .addScaledVector(chase.tangent, -6 - i * 2);
+    }
+
+    const lastPos = chase._trailLastEnginePos[i];
+    if (!chase._trailEnginePosReady) {
+      lastPos.copy(_enginePos);
+      trails[i].trackPosition(_enginePos, ENGINE_TRAIL_FIXED_STEP, now);
+      continue;
+    }
+
+    trackEngineTrailSegment(trails[i], lastPos, _enginePos, now);
+    lastPos.copy(_enginePos);
+  }
+  chase._trailEnginePosReady = true;
+}
+
+function disposeChaseEngineTrails(chase) {
+  if (!chase?.engineTrails?.length) return;
+  for (const trail of chase.engineTrails) trail.dispose();
+  chase.engineTrails.length = 0;
+  chase._trailLastEnginePos = null;
+  chase._trailEnginePosReady = false;
 }
 
 function accelerateToward(current, target, rate, delta) {
@@ -251,7 +292,7 @@ function updateColonistsNameLabel(game, chase, delta) {
   sprite.visible = toi >= dist - 0.5;
 }
 
-export function createSaturnaliaChaseController(game) {
+export async function createSaturnaliaChaseController(game) {
   const root = game.sceneManager?.getObject?.("saturnaliaLevelData");
   const marker = findByPrefix(root, MARKER_NAME);
   const pathObject = findByPrefix(root, PATH_NAME);
@@ -272,20 +313,16 @@ export function createSaturnaliaChaseController(game) {
     path.points.length - 1,
   );
   const startAlong = path.distances[startVertexIndex] ?? closestDistanceOnPath(path, _tmp);
-  const modelIndex = shipModels.length > 0 ? 0 : undefined;
   const enemy = new Enemy(game.scene, _tmp.clone(), game.level, game._levelBounds, {
-    ...{
-      enableLights: true,
-      trailsEffect: game.trailsEffect,
-      game,
-      deferSpawnWarp: true,
-      disableRevealWarp: true,
-      invulnerable: true,
-      shipScale: CHASE_SHIP_SCALE,
-    },
-    ...(modelIndex !== undefined ? { modelIndex } : {}),
+    enableLights: true,
+    game,
+    deferSpawnWarp: true,
+    disableRevealWarp: true,
+    invulnerable: true,
+    shipScale: CHASE_SHIP_SCALE,
   });
   enemy.health = Number.POSITIVE_INFINITY;
+  await applyPortalDroneModel(enemy, CHASE_SHIP_SCALE, game);
   enemy.mesh.position.copy(markerStartPosition);
   const transitionTargetPosition = new THREE.Vector3();
   samplePath(path, startAlong, transitionTargetPosition, _tangent);
@@ -307,9 +344,9 @@ export function createSaturnaliaChaseController(game) {
     playerAlong: startAlong,
     velocity: 0,
     tangent: new THREE.Vector3(0, 0, -1),
-    trailTimer: 0,
     labelOcclusionTimer: 0,
     active: false,
+    engineTrails: createChaseEngineTrails(game, enemy),
   };
   samplePath(path, startAlong, _tmp, controller.tangent);
   enemy.mesh.position.copy(markerStartPosition);
@@ -319,6 +356,7 @@ export function createSaturnaliaChaseController(game) {
 export function disposeSaturnaliaChase(game) {
   const chase = game._saturnaliaChase;
   if (!chase) return;
+  disposeChaseEngineTrails(chase);
   disposeNameTagSprite(chase.enemy?.nameSprite);
   chase.enemy?.dispose?.(game.scene, null);
   game._saturnaliaChase = null;
@@ -354,9 +392,7 @@ export function prewarmSaturnaliaChase(game) {
       game.renderer.render(game.scene, game.camera);
     }
     _enginePos.copy(chase.enemy.mesh.position).addScaledVector(chase.tangent, -6);
-    _trailBack.copy(chase.tangent).negate();
-    game.trailsEffect?.emitPlasmaExhaust(_enginePos, _trailBack);
-    game.trailsEffect?.emitEngineExhaust(_enginePos, _trailBack);
+    updateChaseEngineTrails(game, chase);
     game.renderer.render(game.scene, game.camera);
     game._saturnaliaChaseGpuWarmed = true;
   } finally {
@@ -368,9 +404,6 @@ export function prewarmSaturnaliaChase(game) {
 }
 
 export function startSaturnaliaChase(game) {
-  if (!game._saturnaliaChase) {
-    game._saturnaliaChase = createSaturnaliaChaseController(game);
-  }
   const chase = game._saturnaliaChase;
   if (!chase) return;
   if (chase.active) return chase;
@@ -392,6 +425,55 @@ export function startSaturnaliaChase(game) {
   if (chase.enemy.shipLight) chase.enemy.shipLight.intensity = chase.enemy.shipLightIntensity;
   chase.active = true;
   return chase;
+}
+
+/** Snap chase drone + ally to the player's debug spawn on the path (mid-chase spawns). */
+export function alignSaturnaliaDebugSpawn(game) {
+  const chase = game._saturnaliaChase;
+  if (!chase?.path || !chase.active) return;
+
+  const playerPos = game.xrManager?.isPresenting && game.xrManager.rig
+    ? game.xrManager.rig.position
+    : game.camera.position;
+  const playerAlong = closestDistanceOnPath(chase.path, playerPos);
+  const startAlong = chase.startAlong ?? 0;
+  if (playerAlong <= startAlong + MIN_AHEAD * 0.5) return;
+
+  const effectivePlayerAlong = Math.max(startAlong, playerAlong);
+  const targetAlong = THREE.MathUtils.clamp(
+    effectivePlayerAlong + TARGET_AHEAD,
+    startAlong,
+    chase.path.total,
+  );
+
+  chase.playerAlong = effectivePlayerAlong;
+  chase.along = targetAlong;
+  chase.velocity = CHASE_MIN_SPEED;
+  chase.transitionFromStart = false;
+  chase.transitionElapsed = CHASE_START_TRANSITION_DURATION;
+
+  samplePath(chase.path, chase.along, chase.enemy.mesh.position, chase.tangent);
+  _tmp2.copy(chase.enemy.mesh.position).add(chase.tangent);
+  _look.lookAt(chase.enemy.mesh.position, _tmp2, _up);
+  chase.enemy.mesh.quaternion.setFromRotationMatrix(_look);
+
+  const ally = game.alliedShips?.[0];
+  if (!ally) return;
+
+  const playerQuat = game.xrManager?.isPresenting && game.xrManager.rig
+    ? game.xrManager.rig.quaternion
+    : game.camera.quaternion;
+  _tmp
+    .set(8 * (ally.formationSide ?? 1), 3, -18)
+    .applyQuaternion(playerQuat);
+  ally.mesh.position.copy(playerPos).add(_tmp);
+  if (ally.pathRail) {
+    ally.pathAlong = effectivePlayerAlong;
+    ally.pathRecovery = false;
+    ally.pathInfluence = 0;
+    ally.pathVelocity = 0;
+  }
+  ally.velocity.set(0, 0, 0);
 }
 
 /** Mobius laugh beat: the drone slams the throttle and flees to the end of the path. */
@@ -466,7 +548,7 @@ export function updateSaturnaliaChase(game, delta) {
       chase.enemy.shipLight.position.y += 0.3;
     }
     updateColonistsNameLabel(game, chase, delta);
-    emitChaseTrail(game, chase, delta);
+    updateChaseEngineTrails(game, chase);
     return;
   }
 
@@ -501,7 +583,7 @@ export function updateSaturnaliaChase(game, delta) {
       chase.along = chase.startAlong ?? chase.along;
       chase.velocity = 0;
     }
-    emitChaseTrail(game, chase, delta);
+    updateChaseEngineTrails(game, chase);
     return;
   }
   const rawPlayerAlong = closestDistanceOnPath(chase.path, playerPos);
@@ -559,5 +641,5 @@ export function updateSaturnaliaChase(game, delta) {
     chase.enemy.shipLight.position.y += 0.3;
   }
   updateColonistsNameLabel(game, chase, delta);
-  emitChaseTrail(game, chase, delta);
+  updateChaseEngineTrails(game, chase);
 }

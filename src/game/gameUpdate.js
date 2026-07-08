@@ -29,20 +29,27 @@ import * as gameInGameUI from "./gameInGameUI.js";
 import { syncNetworkBotsWithState } from "./gameMultiplayer.js";
 import {
   checkWeaponPickups,
+  processDeferredAuthoredMissionSpawns,
   processDeferredProximityEnemySpawns,
 } from "./gameEnemies.js";
 import { updateCharonReactorExplosionFlash, updateCharonReactorCoreHealthBar, updateCoreSplatFx } from "./charonReactorCore.js";
+import { updateEarthBossSplatFx } from "./earthBossFight.js";
 import {
   applyCharonEscapeShakeEndFrame,
   applyCharonEscapeShakeStartFrame,
   updateCharonReactorEscapeSequence,
 } from "./charonEscapeSequence.js";
 import {
+  applyEarthEscapeShakeEndFrame,
+  applyEarthEscapeShakeStartFrame,
+} from "./earthEscapeSequence.js";
+import {
   applySaturnaliaCollapseShakeEndFrame,
   updateSaturnaliaCollapseSequence,
 } from "./saturnaliaCollapseSequence.js";
 import { updateCockpitEnvZones } from "../utils/cockpitEnvZones.js";
 import { updateLevelBoosters } from "./levelBoosters.js";
+import { isSoloPlayerCombatInactive } from "./gamePlayerLifecycle.js";
 
 const _audioForward = new THREE.Vector3();
 const _audioUp = new THREE.Vector3();
@@ -61,11 +68,14 @@ function buildSoloPlayerHomingTarget(game) {
       alive: true,
     };
   }
+  const inactive = isSoloPlayerCombatInactive(game);
   const pos =
     game.xrManager?.isPresenting && game.xrManager.rig
       ? game.xrManager.rig.position
       : game.camera.position;
   game._soloPlayerHomingTarget.mesh.position.copy(pos);
+  game._soloPlayerHomingTarget.health = inactive ? 0 : game.player.health;
+  game._soloPlayerHomingTarget.alive = !inactive;
   return game._soloPlayerHomingTarget;
 }
 
@@ -192,18 +202,21 @@ export function tick(game, delta, timestamp, frame) {
 
       if (game.player) {
         applyCharonEscapeShakeStartFrame(game);
+        applyEarthEscapeShakeStartFrame(game);
         game.player.update(delta, game.clock.elapsedTime);
         updateLevelBoosters(game, delta);
         updateCockpitEnvZones(game, delta);
         game.dialogManager?.update(delta);
         updateCharonReactorExplosionFlash(game, delta);
         updateCoreSplatFx(game, delta);
+        updateEarthBossSplatFx(game, delta);
         updateCharonReactorCoreHealthBar(game);
         if (!game.isMultiplayer) {
           game.levelTriggerManager?.update();
         }
         updateCharonReactorEscapeSequence(game, delta);
         applyCharonEscapeShakeEndFrame(game, delta);
+        applyEarthEscapeShakeEndFrame(game);
         updateSaturnaliaCollapseSequence(game, delta);
         applySaturnaliaCollapseShakeEndFrame(game);
         if (game.isMultiplayer) {
@@ -297,6 +310,7 @@ export function tick(game, delta, timestamp, frame) {
     }
 
     if (!game.isMultiplayer) {
+      processDeferredAuthoredMissionSpawns(game);
       processDeferredProximityEnemySpawns(game);
       // Respawns before enemy.update so pooled bots get spawnWarp.update() the same frame
       // they become visible (otherwise first paint can miss dissolve / look like a pop-in).
@@ -327,6 +341,14 @@ export function tick(game, delta, timestamp, frame) {
           cullDist,
           game,
         );
+      }
+      if (game.enemyPortals?.length) {
+        for (let i = game.enemyPortals.length - 1; i >= 0; i--) {
+          const keepAlive = game.enemyPortals[i].update(delta);
+          if (!keepAlive || game.enemyPortals[i].disposed) {
+            game.enemyPortals.splice(i, 1);
+          }
+        }
       }
     }
 
@@ -492,7 +514,7 @@ export function updateBoostDoF(game, delta) {
 }
 
 export function updateBloomActive(game) {
-  game._bloomActive = game.bloomEnabled && game.bloomPass.strength > 0.01;
+  game._bloomActive = game.bloomPass.strength > 0.01;
   game.bloomPass.enabled = game._bloomActive;
   if (game.sparkRenderer) {
     game.sparkRenderer.encodeLinear = game._bloomActive;

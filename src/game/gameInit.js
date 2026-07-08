@@ -76,7 +76,7 @@ export async function init(game) {
     70,
     window.innerWidth / window.innerHeight,
     0.1,
-    1000,
+    2000,
   );
   game.scene.add(game.camera);
 
@@ -194,17 +194,7 @@ export async function init(game) {
   game.composer.addPass(game.bloomPass);
   game.composer.addPass(new OutputPass());
 
-  const bloomUserSetting = game.gameManager.getSetting("bloomEnabled");
-  // Mobile defaults to the low profile (bloom off), but keep bloom on by
-  // default there; only an explicit user setting turns it off.
-  const defaultBloom = isMobileDevice ? true : renderSettings.bloom ?? true;
-  game.bloomEnabled = bloomUserSetting ?? defaultBloom;
   gameUpdate.updateBloomActive(game);
-
-  game.gameManager.on("bloom:changed", (enabled) => {
-    game.bloomEnabled = enabled;
-    gameUpdate.updateBloomActive(game);
-  });
 
   game.gameManager.on("bloom:settings", (settings) => {
     if (settings.strength !== undefined)

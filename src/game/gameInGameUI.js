@@ -515,7 +515,7 @@ export function resumeGame(game) {
 
 const MISSION_COMPLETE_OVERLAY_MS = 440;
 
-function hideMissionCompleteOverlay(game) {
+export function hideMissionCompleteOverlay(game) {
   const el =
     game._missionCompleteOverlayEl ??
     document.getElementById("mission-complete-overlay");
@@ -525,7 +525,7 @@ function hideMissionCompleteOverlay(game) {
   window.setTimeout(() => el.remove(), MISSION_COMPLETE_OVERLAY_MS);
 }
 
-export function showMissionCompleteOverlay(game) {
+export function showMissionCompleteOverlay(game, options = {}) {
   document.getElementById("mission-complete-overlay")?.remove();
   game._missionCompleteOverlayEl = null;
 
@@ -534,25 +534,33 @@ export function showMissionCompleteOverlay(game) {
 
   const state = game.gameManager?.getState?.() ?? {};
   const subtitle =
-    state.missionStepTitle ||
+    options.subtitle ??
+    state.missionStepTitle ??
     (state.currentMissionId === "trainingGrounds"
       ? "Training complete"
       : "Mission complete");
+  const title = options.title ?? "Mission complete";
+  const continueLabel = options.continueLabel ?? "Continue";
 
   const root = document.createElement("div");
   root.id = "mission-complete-overlay";
   root.className = "mission-complete-overlay";
+  if (options.solidBlackBackdrop) {
+    root.classList.add("mission-complete-overlay--solid-black");
+  }
+  if (options.zIndex != null) {
+    root.style.zIndex = String(options.zIndex);
+  }
   root.setAttribute("role", "dialog");
   root.setAttribute("aria-modal", "true");
   root.setAttribute("aria-labelledby", "mission-complete-heading");
   root.innerHTML = `
     <div class="mission-complete-backdrop" aria-hidden="true"></div>
     <div class="mission-complete-card">
-      <h2 id="mission-complete-heading" class="mission-complete-title">Mission complete</h2>
+      <h2 id="mission-complete-heading" class="mission-complete-title"></h2>
       <p class="mission-complete-subtitle"></p>
       <div class="mission-complete-actions">
         <button type="button" class="mission-complete-btn mission-complete-btn-primary" id="mission-complete-continue">
-          Continue
         </button>
         <button type="button" class="mission-complete-btn" id="mission-complete-menu">
           Main menu
@@ -561,21 +569,15 @@ export function showMissionCompleteOverlay(game) {
     </div>
   `;
   document.body.appendChild(root);
+  const titleEl = root.querySelector(".mission-complete-title");
+  if (titleEl) titleEl.textContent = title;
   const subEl = root.querySelector(".mission-complete-subtitle");
   if (subEl) subEl.textContent = subtitle;
+  const continueBtn = root.querySelector("#mission-complete-continue");
+  if (continueBtn) continueBtn.textContent = continueLabel;
   game._missionCompleteOverlayEl = root;
 
-  const onContinue = () => {
-    if (root.dataset.done) return;
-    root.dataset.done = "1";
-    root.querySelector("#mission-complete-continue")?.removeEventListener(
-      "click",
-      onContinue,
-    );
-    root.querySelector("#mission-complete-menu")?.removeEventListener(
-      "click",
-      onMenu,
-    );
+  const defaultOnContinue = () => {
     hideMissionCompleteOverlay(game);
     game.missionManager?.stopMission({ preserveState: true });
     game.gameManager.clearMissionState();
@@ -592,7 +594,7 @@ export function showMissionCompleteOverlay(game) {
     }
   };
 
-  const onMenu = () => {
+  const onContinue = async () => {
     if (root.dataset.done) return;
     root.dataset.done = "1";
     root.querySelector("#mission-complete-continue")?.removeEventListener(
@@ -603,6 +605,28 @@ export function showMissionCompleteOverlay(game) {
       "click",
       onMenu,
     );
+    if (options.onContinue) {
+      await options.onContinue();
+      return;
+    }
+    defaultOnContinue();
+  };
+
+  const onMenu = async () => {
+    if (root.dataset.done) return;
+    root.dataset.done = "1";
+    root.querySelector("#mission-complete-continue")?.removeEventListener(
+      "click",
+      onContinue,
+    );
+    root.querySelector("#mission-complete-menu")?.removeEventListener(
+      "click",
+      onMenu,
+    );
+    if (options.onMenu) {
+      await options.onMenu();
+      return;
+    }
     leaveMatch(game);
   };
 
@@ -612,7 +636,13 @@ export function showMissionCompleteOverlay(game) {
   root.querySelector("#mission-complete-menu")?.addEventListener("click", onMenu);
 
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => root.classList.add("mission-complete-overlay--visible"));
+    requestAnimationFrame(() => {
+      root.classList.add("mission-complete-overlay--visible");
+      if (options.solidBlackBackdrop) {
+        const backdrop = root.querySelector(".mission-complete-backdrop");
+        if (backdrop) backdrop.style.opacity = "1";
+      }
+    });
   });
 }
 

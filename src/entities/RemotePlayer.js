@@ -72,7 +72,7 @@ export async function loadMultiplayerShipModel() {
   exteriorLoading = new Promise((resolve) => {
     const loader = new GLTFLoader();
     loader.load(
-      "./Heavy_EXT_02.glb",
+      "./gltf/Heavy_EXT_02.glb",
       (gltf) => {
         exteriorModel = gltf.scene;
         resolve(exteriorModel);

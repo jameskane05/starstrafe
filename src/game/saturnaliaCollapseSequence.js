@@ -2,7 +2,8 @@
  * Saturnalia: after the chase drone escapes to the end of the level, the
  * station starts tearing itself apart — same treatment as the Charon reactor
  * escape (forward-cone mega explosions, rumble shake, splat pulse) but warm
- * gold/orange and with no countdown or fail state.
+ * gold/orange. A destruction countdown arms at Trigger.008 (paused during the
+ * chase escape beat), then reactivates when the drone hits the core.
  */
 
 import * as THREE from "three";
@@ -14,6 +15,8 @@ import {
   applySplatShockwave,
   clearSplatShockwave,
 } from "./charonReactorCore.js";
+
+export const SATURNALIA_DESTRUCTION_COUNTDOWN_SEC = 120;
 
 const EXPLOSION_INTERVAL_MIN = 0.32;
 const EXPLOSION_INTERVAL_MAX = 0.85;
@@ -65,8 +68,90 @@ const _shake = new THREE.Vector3();
 const _worldUp = new THREE.Vector3(0, 1, 0);
 
 function collapseProgress(game) {
+  const countdownProgress = destructionCountdownProgress(game);
+  if (countdownProgress != null) return countdownProgress;
   const elapsed = game._saturnaliaCollapseElapsed ?? 0;
   return THREE.MathUtils.clamp(elapsed / INTENSITY_RAMP_SEC, 0, 1);
+}
+
+function destructionCountdownProgress(game) {
+  const left = game._saturnaliaDestructionTimeLeft;
+  if (left == null) return null;
+  return 1 - Math.max(0, left) / SATURNALIA_DESTRUCTION_COUNTDOWN_SEC;
+}
+
+function ensureDestructionHud(game) {
+  let el = document.getElementById("saturnalia-destruction-countdown");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "saturnalia-destruction-countdown";
+    el.className =
+      "pickup-message pickup-message--escape pickup-message--persistent visible";
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+  } else {
+    el.classList.add("visible");
+  }
+  game._saturnaliaDestructionHudEl = el;
+  return el;
+}
+
+function hideDestructionHud(game) {
+  const el =
+    game._saturnaliaDestructionHudEl ??
+    document.getElementById("saturnalia-destruction-countdown");
+  if (el) {
+    el.classList.remove("visible");
+    el.textContent = "";
+  }
+  game._saturnaliaDestructionHudEl = null;
+}
+
+function clearDestructionCountdownState(game) {
+  hideDestructionHud(game);
+  game._saturnaliaDestructionTimeLeft = null;
+  game._saturnaliaDestructionCountdownPaused = false;
+}
+
+/** Trigger.008: fuse lit — hold the timer during dialog + chase escape. */
+export function armSaturnaliaDestructionCountdown(game, { paused = true } = {}) {
+  if (game.isMultiplayer) return;
+  if (game.gameManager?.getState?.()?.currentMissionId !== "saturnalia") return;
+  if (game._saturnaliaDestructionTimeLeft == null) {
+    game._saturnaliaDestructionTimeLeft = SATURNALIA_DESTRUCTION_COUNTDOWN_SEC;
+  }
+  game._saturnaliaDestructionCountdownPaused = paused;
+  if (!paused) ensureDestructionHud(game);
+}
+
+export function pauseSaturnaliaDestructionCountdown(game) {
+  if (game._saturnaliaDestructionTimeLeft == null) return;
+  game._saturnaliaDestructionCountdownPaused = true;
+}
+
+export function reactivateSaturnaliaDestructionCountdown(game) {
+  if (game.isMultiplayer) return;
+  if (game._saturnaliaDestructionTimeLeft == null) {
+    game._saturnaliaDestructionTimeLeft = SATURNALIA_DESTRUCTION_COUNTDOWN_SEC;
+  }
+  game._saturnaliaDestructionCountdownPaused = false;
+  ensureDestructionHud(game);
+}
+
+function updateDestructionCountdownHud(game, delta) {
+  if (game._saturnaliaDestructionTimeLeft == null) return;
+  if (game._saturnaliaDestructionCountdownPaused) return;
+
+  const el =
+    game._saturnaliaDestructionHudEl ??
+    document.getElementById("saturnalia-destruction-countdown");
+  const displayT = Math.max(0, game._saturnaliaDestructionTimeLeft);
+  if (el) el.textContent = displayT.toFixed(2);
+
+  game._saturnaliaDestructionTimeLeft = Math.max(
+    0,
+    game._saturnaliaDestructionTimeLeft - delta,
+  );
 }
 
 function initCollapseSplatPulse(game) {
@@ -272,12 +357,14 @@ export function startSaturnaliaCollapseSequence(game) {
   game._saturnaliaCollapseShakePhase = { burstTimer: RUMBLE_BURST_DURATION };
   game._saturnaliaCollapseBeepTimer = 2 + Math.random() * 3;
 
+  reactivateSaturnaliaDestructionCountdown(game);
   initCollapseSplatPulse(game);
   game.gameManager.setState({ saturnaliaCollapseActive: true });
 }
 
 export function applySaturnaliaCollapseShakeEndFrame(game) {
   if (!game._saturnaliaCollapseActive || !game._saturnaliaCollapseShakePhase) return;
+  if (game._saturnaliaEscapeCompleted) return;
   const rig =
     game.xrManager?.isPresenting && game.xrManager.rig
       ? game.xrManager.rig
@@ -290,11 +377,12 @@ export function applySaturnaliaCollapseShakeEndFrame(game) {
 }
 
 export function updateSaturnaliaCollapseSequence(game, delta) {
-  if (!game._saturnaliaCollapseActive) return;
+  if (!game._saturnaliaCollapseActive || game._saturnaliaEscapeCompleted) return;
   if (game.isMultiplayer) return;
 
   const d = Math.max(0, delta);
   game._saturnaliaCollapseElapsed = (game._saturnaliaCollapseElapsed ?? 0) + d;
+  updateDestructionCountdownHud(game, d);
 
   game._saturnaliaCollapseExplosionTimer -= d;
   if (game._saturnaliaCollapseExplosionTimer <= 0) {
@@ -332,11 +420,96 @@ export function updateSaturnaliaCollapseSequence(game, delta) {
   updateCollapseFlameGushers(game, d);
 }
 
-export function stopSaturnaliaCollapseForLevelChange(game) {
-  if (!game._saturnaliaCollapseActive) return;
+import {
+  mountSaturnaliaOutroOverlayBlack,
+  runSaturnaliaOutroTypewriterAndFade,
+} from "./saturnaliaOutroSequence.js";
+
+const ESCAPE_FADE_MS = 2000;
+const ESCAPE_OVERLAY_ID = "saturnalia-escape-overlay";
+
+function clearSaturnaliaCollapseShakeOffset(game) {
+  if (!game._shakeApplyPos) return;
+  const rig =
+    game.xrManager?.isPresenting && game.xrManager.rig
+      ? game.xrManager.rig
+      : game.camera;
+  if (rig) rig.position.sub(game._shakeApplyPos);
+  game._shakeApplyPos = null;
+}
+
+function fadeSaturnaliaEscapeToBlack() {
+  let el = document.getElementById(ESCAPE_OVERLAY_ID);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = ESCAPE_OVERLAY_ID;
+    el.setAttribute("role", "presentation");
+    document.body.appendChild(el);
+  }
+  el.classList.remove("saturnalia-escape-overlay--visible");
+  el.style.opacity = "0";
+  void el.offsetWidth;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallback);
+      el.removeEventListener("transitionend", onEnd);
+      resolve();
+    };
+    const fallback = setTimeout(finish, ESCAPE_FADE_MS + 250);
+    const onEnd = (e) => {
+      if (e.target !== el || e.propertyName !== "opacity") return;
+      finish();
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.classList.add("saturnalia-escape-overlay--visible");
+        el.addEventListener("transitionend", onEnd);
+      });
+    });
+  });
+}
+
+export async function completeSaturnaliaEscape(game, manager = null) {
+  if (game.isMultiplayer || game._saturnaliaEscapeCompleted) return;
+  if (game.gameManager?.getState?.()?.currentMissionId !== "saturnalia") return;
+
+  game._saturnaliaEscapeCompleted = true;
+  clearSaturnaliaCollapseShakeOffset(game);
   clearCollapseSplatPulse(game);
+  clearDestructionCountdownState(game);
   game._saturnaliaCollapseActive = false;
   game._saturnaliaCollapseShakePhase = null;
   game._saturnaliaCollapseGushers = null;
+  game.gameManager?.setState?.({
+    saturnaliaCollapseActive: false,
+    saturnaliaEscapeSucceeded: true,
+  });
+
+  manager?.completeObjective?.("arrive");
+
+  try {
+    await fadeSaturnaliaEscapeToBlack();
+    document.getElementById(ESCAPE_OVERLAY_ID)?.remove();
+    mountSaturnaliaOutroOverlayBlack();
+    await runSaturnaliaOutroTypewriterAndFade();
+  } catch (e) {
+    console.warn("[Saturnalia] Escape/outro sequence failed:", e);
+  }
+}
+
+export function stopSaturnaliaCollapseForLevelChange(game) {
+  if (!game._saturnaliaCollapseActive && game._saturnaliaDestructionTimeLeft == null) {
+    return;
+  }
+  clearCollapseSplatPulse(game);
+  clearDestructionCountdownState(game);
+  game._saturnaliaCollapseActive = false;
+  game._saturnaliaCollapseShakePhase = null;
+  game._saturnaliaCollapseGushers = null;
+  game._saturnaliaEscapeCompleted = false;
   game.gameManager?.setState?.({ saturnaliaCollapseActive: false });
 }

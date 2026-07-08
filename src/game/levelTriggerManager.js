@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { getDialogById } from "../data/dialogData.js";
 import { checkCriteria } from "../data/sceneData.js";
 import { getLevelTriggerBindings } from "../data/levelTriggerData.js";
 
@@ -108,6 +109,10 @@ export class LevelTriggerManager {
   update() {
     const gm = this.game.gameManager;
     if (!gm?.isPlaying?.()) return;
+    // Hold trigger dialog/events until the first-view loading overlay is gone,
+    // otherwise triggers on/near the spawn (e.g. Earth Trigger.000) fire and play
+    // out while the player is still behind the loading screen.
+    if (this.game._firstViewReady === false) return;
 
     const state = gm.getState();
     const levelId = state.currentLevel;
@@ -131,6 +136,14 @@ export class LevelTriggerManager {
       if (this._bindingsByObjectName.size === 0) {
         console.warn(
           `[LevelTrigger] No trigger bindings for level "${levelId}" (see levelTriggerData.js).`,
+        );
+      }
+      const boundNames = [...this._bindingsByObjectName.keys()];
+      const volumeNames = new Set(vols?.map((v) => v.objectName) ?? []);
+      const missingVolumes = boundNames.filter((name) => !volumeNames.has(name));
+      if (missingVolumes.length > 0) {
+        console.warn(
+          `[LevelTrigger] Bindings without a matching volume: [${missingVolumes.join(", ")}]. Loaded volumes: [${[...volumeNames].join(", ") || "none"}]`,
         );
       }
     }
@@ -191,24 +204,34 @@ export class LevelTriggerManager {
       }
     }
 
+    const newInside = new Map();
+
     for (const [bindingId, vol] of nextInside) {
-      if (this._insideBindingIds.has(bindingId)) continue;
+      if (this._insideBindingIds.has(bindingId)) {
+        newInside.set(bindingId, vol);
+        continue;
+      }
 
       const binding = this._findBindingById(bindingId);
       if (!binding) continue;
 
-      if (binding.once && this._triggeredOnce.has(bindingId)) continue;
+      if (binding.once && this._triggeredOnce.has(bindingId)) {
+        newInside.set(bindingId, vol);
+        continue;
+      }
 
-      this._fireEnter(binding, vol);
+      if (!this._fireEnter(binding, vol)) continue;
+
       if (binding.once) {
         this._triggeredOnce.add(bindingId);
         if (binding.objectName) {
           this._disabledTriggerObjectNames.add(binding.objectName);
         }
       }
+      newInside.set(bindingId, vol);
     }
 
-    this._insideBindingIds = nextInside;
+    this._insideBindingIds = newInside;
   }
 
   _findBindingById(id) {
@@ -217,6 +240,16 @@ export class LevelTriggerManager {
       if (b) return b;
     }
     return null;
+  }
+
+  _canPlayTriggerDialog(dialogId) {
+    if (!dialogId) return true;
+    if (!getDialogById(dialogId)) {
+      console.warn(`[LevelTrigger] Unknown dialog id "${dialogId}".`);
+      return false;
+    }
+    if (!this.game.dialogManager?.playDialog) return false;
+    return true;
   }
 
   _fireEnter(binding, volume = null) {
@@ -235,6 +268,10 @@ export class LevelTriggerManager {
     const on = binding.onEnter;
     const dialogId = resolvePlatformDialogId(on?.playDialog, gm);
 
+    if (!this._canPlayTriggerDialog(dialogId)) {
+      return false;
+    }
+
     console.log("[LevelTrigger] enter", {
       bindingId: binding.id,
       objectName: binding.objectName,
@@ -246,7 +283,7 @@ export class LevelTriggerManager {
     if (on?.setState && typeof on.setState === "object") {
       gm.setState(on.setState);
     }
-    if (dialogId && this.game.dialogManager?.playDialog) {
+    if (dialogId) {
       this.game.dialogManager.playDialog(dialogId);
     }
     if (on?.emitMissionEvent) {
@@ -263,5 +300,6 @@ export class LevelTriggerManager {
     }
 
     gm.emit("levelTrigger:enter", payload);
+    return true;
   }
 }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build-lod": "node scripts/build-lod.cjs",
-    "generate-pwa-assets": "pwa-assets-generator --preset minimal-2023 public/icon.png",
+    "generate-pwa-assets": "pwa-assets-generator --preset minimal-2023 public/images/site/icon.png",
     "generate-large-pwa-icons": "node scripts/generate-large-pwa-icons.cjs",
     "dev": "vite",
     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",

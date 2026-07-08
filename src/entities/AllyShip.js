@@ -11,6 +11,11 @@ import {
   disposeNameTagSprite,
   setNameTagSpeaking,
 } from "../ui/nameTagSprite.js";
+import {
+  EngineTrail,
+  ENGINE_TRAIL_FIXED_STEP,
+  trackEngineTrailSegment,
+} from "../vfx/EngineTrail.js";
 
 const _localOffset = new THREE.Vector3();
 const _desiredPos = new THREE.Vector3();
@@ -23,8 +28,7 @@ const _upVec = new THREE.Vector3(0, 1, 0);
 const _newPos = new THREE.Vector3();
 const _fireDir = new THREE.Vector3();
 const _muzzlePos = new THREE.Vector3();
-const _thrusterPos = new THREE.Vector3();
-const _shipForward = new THREE.Vector3();
+const _enginePos = new THREE.Vector3();
 const _labelWorldPos = new THREE.Vector3();
 const _pathTangent = new THREE.Vector3();
 const _railDesiredPos = new THREE.Vector3();
@@ -53,6 +57,27 @@ const IDLE_STEER_RESPONSE = 0.85;
 const IDLE_SPEED_SCALE = 0.72;
 const FAR_CATCHUP_DISTANCE = 70;
 const FAR_CATCHUP_SCALE = 8.0;
+const ESCAPE_LEAD_MIN = 50;
+const ESCAPE_LEAD_TARGET = 65;
+const ESCAPE_LEAD_MAX = 80;
+const ESCAPE_LEAD_MAX_SPEED = 220;
+const ESCAPE_LEAD_BOOST_MAX_SPEED = 300;
+const ESCAPE_LEAD_BOOST_ACCEL_RATE = 140;
+const ESCAPE_LEAD_BOOST_LEAD_MARGIN = 14;
+const PATH_LEAD_MIN = 38;
+const PATH_LEAD_TARGET = 48;
+const PATH_LEAD_MAX = 72;
+const PATH_LEAD_MAX_SPEED = 220;
+const PATH_LEAD_BOOST_MAX_SPEED = 300;
+const PATH_LEAD_COMBAT_DROP_BEHIND = 28;
+const ALLY_ENGINE_TRAIL_OPTS = {
+  maxPoints: 64,
+  trailTime: 1.25,
+  width: 0.85,
+  colorStart: 0xfff0aa,
+  colorEnd: 0x88ddff,
+  emissiveIntensity: 2.8,
+};
 
 function accelerateToward(current, target, rate, delta) {
   const maxStep = rate * delta;
@@ -95,6 +120,9 @@ export class AllyShip {
     this.weaponMarkers = [];
     this.engineMarkers = [];
     this.engineMaterials = [];
+    this.engineTrails = [];
+    this._trailLastEnginePos = null;
+    this._trailEnginePosReady = false;
     this.engineGlowT = 0;
     this.currentMoveSpeed = 0;
     this.idleOffset = new THREE.Vector3();
@@ -103,9 +131,6 @@ export class AllyShip {
     this._physicsSlot =
       Math.abs(Math.floor(position.x * 31 + position.y * 17 + position.z * 7)) %
       3;
-    this.trailsEffect = options.trailsEffect || null;
-    this.engineTrailTimer = 0;
-    this.engineTrailRate = 0.03;
     this.labelOcclusionTimer = 0;
     this.labelOcclusionInterval = 0.1;
     this.laserColor = 0x66ccff;
@@ -195,6 +220,53 @@ export class AllyShip {
     this.shipMesh = clone;
     this.mesh.add(clone);
     updateObjectEnvZoneBlend(this.mesh, this.game);
+    this._createEngineTrails();
+  }
+
+  _createEngineTrails() {
+    if (this.disposed || this.engineTrails.length > 0) return;
+    const markerCount =
+      this.engineMarkers.length > 0
+        ? Math.min(2, this.engineMarkers.length)
+        : 0;
+    if (markerCount === 0) return;
+    for (let i = 0; i < markerCount; i++) {
+      this.engineTrails.push(new EngineTrail(this.scene, ALLY_ENGINE_TRAIL_OPTS));
+    }
+    this._trailLastEnginePos = this.engineTrails.map(() => new THREE.Vector3());
+    this._trailEnginePosReady = false;
+  }
+
+  _updateEngineTrails(game) {
+    const trails = this.engineTrails;
+    if (!trails.length) return;
+
+    const now = game.clock?.elapsedTime ?? performance.now() / 1000;
+    for (let i = 0; i < trails.length; i++) {
+      if (this.engineMarkers[i]) {
+        this.engineMarkers[i].getWorldPosition(_enginePos);
+      } else {
+        _enginePos.copy(this.mesh.position);
+      }
+
+      const lastPos = this._trailLastEnginePos[i];
+      if (!this._trailEnginePosReady) {
+        lastPos.copy(_enginePos);
+        trails[i].trackPosition(_enginePos, ENGINE_TRAIL_FIXED_STEP, now);
+        continue;
+      }
+
+      trackEngineTrailSegment(trails[i], lastPos, _enginePos, now);
+      lastPos.copy(_enginePos);
+    }
+    this._trailEnginePosReady = true;
+  }
+
+  _disposeEngineTrails() {
+    for (const trail of this.engineTrails) trail.dispose();
+    this.engineTrails.length = 0;
+    this._trailLastEnginePos = null;
+    this._trailEnginePosReady = false;
   }
 
   _retargetIdleOffset() {
@@ -247,6 +319,46 @@ export class AllyShip {
     this.target = best;
   }
 
+  _pickPathLeadCombatTarget(enemies, playerPos) {
+    if (!this.pathRail) {
+      this._pickTarget(enemies);
+      return;
+    }
+    const playerAlong = closestDistanceOnPath(this.pathRail, playerPos);
+    let best = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
+      if (!enemy?.mesh?.visible || enemy.health <= 0) continue;
+      const distSq = this.mesh.position.distanceToSquared(enemy.mesh.position);
+      if (distSq > this.assistRangeSq) continue;
+      const enemyAlong = closestDistanceOnPath(this.pathRail, enemy.mesh.position);
+      if (enemyAlong < playerAlong - PATH_LEAD_COMBAT_DROP_BEHIND) continue;
+      const dist = Math.sqrt(distSq);
+      const aheadOfPlayer = enemyAlong - playerAlong;
+      const score = aheadOfPlayer * 2 - dist * 0.15;
+      if (score > bestScore) {
+        bestScore = score;
+        best = enemy;
+      }
+    }
+    this.target = best;
+  }
+
+  _clearPathLeadTargetIfPassed(playerPos) {
+    if (!this.target?.mesh?.visible || this.target.health <= 0 || !this.pathRail) {
+      return;
+    }
+    const playerAlong = closestDistanceOnPath(this.pathRail, playerPos);
+    const enemyAlong = closestDistanceOnPath(
+      this.pathRail,
+      this.target.mesh.position,
+    );
+    if (enemyAlong < playerAlong - PATH_LEAD_COMBAT_DROP_BEHIND) {
+      this.target = null;
+    }
+  }
+
   _enterPathRecovery() {
     if (!this.pathRail || this.pathRecovery) return;
     this.pathRecovery = true;
@@ -256,8 +368,193 @@ export class AllyShip {
     this.blockedMoveCount = 0;
   }
 
+  _isSaturnaliaEscapeLeadActive() {
+    if (!this.pathRail || !this.game) return false;
+    if (this.game.gameManager?.getState?.()?.currentMissionId !== "saturnalia") {
+      return false;
+    }
+    return (
+      this.game._saturnaliaCollapseActive === true ||
+      this.game.gameManager?.getState?.()?.saturnaliaCollapseActive === true
+    );
+  }
+
+  _isEarthDefensePathLeadActive() {
+    if (!this.pathRail || !this.game) return false;
+    return (
+      this.game.gameManager?.getState?.()?.currentMissionId ===
+      "capital-ship-earth-defense"
+    );
+  }
+
+  _getPlayerPathSpeedAlongRail(playerPos, retreat = false) {
+    const player = this.game?.player;
+    if (!player?.velocity || !this.pathRail) return 0;
+    const playerAlong = closestDistanceOnPath(this.pathRail, playerPos);
+    samplePath(this.pathRail, playerAlong, _railDesiredPos, _targetDir);
+    const sign = retreat ? -1 : 1;
+    return Math.max(0, sign * player.velocity.dot(_targetDir));
+  }
+
+  _getPlayerEscapeRetreatSpeed(playerPos) {
+    return this._getPlayerPathSpeedAlongRail(playerPos, true);
+  }
+
+  _buildPathLeadAheadIntent(delta, playerPos) {
+    const playerAlong = closestDistanceOnPath(this.pathRail, playerPos);
+    if (!this.pathRecovery) this._enterPathRecovery();
+    this.pathInfluence = THREE.MathUtils.damp(this.pathInfluence, 1, 2.8, delta);
+
+    const playerAdvanceSpeed = this._getPlayerPathSpeedAlongRail(playerPos, false);
+    const playerBoosting =
+      this.game?.player?.isBoosting === true ||
+      this.game?.player?.overboostActive === true;
+    const maxSpeed = playerBoosting ? PATH_LEAD_BOOST_MAX_SPEED : PATH_LEAD_MAX_SPEED;
+    const leadMargin =
+      ESCAPE_LEAD_BOOST_LEAD_MARGIN * (playerBoosting ? 1.6 : 1);
+
+    const targetAlong = Math.min(
+      this.pathRail.total,
+      playerAlong + PATH_LEAD_TARGET,
+    );
+    const leadGap = this.pathAlong - playerAlong;
+    let targetSpeed = 0;
+    if (leadGap > PATH_LEAD_MAX) {
+      targetSpeed = 0;
+    } else if (leadGap < PATH_LEAD_MIN) {
+      targetSpeed = THREE.MathUtils.clamp(
+        (PATH_LEAD_MIN - leadGap) * 1.35 + playerAdvanceSpeed,
+        RAIL_CRUISE_SPEED,
+        maxSpeed,
+      );
+    } else {
+      targetSpeed = Math.max(
+        RAIL_CRUISE_SPEED,
+        playerAdvanceSpeed * 1.15 + leadMargin * 0.35,
+      );
+    }
+
+    if (playerBoosting && leadGap <= PATH_LEAD_MAX) {
+      targetSpeed = Math.max(
+        targetSpeed,
+        playerAdvanceSpeed * 1.35 + leadMargin,
+      );
+    }
+
+    targetSpeed = Math.min(maxSpeed, targetSpeed);
+
+    this.pathVelocity = accelerateToward(
+      this.pathVelocity,
+      targetSpeed,
+      playerBoosting ? ESCAPE_LEAD_BOOST_ACCEL_RATE : RAIL_ACCEL_RATE,
+      delta,
+    );
+
+    if (this.pathAlong < targetAlong) {
+      this.pathAlong = Math.min(
+        this.pathRail.total,
+        this.pathAlong + this.pathVelocity * delta,
+      );
+    } else if (this.pathAlong > targetAlong) {
+      this.pathAlong = Math.max(
+        playerAlong,
+        this.pathAlong - this.pathVelocity * 0.35 * delta,
+      );
+    }
+
+    samplePath(this.pathRail, this.pathAlong, _railDesiredPos, _pathTangent);
+    return {
+      position: _railDesiredPos,
+      tangent: _pathTangent,
+      influence: this.pathInfluence,
+    };
+  }
+
+  _buildEscapeLeadPathIntent(delta, playerPos) {
+    const playerAlong = closestDistanceOnPath(this.pathRail, playerPos);
+    if (!this.pathRecovery) this._enterPathRecovery();
+    this.pathInfluence = THREE.MathUtils.damp(this.pathInfluence, 1, 2.8, delta);
+
+    const playerRetreatSpeed = this._getPlayerEscapeRetreatSpeed(playerPos);
+    const playerBoosting =
+      this.game?.player?.isBoosting === true ||
+      this.game?.player?.overboostActive === true;
+    const maxSpeed = playerBoosting
+      ? ESCAPE_LEAD_BOOST_MAX_SPEED
+      : ESCAPE_LEAD_MAX_SPEED;
+    const leadMargin =
+      ESCAPE_LEAD_BOOST_LEAD_MARGIN * (playerBoosting ? 1.6 : 1);
+
+    const retreatMin = 0;
+    const retreatMax = Math.max(retreatMin, playerAlong - ESCAPE_LEAD_MIN);
+    const targetAlong = THREE.MathUtils.clamp(
+      playerAlong - ESCAPE_LEAD_TARGET,
+      retreatMin,
+      retreatMax,
+    );
+
+    const leadGap = playerAlong - this.pathAlong;
+    let targetSpeed = 0;
+    if (leadGap > ESCAPE_LEAD_MAX) {
+      targetSpeed = 0;
+    } else if (leadGap < ESCAPE_LEAD_MIN) {
+      targetSpeed = THREE.MathUtils.clamp(
+        (ESCAPE_LEAD_MIN - leadGap) * 1.35 + playerRetreatSpeed,
+        RAIL_CRUISE_SPEED,
+        maxSpeed,
+      );
+    } else {
+      targetSpeed = Math.max(
+        RAIL_CRUISE_SPEED,
+        playerRetreatSpeed * 1.15 + leadMargin * 0.35,
+      );
+    }
+
+    if (playerBoosting && leadGap <= ESCAPE_LEAD_MAX) {
+      targetSpeed = Math.max(
+        targetSpeed,
+        playerRetreatSpeed * 1.35 + leadMargin,
+      );
+    }
+
+    targetSpeed = Math.min(maxSpeed, targetSpeed);
+
+    this.pathVelocity = accelerateToward(
+      this.pathVelocity,
+      targetSpeed,
+      playerBoosting ? ESCAPE_LEAD_BOOST_ACCEL_RATE : RAIL_ACCEL_RATE,
+      delta,
+    );
+
+    if (this.pathAlong > targetAlong) {
+      this.pathAlong = Math.max(
+        retreatMin,
+        this.pathAlong - this.pathVelocity * delta,
+      );
+    } else if (this.pathAlong < targetAlong) {
+      this.pathAlong = Math.min(
+        retreatMax,
+        this.pathAlong + this.pathVelocity * 0.35 * delta,
+      );
+    }
+
+    samplePath(this.pathRail, this.pathAlong, _railDesiredPos, _pathTangent);
+    _pathTangent.negate();
+    return {
+      position: _railDesiredPos,
+      tangent: _pathTangent,
+      influence: this.pathInfluence,
+    };
+  }
+
   _updatePathIntent(delta, playerPos, desiredPos) {
     if (!this.pathRail) return null;
+    if (this._isSaturnaliaEscapeLeadActive()) {
+      return this._buildEscapeLeadPathIntent(delta, playerPos);
+    }
+    if (this._isEarthDefensePathLeadActive()) {
+      return this._buildPathLeadAheadIntent(delta, playerPos);
+    }
     const distToFormationSq = this.mesh.position.distanceToSquared(desiredPos);
     const playerAlong = closestDistanceOnPath(this.pathRail, playerPos);
     if (distToFormationSq > FORMATION_RECOVERY_DISTANCE * FORMATION_RECOVERY_DISTANCE) {
@@ -325,7 +622,15 @@ export class AllyShip {
   }
 
   updateEngineGlow(delta) {
-    const target = Math.min(1, this.currentMoveSpeed / Math.max(1, this.speed * 1.5));
+    const pathLead =
+      this._isSaturnaliaEscapeLeadActive() ||
+      this._isEarthDefensePathLeadActive();
+    const playerBoosting =
+      pathLead &&
+      (this.game?.player?.isBoosting === true ||
+        this.game?.player?.overboostActive === true);
+    let target = Math.min(1, this.currentMoveSpeed / Math.max(1, this.speed * 1.5));
+    if (playerBoosting) target = Math.max(target, 0.92);
     this.engineGlowT += (target - this.engineGlowT) * Math.min(1, delta * 4);
     for (const mat of this.engineMaterials) {
       mat.color.lerpColors(_engineColorBlack, _engineTintIdle, this.engineGlowT);
@@ -347,9 +652,19 @@ export class AllyShip {
     this.targetScanTimer -= delta;
     this.recoveryTimer = Math.max(0, this.recoveryTimer - delta);
     this.currentMoveSpeed = 0;
-    if (this.targetScanTimer <= 0) {
+    const escapeLead = this._isSaturnaliaEscapeLeadActive();
+    const earthPathLead = this._isEarthDefensePathLeadActive();
+    const suppressCombat = escapeLead;
+    if (!suppressCombat && this.targetScanTimer <= 0) {
       this.targetScanTimer = this.targetScanInterval;
-      this._pickTarget(game.enemies);
+      if (earthPathLead) {
+        this._pickPathLeadCombatTarget(game.enemies, playerPos);
+      } else {
+        this._pickTarget(game.enemies);
+      }
+    }
+    if (earthPathLead) {
+      this._clearPathLeadTargetIfPassed(playerPos);
     }
 
     this._updateIdleOffset(delta);
@@ -359,7 +674,12 @@ export class AllyShip {
       .applyQuaternion(playerQuat);
     _desiredPos.copy(playerPos).add(_localOffset);
 
-    if (this.target?.mesh?.visible && this.target.health > 0) {
+    if (
+      !escapeLead &&
+      !earthPathLead &&
+      this.target?.mesh?.visible &&
+      this.target.health > 0
+    ) {
       _targetDir.subVectors(this.target.mesh.position, playerPos).normalize();
       _right.crossVectors(_targetDir, _upVec);
       if (_right.lengthSq() > 0.0001) {
@@ -450,13 +770,19 @@ export class AllyShip {
     }
     this.updateEngineGlow(delta);
 
-    const aimTarget = this.target?.mesh?.visible && this.target.health > 0
-      ? this.target.mesh.position
-      : pathIntent?.tangent?.lengthSq?.() > 0.0001 && pathIntent.influence > 0.35
-        ? _aimPos.copy(this.mesh.position).add(pathIntent.tangent)
-        : moveDist > 1
-        ? _blendDesiredPos
-        : null;
+    this._updateEngineTrails(game);
+
+    const aimTarget =
+      !suppressCombat &&
+      this.target?.mesh?.visible &&
+      this.target.health > 0
+        ? this.target.mesh.position
+        : pathIntent?.tangent?.lengthSq?.() > 0.0001 &&
+            pathIntent.influence > 0.35
+          ? _aimPos.copy(this.mesh.position).add(pathIntent.tangent)
+          : moveDist > 1
+            ? _blendDesiredPos
+            : null;
     if (aimTarget) {
       _lookMatrix.lookAt(this.mesh.position, aimTarget, _upVec);
       _targetQuat.setFromRotationMatrix(_lookMatrix);
@@ -472,7 +798,11 @@ export class AllyShip {
     }
     this.updateNameLabelOcclusion(delta, game.camera);
 
-    if (this.target?.mesh?.visible && this.target.health > 0) {
+    if (
+      !suppressCombat &&
+      this.target?.mesh?.visible &&
+      this.target.health > 0
+    ) {
       const distSq = this.mesh.position.distanceToSquared(this.target.mesh.position);
       if (this.fireCooldown <= 0 && distSq < this.assistRangeSq) {
         let firePos = this.mesh.position;
@@ -495,26 +825,12 @@ export class AllyShip {
         this.fireCooldown = 1 / this.fireRate;
       }
     }
-
-    if (this.trailsEffect && this.engineMarkers.length > 0) {
-      this.engineTrailTimer += delta;
-      while (this.engineTrailTimer >= this.engineTrailRate) {
-        this.engineTrailTimer -= this.engineTrailRate;
-        _shipForward
-          .set(0, 0, -1)
-          .applyQuaternion(this.mesh.quaternion)
-          .normalize();
-        for (const marker of this.engineMarkers) {
-          marker.getWorldPosition(_thrusterPos);
-          this.trailsEffect.emitEngineExhaust(_thrusterPos, _shipForward);
-        }
-      }
-    }
   }
 
   dispose(scene = this.scene) {
     if (this.disposed) return;
     this.disposed = true;
+    this._disposeEngineTrails();
     if (this.shipLight) {
       scene.remove(this.shipLight);
       this.shipLight.dispose?.();

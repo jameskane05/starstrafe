@@ -462,7 +462,7 @@ export class Player {
 
     const loader = new GLTFLoader();
     loader.load(
-      "./Heavy_EXT_02.glb",
+      "./gltf/Heavy_EXT_02.glb",
       (gltf) => applyExterior(gltf.scene),
       undefined,
       (err) => console.error("Exterior ref load error:", err),
@@ -700,7 +700,7 @@ export class Player {
   loadCockpit(scene) {
     const loader = new GLTFLoader();
     loader.load(
-      "./Heavy_INT_05.glb",
+      "./gltf/Heavy_INT_05.glb",
       (gltf) => {
         this.cockpit = gltf.scene;
         this.cockpit.scale.setScalar(1.0);

@@ -41,6 +41,8 @@ const innerMaterial = new THREE.MeshStandardMaterial({
 });
 
 export const PLAYER_SHIP_MODEL_INDEX = 100;
+export const SENTINEL_BOSS_MODEL_INDEX = 101;
+export const BARRIER_MODEL_INDEX = 102;
 
 function createDebrisOuterMaterial() {
   return new THREE.MeshStandardMaterial({
@@ -104,6 +106,7 @@ export function prefractureModels(shipModels) {
 
 export async function prefractureModelsAsync(shipModels) {
   if (!shipModels?.length) return;
+
   await yieldToMain();
   for (let i = 0; i < shipModels.length; i++) {
     try {
@@ -128,6 +131,29 @@ export function prefracturePlayerShip(model) {
   }
 }
 
+export function prefractureBossModel(
+  model,
+  index = SENTINEL_BOSS_MODEL_INDEX,
+) {
+  if (!model) return;
+  try {
+    prefractureModel(index, model);
+    console.log("[ShipDestruction] Pre-fractured boss model");
+  } catch (e) {
+    console.warn("Failed to pre-fracture boss model:", e);
+  }
+}
+
+export function prefractureBarrierModel(model) {
+  if (!model) return;
+  try {
+    prefractureModel(BARRIER_MODEL_INDEX, model);
+    console.log("[ShipDestruction] Pre-fractured barrier model");
+  } catch (e) {
+    console.warn("Failed to pre-fracture barrier model:", e);
+  }
+}
+
 function prefractureModel(index, model) {
   const geometries = [];
   let outerMat = null;
@@ -136,7 +162,20 @@ function prefractureModel(index, model) {
   model.traverse((child) => {
     if (!child.isMesh || !child.geometry) return;
     const n = child.name?.toLowerCase?.() || "";
-    if (n.startsWith("thruster_") || n.startsWith("weapon_")) return;
+    if (
+      n.startsWith("thruster_") ||
+      n.startsWith("weapon_") ||
+      n.startsWith("turret_") ||
+      n.includes("collider")
+    ) {
+      return;
+    }
+    const mats = Array.isArray(child.material)
+      ? child.material
+      : child.material
+        ? [child.material]
+        : [];
+    if (mats.some((m) => m?.name === "Collider_Invisible")) return;
 
     const src = child.geometry.index
       ? child.geometry.toNonIndexed()

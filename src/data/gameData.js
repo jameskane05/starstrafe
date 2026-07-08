@@ -36,7 +36,7 @@ export const LEVELS = {
     id: "saturnalia",
     name: "Saturnalia",
     description: "Futuristic interstellar hub",
-    preview: "/images/NewWorld-preview.png",
+    preview: "/images/saturnalia-preview.png",
   },
   redarena: {
     id: "redarena",
@@ -65,7 +65,9 @@ export const LEVELS = {
     id: "earthdefense",
     name: "Earth Defense",
     description: "Capital ship engagement above Earth",
-    preview: "/images/arena-preview.png",
+    preview: "/images/earth-defense-preview.png",
+    ambientColor: 0x7a8490,
+    ambientIntensity: 5,
     multiplayerSelectable: false,
   },
 };
@@ -182,8 +184,16 @@ export const initialState = {
   /** Charon: opening typewriter on black finished — unlocks `charonIntroEntering` autoplay. */
   charonIntroTextDone: false,
 
+  /** Saturnalia: opening typewriter on black finished — unlocks arrival dialog autoplay. */
+  saturnaliaIntroTextDone: false,
+
+  /** Earth Defense: opening typewriter on black finished. */
+  earthIntroTextDone: false,
+
   /** Saturnalia: chase drone escaped — station collapse VFX/shake active. */
   saturnaliaCollapseActive: false,
+  /** Saturnalia: player reached Trigger.009 before the destruction timer expired. */
+  saturnaliaEscapeSucceeded: false,
 
   debugSpawnActive: false,
 

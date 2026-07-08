@@ -673,11 +673,6 @@ class MenuManager {
     const gm = window.gameManager;
     const currentProfile = gm?.state?.performanceProfile || "medium";
     const profiles = ["low", "medium", "high", "max"];
-    const bloomUserSetting = gm?.getSetting("bloomEnabled");
-    const profileBloom = gm
-      ? getPerformanceProfile(currentProfile).rendering?.bloom
-      : true;
-    const bloomEnabled = bloomUserSetting ?? profileBloom ?? true;
     const antialiasingEnabled = gm?.getSetting("antialiasingEnabled") !== false;
 
     return `
@@ -694,13 +689,6 @@ class MenuManager {
         </p>
 
         <div class="keybind-row" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
-          <span class="keybind-action">BLOOM</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="bloom-toggle" ${bloomEnabled ? "checked" : ""}>
-            <span class="toggle-label">${bloomEnabled ? "ON" : "OFF"}</span>
-          </label>
-        </div>
-        <div class="keybind-row" style="grid-template-columns: 1fr 1fr;">
           <span class="keybind-action">ANTIALIASING (FXAA)</span>
           <label class="toggle-switch">
             <input type="checkbox" id="antialiasing-toggle" ${antialiasingEnabled ? "checked" : ""}>
@@ -941,24 +929,6 @@ class MenuManager {
         const gm = window.gameManager;
         if (gm) {
           gm.setPerformanceProfile(select.value);
-          const bloomUser = gm.getSetting("bloomEnabled");
-          if (bloomUser === undefined) {
-            const profile = gm.getPerformanceProfile();
-            gm.emit("bloom:changed", profile.rendering?.bloom ?? true);
-          }
-        }
-      });
-    }
-
-    const bloomToggle = document.getElementById("bloom-toggle");
-    if (bloomToggle) {
-      bloomToggle.addEventListener("change", () => {
-        const enabled = bloomToggle.checked;
-        const label = bloomToggle.parentElement.querySelector(".toggle-label");
-        if (label) label.textContent = enabled ? "ON" : "OFF";
-        if (window.gameManager) {
-          window.gameManager.setSetting("bloomEnabled", enabled);
-          window.gameManager.emit("bloom:changed", enabled);
         }
       });
     }

@@ -121,7 +121,7 @@ export function handleCollectiblePickup(game, data) {
       };
       NetworkManager.sendWeaponUnlocks?.(game.player.primaryWeaponUnlocks);
       game.setPrimaryWeapon?.(PRIMARY_WEAPONS.CHARGING_LASER);
-      showPickupMessage(game, "CHARGING LASER ACQUIRED");
+      showPickupMessage(game, "CHARGING CANNON ACQUIRED");
     } else if (data.type === "gatling") {
       unlockPrimaryWeapon(PRIMARY_WEAPONS.GATLING);
       game.player.primaryWeaponUnlocks = {

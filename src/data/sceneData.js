@@ -254,7 +254,7 @@ export const sceneObjects = {
   earthdefenseLevel: {
     id: "earthdefenseLevel",
     type: "splat",
-    path: "./splats/earth/EarthDefenseTest2-lod.rad",
+    path: "./splats/earth/earth-final-3-lod.rad",
     description: "Earth Defense environment gaussian splat with LOD",
     position: { x: 0, y: -10, z: 0 },
     rotation: { x: 180, y: 0, z: 0 },

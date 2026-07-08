@@ -36,6 +36,7 @@ class ProceduralAudio {
     this._duckRampDuration = 1;
     this._duckRampElapsed = 0;
     this._duckRampActive = false;
+    this._loadingSuppressed = false;
     
     // Listener position (camera position) for spatial audio
     this.listenerPosition = { x: 0, y: 0, z: 0 };
@@ -147,8 +148,23 @@ class ProceduralAudio {
 
   _syncMasterGain() {
     if (this.masterGain) {
-      this.masterGain.gain.value = this.sfxVolume * this._dialogDuckMul;
+      this.masterGain.gain.value = this._loadingSuppressed
+        ? 0
+        : this.sfxVolume * this._dialogDuckMul;
     }
+  }
+
+  setLoadingSuppressed(active) {
+    this._loadingSuppressed = active === true;
+    if (this._loadingSuppressed) {
+      this.shieldRechargeStop();
+      this.boosterRechargeStop();
+    }
+    this._syncMasterGain();
+  }
+
+  isLoadingSuppressed() {
+    return this._loadingSuppressed === true;
   }
 
   /**

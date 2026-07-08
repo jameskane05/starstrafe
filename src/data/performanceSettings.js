@@ -40,7 +40,7 @@ export const PERFORMANCE_PROFILES = {
     rendering: {
       pixelRatio: 1,
       shadows: false,
-      bloom: false,
+      bloom: true,
       enemyLights: false,
       projectileSplatLights: true,
       toneMapping: true,

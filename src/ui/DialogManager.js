@@ -592,6 +592,12 @@ export class DialogManager {
         });
       }
     }
+    if (dialog.id === "earthSignatureDetected") {
+      this.gameManager.emit?.("dialog:missionMilestone", {
+        dialogId: dialog.id,
+        event: "earthTrackChargingCannon",
+      });
+    }
     const rawCaptions = dialog.captions || [];
     const preparedCaptions = this._prepareCaptions(rawCaptions, dialog);
     this.captions = this._normalizeCaptions(preparedCaptions);

@@ -70,8 +70,18 @@ import {
   waitForFirstViewReady,
 } from "./gameFirstViewLoading.js";
 import { applyAuthoredPlayerSpawn } from "../utils/playerSpawnOrientation.js";
-import { createPathRailFromScene } from "../utils/pathRail.js";
+import { createPathRailFromScene, closestDistanceOnPath, samplePath } from "../utils/pathRail.js";
 import { getPrimaryWeaponUnlocks } from "./weaponUnlocks.js";
+
+const _allySpawnPos = new THREE.Vector3();
+const _allySpawnTangent = new THREE.Vector3();
+const ALLY_ESCORT_MISSIONS = {
+  saturnalia: "saturnaliaLevelData",
+  "capital-ship-earth-defense": "earthdefenseLevelData",
+};
+const ALLY_PATH_LEAD_SPAWN_AHEAD = 24;
+import { stopCharonEscapeSequenceForLevelChange } from "./charonEscapeSequence.js";
+import { stopSaturnaliaCollapseForLevelChange } from "./saturnaliaCollapseSequence.js";
 
 function clearAlliedShips(game) {
   if (!game.alliedShips) game.alliedShips = [];
@@ -81,9 +91,65 @@ function clearAlliedShips(game) {
   game.alliedShips.length = 0;
 }
 
+function unloadCampaignLevelAssets(game, levelId) {
+  for (const suffix of ["Level", "LevelData"]) {
+    const id = `${levelId}${suffix}`;
+    if (game.sceneManager?.hasObject?.(id)) {
+      game.sceneManager.removeObject(id);
+    }
+  }
+}
+
+export async function handoffSoloCampaign(game, missionId, levelId) {
+  stopCharonEscapeSequenceForLevelChange(game);
+  stopSaturnaliaCollapseForLevelChange(game);
+  cleanupDestruction(game.scene);
+  gameEnemies.resetSoloCampaignEnemyState(game);
+  clearAlliedShips(game);
+
+  for (const list of [
+    game.projectiles,
+    game.missiles,
+    game.explosions,
+  ]) {
+    if (!list?.length) continue;
+    for (let i = list.length - 1; i >= 0; i--) {
+      list[i]?.dispose?.();
+    }
+    list.length = 0;
+  }
+
+  game.missionManager?.stopMission();
+  game.levelTriggerManager?.resetSession?.();
+
+  const prevLevel = game.gameManager?.getState?.()?.currentLevel;
+  if (prevLevel && prevLevel !== levelId) {
+    unloadCampaignLevelAssets(game, prevLevel);
+  }
+  unloadCampaignLevelAssets(game, levelId);
+
+  game.levelLoadPromise = null;
+  game._levelSpawnCache = null;
+  game.trainingGoalPoints = [];
+  game.trainingGoalQuaternions = [];
+  game._saturnaliaChaseGpuWarmed = false;
+  game.player = null;
+
+  game.pendingMissionConfig = { missionId, levelId };
+  game.gameManager.setState({
+    currentLevel: levelId,
+    missionLevelId: levelId,
+    isRunning: false,
+  });
+
+  await startSoloDebug(game);
+}
+
 function spawnAlliedEscort(game, missionConfig = null) {
   clearAlliedShips(game);
-  if (missionConfig?.missionId !== "saturnalia") return;
+  const missionId = missionConfig?.missionId;
+  const levelDataId = ALLY_ESCORT_MISSIONS[missionId];
+  if (!levelDataId) return;
   const allyPreset = game.gameManager.getDifficultyPreset?.()?.ally;
   if (allyPreset?.enabled === false) return;
   const playerPos = game.xrManager?.isPresenting && game.xrManager.rig
@@ -92,10 +158,20 @@ function spawnAlliedEscort(game, missionConfig = null) {
   const offset = new THREE.Vector3(8, 3, -18).applyQuaternion(
     game.camera.quaternion,
   );
-  const spawnPos = playerPos.clone().add(offset);
   const pathRail = createPathRailFromScene(
-    game.sceneManager?.getObject?.("saturnaliaLevelData"),
+    game.sceneManager?.getObject?.(levelDataId),
   );
+  let spawnPos = playerPos.clone().add(offset);
+  if (pathRail && missionId === "capital-ship-earth-defense") {
+    const playerAlong = closestDistanceOnPath(pathRail, playerPos);
+    samplePath(
+      pathRail,
+      Math.min(pathRail.total, playerAlong + ALLY_PATH_LEAD_SPAWN_AHEAD),
+      _allySpawnPos,
+      _allySpawnTangent,
+    );
+    spawnPos.copy(_allySpawnPos);
+  }
   const enableLights =
     game.gameManager.getPerformanceSetting("rendering", "enemyLights") ?? true;
   const ally = new AllyShip(
@@ -105,7 +181,6 @@ function spawnAlliedEscort(game, missionConfig = null) {
     game._levelBounds,
     {
       enableLights,
-      trailsEffect: game.trailsEffect,
       game,
       fireRate: allyPreset?.fireRate ?? 1.1,
       damage: allyPreset?.damage ?? 14,
@@ -113,6 +188,11 @@ function spawnAlliedEscort(game, missionConfig = null) {
       pathRail,
     },
   );
+  if (pathRail && missionId === "capital-ship-earth-defense") {
+    ally.pathAlong = closestDistanceOnPath(pathRail, spawnPos);
+    ally.pathRecovery = true;
+    ally.pathInfluence = 1;
+  }
   game.alliedShips.push(ally);
 }
 
@@ -316,17 +396,28 @@ export async function startSoloDebug(game) {
     const debugSpawn = Boolean(
       game.gameManager?.getState?.()?.debugSpawnActive,
     );
-    let charonIntroMod = null;
-    if (missionId === "charon" && !debugSpawn) {
-      charonIntroMod = await import("./charonIntroSequence.js");
-      charonIntroMod.mountCharonOpeningOverlayBlack();
+    let introMod = null;
+    if (!debugSpawn) {
+      if (missionId === "charon") {
+        introMod = await import("./charonIntroSequence.js");
+        introMod.mountCharonOpeningOverlayBlack();
+      } else if (missionId === "saturnalia") {
+        introMod = await import("./saturnaliaIntroSequence.js");
+        introMod.mountSaturnaliaOpeningOverlayBlack();
+      }
     }
     hideFirstViewLoading();
     if (missionId === "charon") {
       if (debugSpawn) {
         game.gameManager.setState({ charonIntroTextDone: true });
-      } else {
-        await charonIntroMod.runCharonIntroTypewriterAndFade(game);
+      } else if (introMod) {
+        await introMod.runCharonIntroTypewriterAndFade(game);
+      }
+    } else if (missionId === "saturnalia") {
+      if (debugSpawn) {
+        game.gameManager.setState({ saturnaliaIntroTextDone: true });
+      } else if (introMod) {
+        await introMod.runSaturnaliaIntroTypewriterAndFade(game);
       }
     }
   })();
@@ -386,8 +477,17 @@ async function applyCockpitEnvironmentForCurrentLevel(game) {
   applyEnvironmentMapToObject(game.player?.cockpit, envMap, intensity);
 }
 
+function enemyShipAssetSourceKey() {
+  return `legacy:${shipModels.length}`;
+}
+
 export async function ensureEnemyShipAssetsLoaded(game, loadingTracker = null) {
-  if (game.enemyShipAssetsPromise) {
+  await loadShipModels();
+  const sourceKey = enemyShipAssetSourceKey();
+  if (
+    game.enemyShipAssetsPromise &&
+    game._enemyShipAssetSourceKey === sourceKey
+  ) {
     await game.enemyShipAssetsPromise;
     await applyEnemyShipEnvironmentForCurrentLevel(game);
     prewarmShipDestructionDebrisMaterials(game);
@@ -397,8 +497,8 @@ export async function ensureEnemyShipAssetsLoaded(game, loadingTracker = null) {
     loadingTracker?.completeTask("solo-enemy-assets");
     return;
   }
+  game._enemyShipAssetSourceKey = sourceKey;
   game.enemyShipAssetsPromise = (async () => {
-    await loadShipModels();
     await prefractureModelsAsync(shipModels);
     await reapplyShipMaterials(shipModels);
     await applyEnemyShipEnvironmentForCurrentLevel(game);

@@ -59,10 +59,17 @@ export class Game {
     this.player = null;
     this.level = null;
     this.enemies = [];
+    this.enemyPortals = [];
     this.alliedShips = [];
     this.spawnPoints = [];
     /** Parallel to spawnPoints: true for `Enemy.* - Heavy` authored spawns. */
     this.enemySpawnHeavyFlags = null;
+    /** Parallel to spawnPoints: true for `EnemyPortal*` authored spawns. */
+    this.enemySpawnPortalFlags = null;
+    /** Parallel to spawnPoints: world scale from authored Enemy markers (default 1). */
+    this.enemySpawnScales = null;
+    /** Parallel to spawnPoints: final ship scale (random × authored, stable per spawn). */
+    this.enemySpawnShipScales = null;
     this.playerSpawnPoints = [];
     this.playerSpawnMarkerQuaternions = [];
     this.enemyRespawnQueue = [];
@@ -281,8 +288,13 @@ export class Game {
     gameNetworkProjectiles.showPickupMessage(this, text);
   }
 
-  showMissionCompleteOverlay() {
-    gameInGameUI.showMissionCompleteOverlay(this);
+  showMissionCompleteOverlay(options = {}) {
+    gameInGameUI.showMissionCompleteOverlay(this, options);
+  }
+
+  async continueToSaturnaliaCampaign() {
+    const { handoffSoloCampaign } = await import("./gameSolo.js");
+    return handoffSoloCampaign(this, "saturnalia", "saturnalia");
   }
 
   spawnNetworkProjectile(id, data) {
@@ -376,8 +388,8 @@ export class Game {
     gameEnemies.checkMissilePickups(this, playerPos, delta);
   }
 
-  spawnAtPoint(pos) {
-    gameEnemies.spawnAtPoint(this, pos);
+  spawnAtPoint(pos, spawnOpts = {}) {
+    return gameEnemies.spawnAtPoint(this, pos, spawnOpts);
   }
 
   tickEnemyRespawns(delta) {
@@ -467,7 +479,11 @@ export class Game {
 
   setPrimaryFireHeld(held) {
     const nextHeld = held === true;
+    const wasHeld = this._primaryFireHeld === true;
     this._primaryFireHeld = nextHeld;
+    if (nextHeld && !wasHeld) {
+      this.firePlayerWeapon();
+    }
     if (!nextHeld) {
       gameCombat.cancelChargingLaser(this);
     }
@@ -475,7 +491,14 @@ export class Game {
 
   updatePrimaryFire(delta) {
     gameCombat.updatePrimaryWeaponState(this, delta);
-    if (this._primaryFireHeld) this.firePlayerWeapon();
+    if (!this._primaryFireHeld) return;
+    const selected = this.getSelectedPrimaryWeapon();
+    if (
+      selected === PRIMARY_WEAPONS.GATLING ||
+      selected === PRIMARY_WEAPONS.CHARGING_LASER
+    ) {
+      this.firePlayerWeapon();
+    }
   }
 
   getSelectedPrimaryWeapon() {

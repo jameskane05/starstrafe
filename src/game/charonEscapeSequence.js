@@ -16,6 +16,10 @@ import {
   clearSplatShockwave,
 } from "./charonReactorCore.js";
 import {
+  hideMissionCompleteOverlay,
+  leaveMatch,
+} from "./gameInGameUI.js";
+import {
   mountCharonOutroOverlayBlack,
   runCharonOutroTypewriterAndFade,
 } from "./charonOutroSequence.js";
@@ -362,11 +366,32 @@ function completeCharonReactorEscape(game) {
   mountCharonOutroOverlayBlack();
   void (async () => {
     try {
-      await runCharonOutroTypewriterAndFade();
+      await runCharonOutroTypewriterAndFade({ retainBlackScreen: true });
     } catch (e) {
       console.warn("[Charon] Outro sequence failed:", e);
     }
     game.missionManager?.reportEvent?.("charonEscapeComplete", {});
+    game.missionManager?.completeMission("Charon escaped", {
+      stepTitle: "Charon",
+      suppressCompleteMessage: true,
+    });
+    game.showMissionCompleteOverlay?.({
+      subtitle: "Charon",
+      title: "Mission complete",
+      continueLabel: "Continue to Saturnalia",
+      solidBlackBackdrop: true,
+      zIndex: 3200,
+      onContinue: async () => {
+        hideMissionCompleteOverlay(game);
+        document.getElementById("charon-outro-overlay")?.remove();
+        await game.continueToSaturnaliaCampaign?.();
+      },
+      onMenu: async () => {
+        hideMissionCompleteOverlay(game);
+        document.getElementById("charon-outro-overlay")?.remove();
+        leaveMatch(game);
+      },
+    });
   })();
 }
 

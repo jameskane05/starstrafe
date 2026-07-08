@@ -21,6 +21,10 @@ import {
   cloneMissileModel,
   preloadMissileModel,
 } from "../cache/missileModelCache.js";
+import {
+  cloneGatlingGunModel,
+  preloadGatlingGunModel,
+} from "../cache/gatlingGunModelCache.js";
 
 const MISSILE_COLOR = 0xff6600;
 const LASER_UPGRADE_COLOR = 0x00ff44;
@@ -28,6 +32,8 @@ const CHARGING_LASER_COLOR = 0xff4a12;
 const GATLING_COLOR = 0xffcc33;
 const PICKUP_MISSILE_LENGTH = 1.8;
 const GLOW_MIN_SCALE = 0.001;
+const GATLING_RING_SCALE = 3;
+const GATLING_GLOW_SCALE = 3.1;
 
 export class Collectible {
   constructor(scene, data, lightPool = null) {
@@ -36,11 +42,11 @@ export class Collectible {
     this.type = data.type;
     this.lightPool = lightPool;
     this.disposed = false;
-    
+
     this.group = new THREE.Group();
     this.group.position.set(data.x, data.y, data.z);
     this.baseY = data.y;
-    
+
     if (this.type === "missile") {
       this.createMissilePickup();
     } else if (this.type === "laser_upgrade") {
@@ -48,9 +54,9 @@ export class Collectible {
     } else if (this.type === "charging_laser") {
       this.createWeaponPickup(CHARGING_LASER_COLOR, true);
     } else if (this.type === "gatling") {
-      this.createWeaponPickup(GATLING_COLOR, false);
+      this.createGatlingPickup();
     }
-    
+
     scene.add(this.group);
   }
 
@@ -94,10 +100,10 @@ export class Collectible {
       metalness: 0.4,
       roughness: 0.2,
     });
-    
+
     this.body = new THREE.Mesh(cylGeo, cylMat);
     this.group.add(this.body);
-    
+
     // Inner core glow
     const coreGeo = new THREE.CylinderGeometry(0.25, 0.25, 1.6, 8);
     const coreMat = new THREE.MeshBasicMaterial({
@@ -107,7 +113,7 @@ export class Collectible {
     });
     this.core = new THREE.Mesh(coreGeo, coreMat);
     this.group.add(this.core);
-    
+
     // Outer glow
     const glowGeo = new THREE.SphereGeometry(1.0, 16, 16);
     const glowMat = new THREE.MeshBasicMaterial({
@@ -146,9 +152,11 @@ export class Collectible {
       opacity: 0.72,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      depthTest: false,
       toneMapped: false,
     });
     this.ring = new THREE.Mesh(ringGeo, ringMat);
+    this.ring.renderOrder = 95;
     this.group.add(this.ring);
 
     const glowGeo = new THREE.SphereGeometry(1.15, 16, 16);
@@ -158,9 +166,11 @@ export class Collectible {
       opacity: 0.24,
       side: THREE.BackSide,
       blending: THREE.AdditiveBlending,
+      depthTest: false,
       toneMapped: false,
     });
     this.glow = new THREE.Mesh(glowGeo, glowMat);
+    this.glow.renderOrder = 94;
     this.glowBaseScale = 1.1;
     this.glow.scale.setScalar(GLOW_MIN_SCALE);
     this.group.add(this.glow);
@@ -168,16 +178,47 @@ export class Collectible {
     this.floatOffset = Math.random() * Math.PI * 2;
   }
 
+  createGatlingPickup() {
+    this.createWeaponPickup(GATLING_COLOR, false);
+    this.ring?.scale.setScalar(GATLING_RING_SCALE);
+    this.glowBaseScale = GATLING_GLOW_SCALE;
+    const applyModel = (model) => {
+      if (this.disposed || !model) return;
+      if (this.body) {
+        this.group.remove(this.body);
+        this.body.traverse((child) => {
+          child.geometry?.dispose?.();
+          if (Array.isArray(child.material)) {
+            child.material.forEach((material) => material?.dispose?.());
+          } else {
+            child.material?.dispose?.();
+          }
+        });
+      }
+      this.body = model;
+      this.body.rotation.set(0, 0, 0);
+      this.group.add(this.body);
+    };
+    const readyModel = cloneGatlingGunModel();
+    if (readyModel) {
+      applyModel(readyModel);
+    } else {
+      preloadGatlingGunModel()
+        .then(() => applyModel(cloneGatlingGunModel()))
+        .catch(() => {});
+    }
+  }
+
   update(delta, serverRotY = null) {
     if (this.disposed) return;
-    
+
     // Rotate
     if (serverRotY !== null) {
       this.group.rotation.y = serverRotY;
     } else {
       this.group.rotation.y += delta * 2;
     }
-    
+
     const time = performance.now() * 0.001 + this.floatOffset;
     this.group.position.y = this.baseY + Math.sin(time * 2) * 0.3;
 
@@ -220,12 +261,16 @@ export class Collectible {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    
+
     this.group.traverse((child) => {
       if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
+      if (Array.isArray(child.material)) {
+        child.material.forEach((material) => material?.dispose?.());
+      } else if (child.material) {
+        child.material.dispose();
+      }
     });
-    
+
     this.scene.remove(this.group);
   }
 }

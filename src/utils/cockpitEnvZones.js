@@ -5,6 +5,7 @@ import {
   getEnvironmentMapConfig,
   loadEnvironmentMap,
   setEnvironmentMapRotationForObject,
+  ENEMY_BOT_ENVMAPS_ENABLED,
 } from "./envMapAssets.js";
 
 const ENV_ZONE_PREFIX = "EnvMap-";
@@ -23,6 +24,16 @@ const _boxSize = new THREE.Vector3();
 const _cameraForward = new THREE.Vector3();
 const _cameraRight = new THREE.Vector3();
 
+function getObjectEnvSamplePoint(object, out) {
+  const sample = object?.userData?.envZoneSampleObject;
+  if (sample?.getWorldPosition) {
+    sample.getWorldPosition(out);
+    return out;
+  }
+  object.getWorldPosition(out);
+  return out;
+}
+
 function envMapIdFromZoneName(name) {
   if (!name?.startsWith(ENV_ZONE_PREFIX)) return null;
   return name.slice(ENV_ZONE_PREFIX.length).trim().toLowerCase();
@@ -39,7 +50,7 @@ function findEnvMapZones(game) {
     const envMapId = envMapIdFromZoneName(object.name);
     if (!envMapId) return;
 
-    const config = getEnvironmentMapConfig(envMapId);
+    const config = getEnvironmentMapConfig(envMapId, levelId);
     if (!config) {
       console.warn(`[CockpitEnvZones] No env map config for "${envMapId}"`);
       return;
@@ -49,7 +60,7 @@ function findEnvMapZones(game) {
     if (_box.isEmpty()) return;
     _box.getSize(_boxSize);
     zones.push({
-      id: envMapId,
+      id: config.id,
       name: object.name,
       bounds: _box.clone(),
       volume: _boxSize.x * _boxSize.y * _boxSize.z,
@@ -64,24 +75,22 @@ function findEnvMapZones(game) {
   return zones;
 }
 
+function zoneAmbientScale(env) {
+  return env?.lighting?.intensityScale ?? env?.config?.ambientIntensityScale ?? 1;
+}
+
 function applyAmbientBlend(game, fromEnv, toEnv, factor) {
   const ambient = game.lightManager?.getLight?.("ambient");
-  if (!ambient || !fromEnv?.lighting?.ambientColor) return;
-  if (!toEnv?.lighting?.ambientColor) {
-    applyEnvironmentAmbientToLight(ambient, fromEnv, fromEnv.config);
-    return;
-  }
+  if (!ambient) return;
 
-  ambient.color
-    .copy(fromEnv.lighting.ambientColor)
-    .lerp(toEnv.lighting.ambientColor, factor);
-  const fromScale =
-    fromEnv.config?.ambientIntensityScale ?? fromEnv.lighting.intensityScale;
-  const toScale =
-    toEnv.config?.ambientIntensityScale ?? toEnv.lighting.intensityScale;
+  const fromColor = fromEnv?.lighting?.ambientColor;
+  if (!fromColor) return;
+
+  const toColor = toEnv?.lighting?.ambientColor ?? fromColor;
+  ambient.color.copy(fromColor).lerp(toColor, factor);
   ambient.intensity =
     game._envZoneBaseAmbientIntensity *
-    THREE.MathUtils.lerp(fromScale, toScale, factor);
+    THREE.MathUtils.lerp(zoneAmbientScale(fromEnv), zoneAmbientScale(toEnv), factor);
 }
 
 function findZoneAtPoint(state, point) {
@@ -121,15 +130,20 @@ export async function initializeCockpitEnvZones(game) {
   }
 
   const loadedById = new Map();
+  const zonesByEnvId = new Map();
+  for (const zone of zones) {
+    if (!zonesByEnvId.has(zone.id)) zonesByEnvId.set(zone.id, zone);
+  }
   await Promise.all(
-    zones.map(async (zone) => {
-      loadedById.set(zone.id, await loadZoneEnv(game, zone));
+    [...zonesByEnvId.entries()].map(async ([envId, zone]) => {
+      loadedById.set(envId, await loadZoneEnv(game, zone));
     }),
   );
 
   game.camera.getWorldPosition(_point);
   const initialZone =
     zones.find((zone) => zone.bounds.containsPoint(_point)) ??
+    zones.find((zone) => zone.id === "earth-command") ??
     zones.find((zone) => zone.id === "gold") ??
     zones[0];
   const currentEnv = loadedById.get(initialZone.id);
@@ -151,6 +165,13 @@ export async function initializeCockpitEnvZones(game) {
   await game.player?.cockpitLoaded?.catch?.(() => {});
   applyBlendedEnvironmentMapToObject(game.player?.cockpit, currentEnv, currentEnv, 1);
   applyAmbientBlend(game, currentEnv, currentEnv, 1);
+  const bossMesh = game._earthBossFight?.enemy?.mesh;
+  if (bossMesh) applyObjectEnvZoneBlend(bossMesh, game);
+  const boss = game._earthBossFight;
+  if (boss?.cable?.mesh && boss.envZoneSample) {
+    boss.cable.mesh.userData.envZoneSampleObject = boss.envZoneSample;
+    applyObjectEnvZoneBlend(boss.cable.mesh, game);
+  }
   return game.cockpitEnvZones;
 }
 
@@ -213,7 +234,7 @@ function updateCockpitZone(game, state, delta) {
 function updateObjectZoneBlend(object, state, delta) {
   if (!object?.visible) return;
 
-  object.getWorldPosition(_objectPoint);
+  getObjectEnvSamplePoint(object, _objectPoint);
   let objectState = state.objectStates.get(object);
   const zone =
     findZoneAtPoint(state, _objectPoint) ??
@@ -260,6 +281,12 @@ function updateObjectZoneBlend(object, state, delta) {
   );
 }
 
+export function applyObjectEnvZoneBlend(object, game) {
+  const state = game?.cockpitEnvZones;
+  if (!state || !object) return;
+  updateObjectZoneBlend(object, state, TRANSITION_SECONDS);
+}
+
 export function updateObjectEnvZoneBlend(object, game, delta = TRANSITION_SECONDS) {
   const state = game?.cockpitEnvZones;
   if (!state) return;
@@ -267,21 +294,41 @@ export function updateObjectEnvZoneBlend(object, game, delta = TRANSITION_SECOND
 }
 
 function updateBotEnvZones(game, state, delta) {
-  for (const enemy of game.enemies ?? []) {
-    updateObjectZoneBlend(enemy.mesh, state, delta);
-  }
+  // Allied NPC keeps zone-blended env maps; enemy bots are disabled to avoid a
+  // material recompile per spawned/streamed bot (ENEMY_BOT_ENVMAPS_ENABLED).
   for (const ally of game.alliedShips ?? []) {
     updateObjectZoneBlend(ally.mesh, state, delta);
+  }
+
+  const boss = game._earthBossFight;
+  if (boss?.envZoneSample && boss.enemy?.mesh && !boss.dead) {
+    boss.envZoneSample.position.copy(boss.sphere.center);
+    boss.enemy.mesh.userData.envZoneSampleObject = boss.envZoneSample;
+    updateObjectZoneBlend(boss.enemy.mesh, state, delta);
+    if (boss.cable?.mesh) {
+      boss.cable.mesh.userData.envZoneSampleObject = boss.envZoneSample;
+      updateObjectZoneBlend(boss.cable.mesh, state, delta);
+    }
+  }
+
+  const chaseEnemy = game._saturnaliaChase?.enemy;
+  if (chaseEnemy?.mesh && !chaseEnemy.disposed) {
+    if (chaseEnemy._portalDroneModelRoot) {
+      chaseEnemy.mesh.userData.envZoneSampleObject =
+        chaseEnemy._portalDroneModelRoot;
+    }
+    updateObjectZoneBlend(chaseEnemy.mesh, state, delta);
+  }
+
+  if (!ENEMY_BOT_ENVMAPS_ENABLED) return;
+  for (const enemy of game.enemies ?? []) {
+    updateObjectZoneBlend(enemy.mesh, state, delta);
   }
   for (const enemy of game._missionEnemyPool ?? []) {
     updateObjectZoneBlend(enemy.mesh, state, delta);
   }
   for (const entry of game._networkBotPool ?? []) {
     updateObjectZoneBlend(entry.mesh, state, delta);
-  }
-  const chaseEnemy = game._saturnaliaChase?.enemy;
-  if (chaseEnemy && !chaseEnemy.disposed) {
-    updateObjectZoneBlend(chaseEnemy.mesh, state, delta);
   }
 }
 

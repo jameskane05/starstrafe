@@ -17,8 +17,66 @@
 
 import * as THREE from "three";
 import NetworkManager from "../network/NetworkManager.js";
-import { applyAuthoredPlayerSpawn } from "../utils/playerSpawnOrientation.js";
+import {
+  setCameraQuaternionFromSpawnMarker,
+} from "../utils/playerSpawnOrientation.js";
+import { checkSphereCollision, isInsideMesh } from "../physics/Physics.js";
 import { refreshCockpitVisibility } from "./gameInGameUI.js";
+
+const SOLO_RESPAWN_MIN_DIST = 10;
+const SOLO_RESPAWN_MAX_DIST = 20;
+const SOLO_RESPAWN_WALL_MARGIN = 2.5;
+const _respawnOffset = new THREE.Vector3();
+
+export function isSoloPlayerCombatInactive(game) {
+  return (
+    !game.isMultiplayer &&
+    (game._soloRespawning || (game.player?.health ?? 0) <= 0)
+  );
+}
+
+function getPlayerWorldPosition(game, out) {
+  if (game.xrManager?.isPresenting && game.xrManager.rig) {
+    return out.copy(game.xrManager.rig.position);
+  }
+  return out.copy(game.camera.position);
+}
+
+function isValidSoloRespawnPoint(x, y, z, clearance) {
+  return isInsideMesh(x, y, z) && !checkSphereCollision(x, y, z, clearance);
+}
+
+function pickSoloRespawnPosition(origin, game) {
+  const clearance =
+    (game.player?.collisionRadius ?? 1.5) + SOLO_RESPAWN_WALL_MARGIN;
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist =
+      SOLO_RESPAWN_MIN_DIST +
+      Math.random() * (SOLO_RESPAWN_MAX_DIST - SOLO_RESPAWN_MIN_DIST);
+    const yOff = (Math.random() - 0.5) * 4;
+    const x = origin.x + Math.cos(angle) * dist;
+    const z = origin.z + Math.sin(angle) * dist;
+    const y = origin.y + yOff;
+    if (isValidSoloRespawnPoint(x, y, z, clearance)) {
+      return _respawnOffset.set(x, y, z).clone();
+    }
+  }
+
+  if (isValidSoloRespawnPoint(origin.x, origin.y, origin.z, clearance)) {
+    return origin.clone();
+  }
+  return origin.clone();
+}
+
+function setPlayerWorldPosition(game, position) {
+  if (game.xrManager?.isPresenting && game.xrManager.rig) {
+    game.xrManager.rig.position.copy(position);
+  } else {
+    game.camera.position.copy(position);
+  }
+}
 
 export function showDamageIndicator(game, hitWorldPos) {
   const camPos = game.camera.position.clone();
@@ -94,6 +152,18 @@ export function handleLocalPlayerDeath(game) {
 export function startSoloRespawn(game) {
   game._soloRespawning = true;
 
+  if (!game._soloDeathWorldPos) {
+    game._soloDeathWorldPos = new THREE.Vector3();
+  }
+  getPlayerWorldPosition(game, game._soloDeathWorldPos);
+
+  for (let i = 0; i < game.enemies.length; i++) {
+    const enemy = game.enemies[i];
+    enemy.state = "wander";
+    enemy.hasLOS = false;
+    enemy._pickNewWaypoint?.();
+  }
+
   const overlay = document.getElementById("respawn-overlay");
   overlay.classList.add("active");
   refreshCockpitVisibility(game);
@@ -120,35 +190,49 @@ export function finishSoloRespawn(game) {
   game.player.missiles = game.player.maxMissiles;
   game.player.lastDamageTime = 0;
 
-  const ck = game._lastTriggerRespawnWorldPos;
-  if (ck) {
-    if (game.xrManager?.isPresenting && game.xrManager.rig) {
-      game.xrManager.rig.position.copy(ck);
-      game.xrManager.rig.quaternion.setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        (-70 * Math.PI) / 180,
+  const savedQuat = game.camera.quaternion.clone();
+  let origin = game._soloDeathWorldPos;
+  let authoredSpawnIndex = -1;
+
+  if (!origin) {
+    const ck = game._lastTriggerRespawnWorldPos;
+    if (ck) {
+      origin = ck;
+    } else if (game.playerSpawnPoints?.length > 0) {
+      authoredSpawnIndex = Math.floor(
+        Math.random() * game.playerSpawnPoints.length,
       );
-      game.camera.quaternion.identity();
+      origin = game.playerSpawnPoints[authoredSpawnIndex];
     } else {
-      game.camera.position.copy(ck);
+      origin = game.camera.position;
+    }
+  }
+
+  const respawnPos = pickSoloRespawnPosition(origin, game);
+  setPlayerWorldPosition(game, respawnPos);
+
+  if (authoredSpawnIndex >= 0) {
+    const mq = game.playerSpawnMarkerQuaternions?.[authoredSpawnIndex];
+    if (mq) {
+      setCameraQuaternionFromSpawnMarker(game.camera.quaternion, mq);
+    } else {
       game.camera.quaternion.setFromAxisAngle(
         new THREE.Vector3(0, 1, 0),
         (-70 * Math.PI) / 180,
       );
     }
-    game.player?.velocity?.set(0, 0, 0);
-  } else if (game.playerSpawnPoints?.length > 0) {
-    applyAuthoredPlayerSpawn(
-      game,
-      Math.floor(Math.random() * game.playerSpawnPoints.length),
-    );
+    if (game.xrManager?.isPresenting) {
+      game.camera.quaternion.identity();
+    }
   } else {
-    game.camera.position.set(0, 0, 0);
-    game.camera.quaternion.setFromAxisAngle(
-      new THREE.Vector3(0, 1, 0),
-      -Math.PI / 2,
-    );
+    game.camera.quaternion.copy(savedQuat);
+    if (game.xrManager?.isPresenting) {
+      game.camera.quaternion.identity();
+    }
   }
+
+  game.player?.velocity?.set(0, 0, 0);
+  game._soloDeathWorldPos = null;
 
   game._hudLast.health = null;
   game._hudLast.missiles = null;

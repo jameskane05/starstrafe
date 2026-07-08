@@ -5,7 +5,15 @@ const ENEMY_ENV_MAPS_BY_LEVEL = {
     id: "gold",
     path: "envmaps/gold",
     intensity: 4,
-    ambientIntensityScale: 1,
+    ambientColor: [1, 0.5072, 0.2677],
+    ambientIntensityScale: 1.2872,
+  },
+  earthdefense: {
+    id: "black",
+    path: "envmaps/black",
+    intensity: 3,
+    ambientColor: [1, 0.504, 0.2772],
+    ambientIntensityScale: 1.02,
   },
 };
 
@@ -14,32 +22,98 @@ const ENV_MAPS_BY_ID = {
     id: "black",
     path: "envmaps/black",
     intensity: 4,
-    ambientIntensityScale: 1,
+    ambientColor: [1, 0.504, 0.2772],
+    ambientIntensityScale: 0.8894,
   },
   bluegreen: {
     id: "bluegreen",
     path: "envmaps/bluegreen",
     intensity: 4,
-    ambientIntensityScale: 1,
+    ambientColor: [0.2163, 0.7642, 1],
+    ambientIntensityScale: 1.457,
   },
   gold: ENEMY_ENV_MAPS_BY_LEVEL.saturnalia,
   green: {
     id: "green",
     path: "envmaps/green",
     intensity: 4,
-    ambientIntensityScale: 1,
+    ambientColor: [0.1728, 1, 0.0166],
+    ambientIntensityScale: 1.5218,
   },
   red: {
     id: "red",
     path: "envmaps/red",
     intensity: 4,
-    ambientIntensityScale: 1,
+    ambientColor: [1, 0.1843, 0.2004],
+    ambientIntensityScale: 1.0047,
+  },
+  "earth-white": {
+    id: "earth-white",
+    path: "envmaps/earth-white",
+    intensity: 4,
+    ambientColor: [1, 0.7483, 0.7646],
+    ambientIntensityScale: 1.2274,
+  },
+  "earth-grey": {
+    id: "earth-grey",
+    path: "envmaps/earth-grey",
+    intensity: 4,
+    ambientColor: [1, 0.9795, 0.9765],
+    ambientIntensityScale: 1.6463,
+  },
+  "earth-command": {
+    id: "earth-command",
+    path: "envmaps/earth-command",
+    intensity: 4,
+    ambientColor: [0.6684, 0.7847, 1],
+    ambientIntensityScale: 1.6686,
   },
 };
+
+/** GLB EnvMap-* zone ids (e.g. Grey, White.002) → bundled envmaps/* folders. */
+const ENV_MAP_ALIASES = {
+  grey: "black",
+  white: "bluegreen",
+  command: "red",
+};
+
+const ENV_MAP_ALIASES_BY_LEVEL = {
+  earthdefense: {
+    grey: "earth-grey",
+    white: "earth-white",
+    command: "earth-command",
+  },
+};
+
+function resolveEnvMapId(rawId, levelId) {
+  if (!rawId) return null;
+  const id = String(rawId).trim().toLowerCase();
+  const base = id.replace(/\.\d+$/, "");
+  const levelAliases = levelId ? ENV_MAP_ALIASES_BY_LEVEL[levelId] : null;
+  return (
+    levelAliases?.[id] ??
+    levelAliases?.[base] ??
+    ENV_MAP_ALIASES[id] ??
+    ENV_MAP_ALIASES[base] ??
+    id
+  );
+}
 
 const _cubeLoader = new THREE.CubeTextureLoader();
 const _envMapCache = new Map();
 let _pmremGenerator = null;
+
+export const LEVELS_WITH_ENV_ZONES = ["earthdefense", "saturnalia"];
+
+export function levelUsesEnvZones(levelId) {
+  return LEVELS_WITH_ENV_ZONES.includes(levelId);
+}
+
+/**
+ * Env maps on enemy bots forced a material recompile every time a bot spawned/streamed in.
+ * Disabled for now; cockpit + allied NPC env maps are unaffected.
+ */
+export const ENEMY_BOT_ENVMAPS_ENABLED = false;
 
 function assetUrl(path) {
   const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "") || "";
@@ -50,8 +124,8 @@ export function getEnemyEnvMapConfigForLevel(levelId) {
   return ENEMY_ENV_MAPS_BY_LEVEL[levelId] ?? null;
 }
 
-export function getEnvironmentMapConfig(id) {
-  return ENV_MAPS_BY_ID[id] ?? null;
+export function getEnvironmentMapConfig(id, levelId) {
+  return ENV_MAPS_BY_ID[resolveEnvMapId(id, levelId)] ?? null;
 }
 
 export function applyEnvironmentMapToObject(root, envMap, intensity = 1) {
@@ -134,16 +208,17 @@ export function applyBlendedEnvironmentMapToObject(
     for (const material of materials) {
       if (!material || !("envMap" in material)) continue;
       const blendState = patchMaterialForEnvMapBlend(material);
-      if (material.envMap !== fromEnv.texture) {
-        material.envMap = fromEnv.texture;
+      const fallbackTexture = factor >= 0.999 ? toTexture : fromEnv.texture;
+      if (material.envMap !== fallbackTexture) {
+        material.envMap = fallbackTexture;
         material.needsUpdate = true;
       }
       material.envMapIntensity = intensity;
-      blendState.fromTexture = fromEnv.texture;
+      blendState.fromTexture = factor >= 0.999 ? toTexture : fromEnv.texture;
       blendState.toTexture = toTexture;
       blendState.factor = factor;
       if (blendState.uniforms) {
-        blendState.uniforms.envMapBlendFromMap.value = fromEnv.texture;
+        blendState.uniforms.envMapBlendFromMap.value = blendState.fromTexture;
         blendState.uniforms.envMapBlendToMap.value = toTexture;
         blendState.uniforms.envMapBlendFactor.value = factor;
       }
@@ -166,75 +241,18 @@ export function setEnvironmentMapRotationForObject(root, rotation) {
   });
 }
 
-function estimateAmbientLightingFromCubeImages(images) {
-  const imageList = Array.isArray(images) ? images : [];
-  if (imageList.length === 0) return null;
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
-
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let samples = 0;
-
-  for (const image of imageList) {
-    const width = image?.naturalWidth || image?.width || 0;
-    const height = image?.naturalHeight || image?.height || 0;
-    if (!width || !height) continue;
-
-    canvas.width = width;
-    canvas.height = height;
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(image, 0, 0, width, height);
-
-    const data = ctx.getImageData(0, 0, width, height).data;
-    const stride = Math.max(1, Math.floor(Math.min(width, height) / 32));
-    for (let y = 0; y < height; y += stride) {
-      for (let x = 0; x < width; x += stride) {
-        const i = (y * width + x) * 4;
-        const alpha = data[i + 3] / 255;
-        if (alpha < 0.02) continue;
-
-        const sr = data[i] / 255;
-        const sg = data[i + 1] / 255;
-        const sb = data[i + 2] / 255;
-        const luminance = sr * 0.2126 + sg * 0.7152 + sb * 0.0722;
-        if (luminance < 0.01) continue;
-
-        const weight = 0.35 + luminance * 1.6;
-        r += sr * weight;
-        g += sg * weight;
-        b += sb * weight;
-        samples += weight;
-      }
-    }
-  }
-
-  if (samples <= 0) return null;
-
-  r /= samples;
-  g /= samples;
-  b /= samples;
-  const maxChannel = Math.max(r, g, b, 0.001);
-  const luminance = r * 0.2126 + g * 0.7152 + b * 0.0722;
-
+function lightingFromConfig(config) {
+  if (!config?.ambientColor) return null;
   return {
-    ambientColor: new THREE.Color(
-      r / maxChannel,
-      g / maxChannel,
-      b / maxChannel,
-    ),
-    intensityScale: THREE.MathUtils.clamp(0.75 + luminance * 2.25, 0.75, 2.4),
+    ambientColor: new THREE.Color().fromArray(config.ambientColor),
+    intensityScale: config.ambientIntensityScale ?? 1,
   };
 }
 
 export function applyEnvironmentAmbientToLight(light, loadedEnvMap, config) {
   if (!light || !loadedEnvMap?.lighting?.ambientColor) return;
   light.color.copy(loadedEnvMap.lighting.ambientColor);
-  light.intensity *=
-    config?.ambientIntensityScale ?? loadedEnvMap.lighting.intensityScale;
+  light.intensity *= loadedEnvMap.lighting.intensityScale ?? 1;
 }
 
 export async function loadEnvironmentMap(config, renderer) {
@@ -252,9 +270,6 @@ export async function loadEnvironmentMap(config, renderer) {
     .loadAsync(faceOrder.map((face) => `${face}.png`));
 
   cubeTexture.colorSpace = THREE.SRGBColorSpace;
-  const lighting = estimateAmbientLightingFromCubeImages(
-    cubeTexture.images ?? cubeTexture.image,
-  );
   _pmremGenerator ??= new THREE.PMREMGenerator(renderer);
   const target = _pmremGenerator.fromCubemap(cubeTexture);
   cubeTexture.dispose();
@@ -262,7 +277,7 @@ export async function loadEnvironmentMap(config, renderer) {
   const result = {
     texture: target.texture,
     intensity: config.intensity ?? 1,
-    lighting,
+    lighting: lightingFromConfig(config),
     target,
   };
   _envMapCache.set(config.id, result);

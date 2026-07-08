@@ -30,6 +30,8 @@ function createBoosterVisual(position, quaternion = null) {
     roughness: 0.35,
     transparent: true,
     opacity: 0.9,
+    depthTest: true,
+    depthWrite: true,
     toneMapped: false,
   });
   const ring = new THREE.Mesh(
@@ -44,6 +46,7 @@ function createBoosterVisual(position, quaternion = null) {
     transparent: true,
     opacity: 0.22,
     depthWrite: false,
+    depthTest: true,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
   });
@@ -64,6 +67,8 @@ function createBoosterVisual(position, quaternion = null) {
     roughness: 0.28,
     transparent: true,
     opacity: 0.85,
+    depthTest: true,
+    depthWrite: true,
     toneMapped: false,
   });
   const arcGeometry = new THREE.TorusGeometry(
@@ -95,6 +100,10 @@ function createBoosterVisual(position, quaternion = null) {
   group.userData.arcPivotB = arcPivotB;
   group.userData.pulseMeshes = [ring, arcA, arcB];
   group.userData.baseQuaternion = group.quaternion.clone();
+  group.renderOrder = 0;
+  group.traverse((child) => {
+    if (child.isMesh) child.renderOrder = 0;
+  });
   group.userData.dispose = () => {
     ring.geometry.dispose();
     ring.material.dispose();
@@ -174,6 +183,14 @@ export function activateLevelBooster(game, booster) {
   };
   sfxManager.play("engine-boost", booster.position, 1);
   player.updateCockpitStatusDisplay?.({ overboostActive: true });
+}
+
+export function clearLevelOverboost(game) {
+  if (!game?.player) return;
+  game._levelOverboost = null;
+  game.player.overboostMultiplier = 1;
+  game.player.overboostActive = false;
+  game.player.updateCockpitStatusDisplay?.({ overboostActive: false });
 }
 
 function updateLevelBoostEffects(game, delta) {
