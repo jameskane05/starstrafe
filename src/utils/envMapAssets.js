@@ -4,9 +4,9 @@ const ENEMY_ENV_MAPS_BY_LEVEL = {
   saturnalia: {
     id: "gold",
     path: "envmaps/gold",
-    intensity: 4,
+    intensity: 1,
     ambientColor: [1, 0.5072, 0.2677],
-    ambientIntensityScale: 1.2872,
+    ambientIntensityScale: 0.8,
   },
   earthdefense: {
     id: "black",
@@ -115,6 +115,9 @@ export function levelUsesEnvZones(levelId) {
  */
 export const ENEMY_BOT_ENVMAPS_ENABLED = false;
 
+/** Fleet drone hulls read env maps hotter than legacy starfighters; allies stay at full intensity. */
+export const FLEET_ENEMY_ENV_MAP_INTENSITY_SCALE = 0.3;
+
 function assetUrl(path) {
   const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "") || "";
   return (base ? `${base}/${path}` : `./${path}`).replace(/\/+/g, "/");
@@ -189,16 +192,18 @@ export function applyBlendedEnvironmentMapToObject(
   fromEnv,
   toEnv,
   blendFactor,
+  intensityScale = 1,
 ) {
   if (!root || !fromEnv?.texture) return;
 
   const factor = THREE.MathUtils.clamp(blendFactor ?? 0, 0, 1);
   const toTexture = toEnv?.texture ?? fromEnv.texture;
-  const intensity = THREE.MathUtils.lerp(
-    fromEnv.intensity ?? 1,
-    toEnv?.intensity ?? fromEnv.intensity ?? 1,
-    factor,
-  );
+  const intensity =
+    THREE.MathUtils.lerp(
+      fromEnv.intensity ?? 1,
+      toEnv?.intensity ?? fromEnv.intensity ?? 1,
+      factor,
+    ) * intensityScale;
 
   root.traverse((child) => {
     if (!child.isMesh || !child.material) return;

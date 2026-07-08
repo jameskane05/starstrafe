@@ -294,6 +294,19 @@ export const earthDefenseLevelTriggerBindings = [
       emitMissionEvent: "earthBossFightStart",
     },
   },
+  {
+    objectName: "Trigger.006",
+    id: "earthdefense-trigger-006-escape",
+    once: true,
+    criteria: {
+      currentMissionId: "capital-ship-earth-defense",
+      currentState: GAME_STATES.PLAYING,
+      earthEscapeActive: true,
+    },
+    onEnter: {
+      emitMissionEvent: "earthEscapeComplete",
+    },
+  },
 ];
 
 const byLevel = {

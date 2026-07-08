@@ -26,10 +26,15 @@ import {
   ENEMY_SPAWN_DISSOLVE_DURATION,
 } from "../vfx/checkpointDissolveWarp.js";
 import { beginSpawnWarp } from "../vfx/spawnWarp.js";
-import { applyEnvironmentMapToObject } from "../utils/envMapAssets.js";
 import {
+  applyEnvironmentMapToObject,
+  FLEET_ENEMY_ENV_MAP_INTENSITY_SCALE,
+} from "../utils/envMapAssets.js";
+import {
+  cloneFleetShipTemplate,
   getFleetShipIndexById,
   isDroneFleetActive,
+  loadDroneFleetModels,
   setupFleetDroneCloneMarkers,
 } from "./droneFleetLoader.js";
 
@@ -48,8 +53,8 @@ const _textureLoader = new THREE.TextureLoader();
 export const ENEMY_NORMAL_SHIP_SCALE_MIN = 0.9;
 export const ENEMY_NORMAL_SHIP_SCALE_MAX = 1.25;
 export const ENEMY_HEAVY_SHIP_SCALE = 4.0;
-export const ENEMY_DEFAULT_SHIP_SCALE = 2.5;
-export const ENEMY_SHIP_SCALE_HIT_REFERENCE = 2.5;
+export const ENEMY_DEFAULT_SHIP_SCALE = 1;
+export const ENEMY_SHIP_SCALE_HIT_REFERENCE = 1;
 
 export function randomNormalEnemyShipScaleFactor() {
   return (
@@ -412,13 +417,28 @@ function applyRuntimeShipMaterials(root, mats, index) {
   });
 }
 
-export function applyEnemyShipEnvironmentMap(root, envMap, intensity = 1) {
-  applyEnvironmentMapToObject(root, envMap, intensity);
+function fleetEnemyEnvMapIntensity(intensity, useFleetBotScale = false) {
+  if (!useFleetBotScale || !isDroneFleetActive()) return intensity;
+  return intensity * FLEET_ENEMY_ENV_MAP_INTENSITY_SCALE;
+}
+
+export function applyEnemyShipEnvironmentMap(
+  root,
+  envMap,
+  intensity = 1,
+  { useFleetBotScale = false } = {},
+) {
+  applyEnvironmentMapToObject(
+    root,
+    envMap,
+    fleetEnemyEnvMapIntensity(intensity, useFleetBotScale),
+  );
 }
 
 export function applyEnemyShipEnvironmentMapToModels(envMap, intensity = 1) {
+  const effectiveIntensity = fleetEnemyEnvMapIntensity(intensity, true);
   for (const model of shipModels) {
-    applyEnemyShipEnvironmentMap(model, envMap, intensity);
+    applyEnvironmentMapToObject(model, envMap, effectiveIntensity);
   }
 }
 
@@ -438,8 +458,15 @@ async function loadManifestPaths() {
 }
 
 async function loadShipModels() {
+  const fleetResult = await loadDroneFleetModels();
+  if (fleetResult?.templates?.length) {
+    shipModels = fleetResult.templates;
+    loadPromise = null;
+    return;
+  }
+
   if (loadPromise) return loadPromise;
-  if (shipModels.length > 0) return;
+  if (shipModels.length > 0 && !shipModels[0]?.userData?.droneFleetShip) return;
 
   loadPromise = (async () => {
     const loader = new GLTFLoader();
@@ -505,6 +532,7 @@ async function loadShipModels() {
 
 async function reapplyShipMaterials(models) {
   if (models.length === 0) return;
+  if (models[0]?.userData?.droneFleetShip) return;
   const hasTex = (s) => {
     let v = false;
     s.traverse((c) => {
@@ -646,7 +674,9 @@ export class Enemy {
         : !useFleetTemplate;
 
     if (shipTemplate) {
-      const clone = shipTemplate.clone();
+      const clone = useFleetTemplate
+        ? cloneFleetShipTemplate(shipTemplate)
+        : shipTemplate.clone();
       this.usesSharedTemplateModel = true;
       clone.scale.setScalar(this.shipScale);
       clone.rotation.set(0, Math.PI, 0);

@@ -13,6 +13,7 @@ import { preloadBarrierModel } from "../game/levelBarriers.js";
 import {
   startEarthEscapeSequence,
   updateEarthEscapeSequence,
+  completeEarthEscape,
 } from "../game/earthEscapeSequence.js";
 import {
   PRIMARY_WEAPONS,
@@ -48,11 +49,13 @@ export const earthDefenseMission = {
         [PRIMARY_WEAPONS.GATLING]: true,
       };
     }
+    game._earthEscapeCompleted = false;
     game.gameManager.setState({
       selectedMissileMode: "homing",
       playerLaserEnabled: true,
       playerMissilesEnabled: true,
       earthIntroTextDone: false,
+      earthEscapeActive: false,
     });
     game.setPrimaryWeapon?.(PRIMARY_WEAPONS.GATLING);
 
@@ -131,10 +134,7 @@ export const earthDefenseMission = {
           });
           startEarthEscapeSequence(manager.game);
         } else if (type === "earthEscapeComplete") {
-          manager.updateObjective("arrive", {
-            text: "Escaped Earth Defense.",
-            completed: true,
-          });
+          completeEarthEscape(manager.game);
         } else if (type === "earthEscapeFailed") {
           manager.updateObjective("arrive", {
             text: "Escape failed.",

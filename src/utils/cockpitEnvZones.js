@@ -6,7 +6,9 @@ import {
   loadEnvironmentMap,
   setEnvironmentMapRotationForObject,
   ENEMY_BOT_ENVMAPS_ENABLED,
+  FLEET_ENEMY_ENV_MAP_INTENSITY_SCALE,
 } from "./envMapAssets.js";
+import { isDroneFleetActive } from "../entities/droneFleetLoader.js";
 
 const ENV_ZONE_PREFIX = "EnvMap-";
 const TRANSITION_SECONDS = 1;
@@ -231,7 +233,11 @@ function updateCockpitZone(game, state, delta) {
   applyAmbientBlend(game, state.fromEnv, state.toEnv, smoothBlend);
 }
 
-function updateObjectZoneBlend(object, state, delta) {
+function fleetEnemyEnvZoneIntensityScale() {
+  return isDroneFleetActive() ? FLEET_ENEMY_ENV_MAP_INTENSITY_SCALE : 1;
+}
+
+function updateObjectZoneBlend(object, state, delta, intensityScale = 1) {
   if (!object?.visible) return;
 
   getObjectEnvSamplePoint(object, _objectPoint);
@@ -278,6 +284,7 @@ function updateObjectZoneBlend(object, state, delta) {
     objectState.fromEnv,
     objectState.toEnv,
     smoothBlend,
+    intensityScale,
   );
 }
 
@@ -321,11 +328,12 @@ function updateBotEnvZones(game, state, delta) {
   }
 
   if (!ENEMY_BOT_ENVMAPS_ENABLED) return;
+  const enemyIntensityScale = fleetEnemyEnvZoneIntensityScale();
   for (const enemy of game.enemies ?? []) {
-    updateObjectZoneBlend(enemy.mesh, state, delta);
+    updateObjectZoneBlend(enemy.mesh, state, delta, enemyIntensityScale);
   }
   for (const enemy of game._missionEnemyPool ?? []) {
-    updateObjectZoneBlend(enemy.mesh, state, delta);
+    updateObjectZoneBlend(enemy.mesh, state, delta, enemyIntensityScale);
   }
   for (const entry of game._networkBotPool ?? []) {
     updateObjectZoneBlend(entry.mesh, state, delta);

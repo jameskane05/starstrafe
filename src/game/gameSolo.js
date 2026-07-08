@@ -32,6 +32,7 @@ import {
   loadShipModels,
   shipModels,
   reapplyShipMaterials,
+  isDroneFleetActive,
 } from "../entities/Enemy.js";
 import {
   applyEnvironmentAmbientToLight,
@@ -44,6 +45,7 @@ import {
   cleanupDestruction,
   getShipDestructionDebrisMaterials,
   prefractureModelsAsync,
+  scheduleFleetPrefractureInBackground,
   spawnDestruction,
 } from "../vfx/ShipDestruction.js";
 import { Explosion } from "../entities/Explosion.js";
@@ -244,6 +246,8 @@ export async function startSoloDebug(game) {
   loadingTracker?.completeTask("solo-xr");
 
   await game.preloadLevel();
+  game._enemyShipAssetSourceKey = null;
+  game.enemyShipAssetsPromise = null;
   await ensureEnemyShipAssetsLoaded(game, loadingTracker);
 
   game.player = new Player(game.camera, game.input, game.level, game.scene, {
@@ -467,11 +471,12 @@ async function applyEnemyShipEnvironmentForCurrentLevel(game) {
     config,
   );
   applyEnemyShipEnvironmentMapToModels(envMap, intensity);
+  const enemyEnvOpts = { useFleetBotScale: true };
   for (const enemy of game.enemies ?? []) {
-    applyEnemyShipEnvironmentMap(enemy.mesh, envMap, intensity);
+    applyEnemyShipEnvironmentMap(enemy.mesh, envMap, intensity, enemyEnvOpts);
   }
   for (const enemy of game._missionEnemyPool ?? []) {
-    applyEnemyShipEnvironmentMap(enemy.mesh, envMap, intensity);
+    applyEnemyShipEnvironmentMap(enemy.mesh, envMap, intensity, enemyEnvOpts);
   }
   for (const ally of game.alliedShips ?? []) {
     applyEnemyShipEnvironmentMap(ally.mesh, envMap, intensity);
@@ -501,7 +506,9 @@ async function applyCockpitEnvironmentForCurrentLevel(game) {
 }
 
 function enemyShipAssetSourceKey() {
-  return `legacy:${shipModels.length}`;
+  return isDroneFleetActive()
+    ? `fleet:${shipModels.length}`
+    : `legacy:${shipModels.length}`;
 }
 
 export async function ensureEnemyShipAssetsLoaded(game, loadingTracker = null) {
@@ -522,12 +529,25 @@ export async function ensureEnemyShipAssetsLoaded(game, loadingTracker = null) {
   }
   game._enemyShipAssetSourceKey = sourceKey;
   game.enemyShipAssetsPromise = (async () => {
-    await prefractureModelsAsync(shipModels);
+    const useFleet = isDroneFleetActive();
+    console.log(
+      `[Enemy] Ship model source: ${
+        useFleet
+          ? `drone-fleet (${shipModels.length} variants)`
+          : `per-ship GLBs (${shipModels.length} models)`
+      }`,
+    );
+    if (!useFleet) {
+      await prefractureModelsAsync(shipModels);
+    }
     await reapplyShipMaterials(shipModels);
     await applyEnemyShipEnvironmentForCurrentLevel(game);
     prewarmShipDestructionDebrisMaterials(game);
   })();
   await game.enemyShipAssetsPromise;
+  if (isDroneFleetActive()) {
+    scheduleFleetPrefractureInBackground(shipModels);
+  }
   prewarmEnemySpawnWarp(game);
   loadingTracker?.completeTask("solo-enemy-assets");
 }
@@ -622,7 +642,10 @@ function prewarmEnemySpawnWarp(game) {
   const template = shipModels[0];
   if (!template || !game.renderer || !game.camera) return;
 
-  const clone = template.clone();
+  const clone = template.userData?.droneFleetShip
+    ? template.clone(true)
+    : template.clone();
+  clone.visible = true;
   clone.scale.setScalar(2.0);
   clone.rotation.set(0, Math.PI, 0);
 

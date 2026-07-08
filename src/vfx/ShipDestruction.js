@@ -26,6 +26,7 @@ const debrisOuterMaterials = [];
 const debrisInnerMaterials = [];
 
 const FRAGMENT_COUNT = 8;
+const FLEET_DESTRUCTION_REP_COUNT = 2;
 const DEBRIS_LIFETIME = 2.5;
 const EJECT_SPEED = 18;
 const SPIN_SPEED = 8;
@@ -105,7 +106,7 @@ export function prefractureModels(shipModels) {
 }
 
 export async function prefractureModelsAsync(shipModels) {
-  if (!shipModels?.length) return;
+  if (!shipModels?.length || shipModels[0]?.userData?.droneFleetShip) return;
 
   await yieldToMain();
   for (let i = 0; i < shipModels.length; i++) {
@@ -119,6 +120,37 @@ export async function prefractureModelsAsync(shipModels) {
   console.log(
     `Pre-fractured ${fragmentCache.size}/${shipModels.length} ship models`,
   );
+}
+
+let fleetPrefractureScheduled = false;
+
+export function scheduleFleetPrefractureInBackground(shipModels) {
+  if (fleetPrefractureScheduled) return;
+  if (!shipModels?.length || !shipModels[0]?.userData?.droneFleetShip) return;
+  fleetPrefractureScheduled = true;
+
+  void (async () => {
+    const repCount = Math.min(FLEET_DESTRUCTION_REP_COUNT, shipModels.length);
+    await yieldToMain();
+    for (let i = 0; i < repCount; i++) {
+      try {
+        prefractureModel(i, shipModels[i]);
+      } catch (e) {
+        console.warn(`Failed to pre-fracture fleet rep ${i}:`, e);
+      }
+      await yieldToMain();
+    }
+    for (let i = repCount; i < shipModels.length; i++) {
+      const cached = fragmentCache.get(i % repCount);
+      if (cached) fragmentCache.set(i, cached);
+    }
+    console.log(
+      `[ShipDestruction] Fleet prefracture: ${repCount} reps, ${shipModels.length} variants aliased`,
+    );
+  })().catch((error) => {
+    fleetPrefractureScheduled = false;
+    console.warn("[ShipDestruction] Fleet prefracture failed:", error);
+  });
 }
 
 export function prefracturePlayerShip(model) {

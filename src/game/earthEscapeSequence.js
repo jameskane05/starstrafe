@@ -12,9 +12,12 @@ import {
   hideMissionCompleteOverlay,
   leaveMatch,
 } from "./gameInGameUI.js";
+import {
+  mountEarthOutroOverlayBlack,
+  runEarthOutroTypewriterAndFade,
+} from "./earthOutroSequence.js";
 
 const ESCAPE_DURATION_SEC = 90;
-const ESCAPE_RADIUS = 20;
 const EXPLOSION_INTERVAL_MIN = 0.28;
 const EXPLOSION_INTERVAL_MAX = 0.72;
 const RUMBLE_INTERVAL_MIN = 10;
@@ -74,12 +77,6 @@ const _up = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _shake = new THREE.Vector3();
 const _worldUp = new THREE.Vector3(0, 1, 0);
-
-function playerWorldPosition(game) {
-  return game.xrManager?.isPresenting && game.xrManager.rig
-    ? game.xrManager.rig.position
-    : game.camera?.position;
-}
 
 function escapeProgress(game) {
   const timeLeft = game._earthEscapeTimeLeft ?? ESCAPE_DURATION_SEC;
@@ -374,7 +371,16 @@ export function applyEarthEscapeShakeEndFrame(game) {
   game._earthEscapeShakeApplied = off.clone();
 }
 
-function completeEarthEscape(game) {
+export function completeEarthEscape(game) {
+  if (game.isMultiplayer || game._earthEscapeCompleted) return;
+  if (
+    game.gameManager?.getState?.()?.currentMissionId !==
+    "capital-ship-earth-defense"
+  ) {
+    return;
+  }
+
+  game._earthEscapeCompleted = true;
   clearShakeOffset(game);
   clearSplatPulse(game);
   clearEscapeFlashOverlay();
@@ -382,7 +388,58 @@ function completeEarthEscape(game) {
   game._earthEscapeGushers = null;
   game._earthEscapeSequenceActive = false;
   game.gameManager?.setState?.({ earthEscapeActive: false });
-  game.missionManager?.reportEvent?.("earthEscapeComplete", {});
+
+  void runEarthEscapeOutroAndVictory(game);
+}
+
+const ESCAPE_FADE_MS = 2000;
+const ESCAPE_OVERLAY_ID = "earth-escape-overlay";
+
+function fadeEarthEscapeToBlack() {
+  let el = document.getElementById(ESCAPE_OVERLAY_ID);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = ESCAPE_OVERLAY_ID;
+    el.setAttribute("role", "presentation");
+    document.body.appendChild(el);
+  }
+  el.classList.remove("earth-escape-overlay--visible");
+  el.style.opacity = "0";
+  void el.offsetWidth;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallback);
+      el.removeEventListener("transitionend", onEnd);
+      resolve();
+    };
+    const fallback = setTimeout(finish, ESCAPE_FADE_MS + 250);
+    const onEnd = (e) => {
+      if (e.target !== el || e.propertyName !== "opacity") return;
+      finish();
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.classList.add("earth-escape-overlay--visible");
+        el.addEventListener("transitionend", onEnd);
+      });
+    });
+  });
+}
+
+async function runEarthEscapeOutroAndVictory(game) {
+  try {
+    await fadeEarthEscapeToBlack();
+    document.getElementById(ESCAPE_OVERLAY_ID)?.remove();
+    mountEarthOutroOverlayBlack();
+    await runEarthOutroTypewriterAndFade({ retainBlackScreen: true });
+  } catch (e) {
+    console.warn("[EarthEscape] Outro sequence failed:", e);
+  }
+
   game.missionManager?.completeMission("Earth Defense complete", {
     stepTitle: "Earth Defense",
     suppressCompleteMessage: true,
@@ -393,8 +450,10 @@ function completeEarthEscape(game) {
     menuOnly: true,
     solidBlackBackdrop: true,
     zIndex: 3200,
+    outroOverlayId: "earth-outro-overlay",
     onMenu: async () => {
       hideMissionCompleteOverlay(game);
+      document.getElementById("earth-outro-overlay")?.remove();
       leaveMatch(game);
     },
   });
@@ -413,15 +472,6 @@ function failEarthEscape(game) {
 
 export function startEarthEscapeSequence(game) {
   if (game.isMultiplayer || game._earthEscapeSequenceActive) return;
-  const target =
-    game.playerSpawnPoints?.[0]?.clone?.() ??
-    game._earthEscapeTarget?.clone?.() ??
-    null;
-  if (!target) {
-    console.warn("[EarthEscape] Missing player start point");
-    return;
-  }
-  game._earthEscapeTarget = target;
   game._earthEscapeSequenceActive = true;
   game._earthEscapeTimeLeft = ESCAPE_DURATION_SEC;
   game._earthEscapeExplosionTimer = 0.15;
@@ -439,16 +489,6 @@ export function startEarthEscapeSequence(game) {
 export function updateEarthEscapeSequence(game, delta) {
   if (!game._earthEscapeSequenceActive || game.isMultiplayer) return;
   const d = Math.max(0, delta);
-  const pos = playerWorldPosition(game);
-  if (pos && game._earthEscapeTarget) {
-    if (
-      pos.distanceToSquared(game._earthEscapeTarget) <=
-      ESCAPE_RADIUS * ESCAPE_RADIUS
-    ) {
-      completeEarthEscape(game);
-      return;
-    }
-  }
 
   const el =
     game._earthEscapeHudEl ?? document.getElementById("earth-escape-countdown");
@@ -514,5 +554,6 @@ export function stopEarthEscapeSequenceForLevelChange(game) {
   game._earthEscapeTimeLeft = 0;
   game._earthEscapeShakePhase = null;
   game._earthEscapeGushers = null;
+  game._earthEscapeCompleted = false;
   game.gameManager?.setState?.({ earthEscapeActive: false });
 }

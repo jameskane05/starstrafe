@@ -38,7 +38,13 @@
  */
 
 import * as THREE from "three";
-import { Enemy, shipModels, computeEnemyShipScale, randomNormalEnemyShipScaleFactor } from "../entities/Enemy.js";
+import {
+  Enemy,
+  shipModels,
+  computeEnemyShipScale,
+  randomNormalEnemyShipScaleFactor,
+  isDroneFleetActive,
+} from "../entities/Enemy.js";
 import { EnemyPortal } from "../entities/EnemyPortal.js";
 import { Collectible } from "../entities/Collectible.js";
 import {
@@ -970,7 +976,7 @@ async function buildPortalSummonEnemyPool(game, poolCount) {
     ...enemySpawnOptions(game),
     deferSpawnWarp: true,
     disableRevealWarp: true,
-    cloneMaterials: true,
+    cloneMaterials: !isDroneFleetActive(),
   };
   const pool = [];
   const nModels = shipModels.length;
@@ -1283,7 +1289,7 @@ async function buildAuthoredMissionEnemyPool(game, poolCount) {
     ...enemySpawnOptions(game),
     deferSpawnWarp: true,
     disableRevealWarp: true,
-    cloneMaterials: true,
+    cloneMaterials: !isDroneFleetActive(),
   };
   const pool = [];
   const nModels = shipModels.length;

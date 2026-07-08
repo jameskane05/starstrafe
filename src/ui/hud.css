@@ -1106,7 +1106,8 @@ body.pilot-chrome-hidden #boost-hud {
 #charon-outro-overlay,
 #saturnalia-opening-overlay,
 #saturnalia-outro-overlay,
-#earth-opening-overlay {
+#earth-opening-overlay,
+#earth-outro-overlay {
   position: fixed;
   inset: 0;
   z-index: 3100;
@@ -1125,7 +1126,8 @@ body.pilot-chrome-hidden #boost-hud {
 #charon-outro-overlay.charon-opening-overlay--fade-out,
 #saturnalia-opening-overlay.charon-opening-overlay--fade-out,
 #saturnalia-outro-overlay.charon-opening-overlay--fade-out,
-#earth-opening-overlay.charon-opening-overlay--fade-out {
+#earth-opening-overlay.charon-opening-overlay--fade-out,
+#earth-outro-overlay.charon-opening-overlay--fade-out {
   opacity: 0;
   pointer-events: none;
 }
@@ -1134,7 +1136,8 @@ body.pilot-chrome-hidden #boost-hud {
 #charon-outro-overlay .charon-opening-panel,
 #saturnalia-opening-overlay .charon-opening-panel,
 #saturnalia-outro-overlay .charon-opening-panel,
-#earth-opening-overlay .charon-opening-panel {
+#earth-opening-overlay .charon-opening-panel,
+#earth-outro-overlay .charon-opening-panel {
   /* Fixed width so flex centering does not shift as typewriter grows text */
   width: min(44rem, 90vw);
   max-width: 100%;
@@ -1146,7 +1149,8 @@ body.pilot-chrome-hidden #boost-hud {
 #charon-outro-overlay .charon-opening-line,
 #saturnalia-opening-overlay .charon-opening-line,
 #saturnalia-outro-overlay .charon-opening-line,
-#earth-opening-overlay .charon-opening-line {
+#earth-opening-overlay .charon-opening-line,
+#earth-outro-overlay .charon-opening-line {
   width: 100%;
   text-align: left;
   font-family: "Orbitron", sans-serif;
@@ -1166,11 +1170,13 @@ body.pilot-chrome-hidden #boost-hud {
 #charon-outro-overlay .charon-opening-line[data-line="2"],
 #saturnalia-opening-overlay .charon-opening-line[data-line="2"],
 #saturnalia-outro-overlay .charon-opening-line[data-line="2"],
-#earth-opening-overlay .charon-opening-line[data-line="2"] {
+#earth-opening-overlay .charon-opening-line[data-line="2"],
+#earth-outro-overlay .charon-opening-line[data-line="2"] {
   margin-bottom: 0;
 }
 
-#saturnalia-escape-overlay {
+#saturnalia-escape-overlay,
+#earth-escape-overlay {
   position: fixed;
   inset: 0;
   z-index: 3100;
@@ -1180,6 +1186,7 @@ body.pilot-chrome-hidden #boost-hud {
   pointer-events: auto;
 }
 
-#saturnalia-escape-overlay.saturnalia-escape-overlay--visible {
+#saturnalia-escape-overlay.saturnalia-escape-overlay--visible,
+#earth-escape-overlay.earth-escape-overlay--visible {
   opacity: 1;
 }

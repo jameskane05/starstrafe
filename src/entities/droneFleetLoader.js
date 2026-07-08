@@ -19,7 +19,28 @@ function laserColorFromFleetShip(ship) {
   return color.getHex();
 }
 
+function detachFleetTemplate(wrapper) {
+  if (wrapper.parent) {
+    wrapper.parent.remove(wrapper);
+  }
+  wrapper.position.set(0, 0, 0);
+  wrapper.quaternion.identity();
+  wrapper.scale.set(1, 1, 1);
+  wrapper.updateMatrix();
+}
+
+export function cloneFleetShipTemplate(template) {
+  const clone = template.clone(true);
+  clone.visible = true;
+  clone.position.set(0, 0, 0);
+  clone.quaternion.identity();
+  clone.scale.set(1, 1, 1);
+  clone.updateMatrixWorld(true);
+  return clone;
+}
+
 function prepareFleetTemplate(wrapper, ship) {
+  detachFleetTemplate(wrapper);
   wrapper.visible = false;
   wrapper.userData.droneFleetShip = true;
   wrapper.userData.droneFleetId = ship.id;
@@ -80,6 +101,14 @@ export function setupFleetDroneCloneMarkers(enemy, root) {
   });
 }
 
+function readFleetManifest(gltf) {
+  return (
+    gltf.asset?.extras?.proceduralGeneratorFleet ??
+    gltf.parser?.json?.extras?.proceduralGeneratorFleet ??
+    gltf.parser?.json?.asset?.extras?.proceduralGeneratorFleet
+  );
+}
+
 export async function loadDroneFleetModels() {
   if (fleetTemplates.length > 0) {
     return { templates: fleetTemplates, catalog: fleetCatalog, fleetRoot };
@@ -100,9 +129,7 @@ export async function loadDroneFleetModels() {
       return null;
     }
 
-    const fleetMeta =
-      gltf.asset?.extras?.proceduralGeneratorFleet ??
-      gltf.parser?.json?.asset?.extras?.proceduralGeneratorFleet;
+    const fleetMeta = readFleetManifest(gltf);
     if (!fleetMeta || fleetMeta.version !== 1 || !Array.isArray(fleetMeta.ships)) {
       console.warn("[Enemy] drone-fleet.glb missing proceduralGeneratorFleet manifest");
       return null;
