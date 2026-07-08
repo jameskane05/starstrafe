@@ -17,6 +17,7 @@ import {
 } from "../vfx/checkpointDissolveWarp.js";
 import proceduralAudio from "../audio/ProceduralAudio.js";
 import { disposeWeaponPickupTrackers } from "./weaponPickupTracker.js";
+import { disposeLevelBarrierTrackers } from "./levelBarrierTracker.js";
 /** Beyond this world distance from checkpoint, spokes stay dull (HUD xu ≈ dist * 10). */
 const RIM_BLOOM_FAR = 92;
 /** Within this world distance, all six spokes reach full bloom (≈70 xu). */
@@ -337,6 +338,7 @@ export class MissionManager {
     this.clearCheckpoints();
     this.clearDirectionalHelperTarget();
     disposeWeaponPickupTrackers(this);
+    disposeLevelBarrierTrackers(this);
     this.runtime.cannonTrackerEl?.remove();
     this.currentMission = null;
     this.currentStep = null;

@@ -392,17 +392,17 @@ export const saturnaliaDialogTracks = {
     id: "saturnaliaIDontLikeThis",
     speakerId: "leader",
     audio: dialogPublicUrl(
-      "audio/dialog/saturnalia/saturn-19-i-dont-like-this.audio.mp3",
+      "audio/dialog/saturnalia/saturn-19-i-dont-trust-this.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/saturnalia/saturn-19-i-dont-like-this.json",
+      "audio/dialog/saturnalia/saturn-19-i-dont-trust-this.json",
     ),
     captions: [
-      say("I don't like this.", 0.92, 0.5),
+      say("I don't trust this.", 1, 0.67),
       say(
-        "No way these weird assholes are down in the engine rooms.",
-        2.92,
-        2.38,
+        "No way these rich assholes would be down here in the engine room.",
+        3.04,
+        2.64,
       ),
     ],
     criteria: {

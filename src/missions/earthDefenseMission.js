@@ -23,8 +23,13 @@ import {
   enableWeaponPickupTracker,
   updateWeaponPickupTracker,
 } from "./weaponPickupTracker.js";
+import {
+  enableLevelBarrierTracker,
+  updateLevelBarrierTracker,
+} from "./levelBarrierTracker.js";
 
 const EARTH_CHARGING_CANNON_TRACKER_ID = "earthChargingCannon";
+const EARTH_BARRIER_TRACKER_ID = "earthBarrier";
 
 export const earthDefenseMission = {
   id: "capital-ship-earth-defense",
@@ -149,12 +154,21 @@ export const earthDefenseMission = {
             pickupType: "charging_laser",
             label: "CHARGING CANNON",
           });
+        } else if (
+          type === "dialogMissionMilestone" &&
+          payload?.event === "earthTrackBarrier"
+        ) {
+          enableLevelBarrierTracker(manager, {
+            id: EARTH_BARRIER_TRACKER_ID,
+            label: "BARRIER",
+          });
         }
       },
       update(manager, delta) {
         updateEarthBossFight(manager.game, delta);
         updateEarthEscapeSequence(manager.game, delta);
         updateWeaponPickupTracker(manager, EARTH_CHARGING_CANNON_TRACKER_ID);
+        updateLevelBarrierTracker(manager, EARTH_BARRIER_TRACKER_ID);
       },
     },
   },

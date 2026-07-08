@@ -254,21 +254,23 @@ export const earthDialogTracks = {
     autoPlay: false,
     priority: 210,
     once: true,
-    playNext: "earthWeDontHaveMuchTime",
+    playNext: "earthHoldDownFire",
   },
-  earthWeDontHaveMuchTime: {
-    id: "earthWeDontHaveMuchTime",
+  earthHoldDownFire: {
+    id: "earthHoldDownFire",
     speakerId: "flightControl",
     audio: dialogPublicUrl(
-      "audio/dialog/earth/earth-12-we-dont-have-much-time.audio.mp3",
+      "audio/dialog/earth/earth-12-hold-down-fire.audio.mp3",
     ),
     faceDataUrl: dialogPublicUrl(
-      "audio/dialog/earth/earth-12-we-dont-have-much-time.json",
+      "audio/dialog/earth/earth-12-hold-down-fire.json",
     ),
     captions: [
-      say("We don't have much time!", 1.22, 0.56),
-      say("Take down the barrier and confront the rogue AI!", 2.58, 2.46),
+      say("Hold down the fire button to use the charging cannon.", 3.5, 0.42),
+      say("You can destroy the barrier to the control room", 2.84, 4.46),
+      say("and after it, the rogue AI", 2.5, 7.34),
     ],
+    missionMilestones: [{ atTimeSec: 4.46, event: "earthTrackBarrier" }],
     criteria: {
       currentState: GAME_STATES.PLAYING,
       currentMissionId: "capital-ship-earth-defense",
