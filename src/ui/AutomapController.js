@@ -422,7 +422,7 @@ export class AutomapController {
     geometryRoot.traverse((child) => {
       if (!child.isMesh) return;
       const name = child.name ?? "";
-      if (name.startsWith("Trigger") || name.startsWith("Cube")) return;
+      if (name.startsWith("Trigger")) return;
       const geo = child.geometry;
       if (!geo?.attributes?.position) return;
 
@@ -530,7 +530,7 @@ export class AutomapController {
     geometryRoot.traverse((child) => {
       if (!child.isMesh) return;
       const name = child.name ?? "";
-      if (name.startsWith("Trigger") || name.startsWith("Cube")) return;
+      if (name.startsWith("Trigger")) return;
       const geo = child.geometry;
       if (!geo?.attributes?.position) return;
       const pos = geo.attributes.position;
@@ -707,12 +707,14 @@ export class AutomapController {
     this._orbitPivot.quaternion.multiplyQuaternions(_yawQ, _pitchQ);
     this._orbitPivot.scale.setScalar(this.zoom);
 
-    if (playerWorldPos && this._edgeCount > 0) {
-      const pnx = (playerWorldPos.x - this._mapCenter.x) * this._mapScale;
-      const pny = (playerWorldPos.y - this._mapCenter.y) * this._mapScale;
-      const pnz = (playerWorldPos.z - this._mapCenter.z) * this._mapScale;
-      // Both solid mesh and wireframe live in _mapGroup, so one offset moves both
-      this._mapGroup.position.set(-pnx, -pny, -pnz);
+    if (playerWorldPos) {
+      if (this._edgeCount > 0) {
+        const pnx = (playerWorldPos.x - this._mapCenter.x) * this._mapScale;
+        const pny = (playerWorldPos.y - this._mapCenter.y) * this._mapScale;
+        const pnz = (playerWorldPos.z - this._mapCenter.z) * this._mapScale;
+        // Both solid mesh and wireframe live in _mapGroup, so one offset moves both
+        this._mapGroup.position.set(-pnx, -pny, -pnz);
+      }
 
       _playerFwd.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
       _iconQuat.setFromUnitVectors(_iconUp, _playerFwd);

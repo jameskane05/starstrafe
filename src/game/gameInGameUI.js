@@ -541,6 +541,7 @@ export function showMissionCompleteOverlay(game, options = {}) {
       : "Mission complete");
   const title = options.title ?? "Mission complete";
   const continueLabel = options.continueLabel ?? "Continue";
+  const menuOnly = options.menuOnly === true;
 
   const root = document.createElement("div");
   root.id = "mission-complete-overlay";
@@ -560,9 +561,14 @@ export function showMissionCompleteOverlay(game, options = {}) {
       <h2 id="mission-complete-heading" class="mission-complete-title"></h2>
       <p class="mission-complete-subtitle"></p>
       <div class="mission-complete-actions">
-        <button type="button" class="mission-complete-btn mission-complete-btn-primary" id="mission-complete-continue">
-        </button>
-        <button type="button" class="mission-complete-btn" id="mission-complete-menu">
+        ${
+          menuOnly
+            ? ""
+            : `<button type="button" class="mission-complete-btn mission-complete-btn-primary" id="mission-complete-continue"></button>`
+        }
+        <button type="button" class="mission-complete-btn${
+          menuOnly ? " mission-complete-btn-primary" : ""
+        }" id="mission-complete-menu">
           Main menu
         </button>
       </div>
@@ -576,6 +582,23 @@ export function showMissionCompleteOverlay(game, options = {}) {
   const continueBtn = root.querySelector("#mission-complete-continue");
   if (continueBtn) continueBtn.textContent = continueLabel;
   game._missionCompleteOverlayEl = root;
+
+  const releaseOutroUnderlay = () => {
+    const outroId = options.outroOverlayId;
+    if (!outroId) return;
+    const outro = document.getElementById(outroId);
+    if (!outro) return;
+    outro.style.pointerEvents = "none";
+    outro.style.zIndex = "3000";
+  };
+
+  const revealOverlay = () => {
+    root.classList.add("mission-complete-overlay--visible");
+    if (options.solidBlackBackdrop) {
+      const backdrop = root.querySelector(".mission-complete-backdrop");
+      if (backdrop) backdrop.style.opacity = "1";
+    }
+  };
 
   const defaultOnContinue = () => {
     hideMissionCompleteOverlay(game);
@@ -635,15 +658,14 @@ export function showMissionCompleteOverlay(game, options = {}) {
     ?.addEventListener("click", onContinue);
   root.querySelector("#mission-complete-menu")?.addEventListener("click", onMenu);
 
-  requestAnimationFrame(() => {
+  releaseOutroUnderlay();
+  if (options.solidBlackBackdrop) {
+    revealOverlay();
+  } else {
     requestAnimationFrame(() => {
-      root.classList.add("mission-complete-overlay--visible");
-      if (options.solidBlackBackdrop) {
-        const backdrop = root.querySelector(".mission-complete-backdrop");
-        if (backdrop) backdrop.style.opacity = "1";
-      }
+      requestAnimationFrame(revealOverlay);
     });
-  });
+  }
 }
 
 export function leaveMatch(game) {

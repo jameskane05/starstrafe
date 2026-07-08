@@ -9,6 +9,7 @@ const MIN_DISPLAYED_SPLATS = 50000;
 const POLL_INTERVAL_MS = 100;
 const MAX_WAIT_MS = 30000;
 const COCKPIT_FALLBACK_MS = 5000;
+const FADE_TO_BLACK_MS = 800;
 const RAD_URL = /\.(rad|radc)(\?|$)|radc(?:\?|$|\/)/i;
 
 export const radcCounters =
@@ -107,15 +108,25 @@ if (typeof window !== "undefined" && !window.__starspeedPatchedRadRequests) {
   }
 }
 
-export function showFirstViewLoading() {
+export function showFirstViewLoading(options = {}) {
   radcCounters.requested = 0;
   radcCounters.completed = 0;
   const el = getOverlay();
-  el.classList.remove("first-view-loading-overlay--blocking");
+  el.classList.remove(
+    "first-view-loading-overlay--blocking",
+    "first-view-loading-overlay--fade-to-black",
+  );
   const counters = el.querySelector("[data-counters]");
   if (counters) counters.style.display = "";
   const sub = el.querySelector("[data-prewarm-msg]");
   if (sub) sub.style.display = "none";
+  if (options.zIndex != null) {
+    el.style.zIndex = String(options.zIndex);
+  } else {
+    el.style.removeProperty("z-index");
+  }
+  const content = el.querySelector(".first-view-loading-content");
+  if (content) content.style.opacity = "";
   if (!el.parentNode) document.body.appendChild(el);
   el.style.display = "flex";
   startRefreshLoop();
@@ -123,7 +134,40 @@ export function showFirstViewLoading() {
 
 export function hideFirstViewLoading() {
   stopRefreshLoop();
-  if (overlayEl) overlayEl.style.display = "none";
+  if (overlayEl) {
+    overlayEl.classList.remove("first-view-loading-overlay--fade-to-black");
+    overlayEl.style.removeProperty("z-index");
+    overlayEl.style.display = "none";
+  }
+}
+
+/** Fade the pages-loading overlay to black (logo/counter fade out) before mission intro. */
+export function fadeFirstViewLoadingToBlack(durationMs = FADE_TO_BLACK_MS) {
+  return new Promise((resolve) => {
+    const el = overlayEl ?? getOverlay();
+    if (el.style.display !== "flex") {
+      resolve();
+      return;
+    }
+    stopRefreshLoop();
+    el.classList.add("first-view-loading-overlay--fade-to-black");
+    void el.offsetWidth;
+
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallback);
+      el.removeEventListener("transitionend", onEnd);
+      resolve();
+    };
+    const fallback = setTimeout(finish, durationMs + 150);
+    const onEnd = (e) => {
+      if (e.target !== el || e.propertyName !== "background-color") return;
+      finish();
+    };
+    el.addEventListener("transitionend", onEnd);
+  });
 }
 
 /**

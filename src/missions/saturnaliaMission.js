@@ -8,6 +8,7 @@ import {
   armSaturnaliaDestructionCountdown,
   pauseSaturnaliaDestructionCountdown,
   completeSaturnaliaEscape,
+  startSaturnaliaCollapseSequence,
 } from "../game/saturnaliaCollapseSequence.js";
 import {
   createSaturnaliaChaseController,
@@ -47,7 +48,13 @@ export const saturnaliaMission = {
     }
     game._saturnaliaChase = await createSaturnaliaChaseController(game);
     prewarmSaturnaliaChase(game);
-    if (options.debugSpawnIndex != null) {
+    // ?debugStep=escape — skip chase; spawn already in end collapse/escape sequence.
+    if (options.debugStepId === "escape") {
+      manager.runtime.debugEscapeStarted = true;
+      manager.runtime.chaseEscapeStarted = true;
+      armSaturnaliaDestructionCountdown(game, { paused: false });
+      startSaturnaliaCollapseSequence(game);
+    } else if (options.debugSpawnIndex != null) {
       const chase = startSaturnaliaChase(game);
       alignSaturnaliaDebugSpawn(game);
       if (chase?.enemy?.mesh) {
@@ -64,13 +71,16 @@ export const saturnaliaMission = {
     arrival: {
       title: "Saturnalia",
       enter(manager) {
+        const escapeStarted = manager.runtime.debugEscapeStarted === true;
         const chaseStarted = manager.runtime.debugChaseStarted === true;
         manager.setObjectives("Saturnalia", [
           {
             id: "arrive",
-            text: chaseStarted
-              ? "Pursue the fleeing signal through Saturnalia."
-              : "Reach Saturnalia.",
+            text: escapeStarted
+              ? "Escape Saturnalia."
+              : chaseStarted
+                ? "Pursue the fleeing signal through Saturnalia."
+                : "Reach Saturnalia.",
             completed: false,
           },
         ]);

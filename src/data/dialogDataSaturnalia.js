@@ -457,5 +457,50 @@ export const saturnaliaDialogTracks = {
     autoPlay: false,
     priority: 220,
     once: true,
+    playNext: "saturnaliaSuchASimpleRuse",
+  },
+  saturnaliaSuchASimpleRuse: {
+    id: "saturnaliaSuchASimpleRuse",
+    speakerId: "mobius",
+    audio: dialogPublicUrl(
+      "audio/dialog/saturnalia/saturn-22-such-a-simple-ruse.audio.mp3",
+    ),
+    faceDataUrl: dialogPublicUrl(
+      "audio/dialog/saturnalia/saturn-22-such-a-simple-ruse.json",
+    ),
+    captions: [
+      say("Such a simple ruse.", 1.86, 0.6),
+      say("Yet you fall for it easily.", 2.46, 3.14),
+      say("You will not leave this place.", 1.67, 6.82),
+    ],
+    criteria: {
+      currentState: GAME_STATES.PLAYING,
+      currentMissionId: "saturnalia",
+    },
+    autoPlay: false,
+    priority: 220,
+    once: true,
+    playNext: "saturnaliaNevermindHim",
+  },
+  saturnaliaNevermindHim: {
+    id: "saturnaliaNevermindHim",
+    speakerId: "flightControl",
+    audio: dialogPublicUrl(
+      "audio/dialog/saturnalia/saturn-23-nevermind-him.audio.mp3",
+    ),
+    faceDataUrl: dialogPublicUrl(
+      "audio/dialog/saturnalia/saturn-23-nevermind-him.json",
+    ),
+    captions: [
+      say("Nevermind him.", 1.06, 0.34),
+      say("Out the way you came!", 0.96, 1.46),
+    ],
+    criteria: {
+      currentState: GAME_STATES.PLAYING,
+      currentMissionId: "saturnalia",
+    },
+    autoPlay: false,
+    priority: 220,
+    once: true,
   },
 };

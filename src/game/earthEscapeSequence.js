@@ -8,6 +8,10 @@ import {
   clearSplatShockwave,
 } from "./charonReactorCore.js";
 import { clearEarthBossSplatFx } from "./earthBossFight.js";
+import {
+  hideMissionCompleteOverlay,
+  leaveMatch,
+} from "./gameInGameUI.js";
 
 const ESCAPE_DURATION_SEC = 90;
 const ESCAPE_RADIUS = 20;
@@ -379,6 +383,21 @@ function completeEarthEscape(game) {
   game._earthEscapeSequenceActive = false;
   game.gameManager?.setState?.({ earthEscapeActive: false });
   game.missionManager?.reportEvent?.("earthEscapeComplete", {});
+  game.missionManager?.completeMission("Earth Defense complete", {
+    stepTitle: "Earth Defense",
+    suppressCompleteMessage: true,
+  });
+  game.showMissionCompleteOverlay?.({
+    title: "Victory",
+    subtitle: "The rogue swarm has been defeated. Starspeed prevails.",
+    menuOnly: true,
+    solidBlackBackdrop: true,
+    zIndex: 3200,
+    onMenu: async () => {
+      hideMissionCompleteOverlay(game);
+      leaveMatch(game);
+    },
+  });
 }
 
 function failEarthEscape(game) {

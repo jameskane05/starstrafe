@@ -381,10 +381,11 @@ function completeCharonReactorEscape(game) {
       continueLabel: "Continue to Saturnalia",
       solidBlackBackdrop: true,
       zIndex: 3200,
+      outroOverlayId: "charon-outro-overlay",
       onContinue: async () => {
         hideMissionCompleteOverlay(game);
         document.getElementById("charon-outro-overlay")?.remove();
-        await game.continueToSaturnaliaCampaign?.();
+        void game.continueToSaturnaliaCampaign?.();
       },
       onMenu: async () => {
         hideMissionCompleteOverlay(game);

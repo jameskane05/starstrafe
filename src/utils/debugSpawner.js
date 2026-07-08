@@ -4,6 +4,8 @@
  * Params (all optional except debugMission to activate):
  *   debugMission   — mission id registered in missions/missionsIndex.js (e.g. trainingGrounds)
  *   debugStep      — step id on that mission (e.g. laserWave, missileWave). Omit to use mission.startStepId.
+ *                    Saturnalia also accepts `escape` (not a mission step) to jump into the
+ *                    end collapse / Trigger.009 escape sequence.
  *   debugLevel     — level id (e.g. arenatech). Omit to use mission.defaultLevelId.
  *   debugSpawn     — player spawn point index (e.g. 5 for Spawn.005). Omit to use default (0).
  *
@@ -13,11 +15,16 @@
  *   ?debugMission=trainingGrounds&debugStep=laserWave&debugLevel=arenatech
  *   ?debugMission=charon
  *   ?debugMission=charon&debugSpawn=5
+ *   ?debugMission=saturnalia&debugSpawn=0
+ *   ?debugMission=saturnalia&debugSpawn=0&debugStep=escape
  *
  * Training Grounds step ids: introDialog, movementGoals, rollDialog, rollTraining,
  * laserDialog, laserWave, missileDialog, missileWave
  *
  * Charon step ids: briefing
+ *
+ * Saturnalia step ids: arrival (default)
+ * Saturnalia debugStep aliases: escape — start destruction countdown + collapse FX immediately
  *
  * Add new missions in missions/missionsIndex.js; step ids are keys of mission.steps.
  */
@@ -28,6 +35,11 @@ const P_MISSION = "debugMission";
 const P_STEP = "debugStep";
 const P_LEVEL = "debugLevel";
 const P_SPAWN = "debugSpawn";
+
+/** Non-step aliases accepted by mission.start (not keys of mission.steps). */
+const DEBUG_STEP_ALIASES = {
+  saturnalia: new Set(["escape"]),
+};
 
 export function getDebugMissionSpawn() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -51,12 +63,14 @@ export function getDebugMissionSpawn() {
   const stepRaw = urlParams.get(P_STEP)?.trim();
   let debugStepId;
   if (stepRaw) {
-    if (mission.steps?.[stepRaw]) {
+    const aliases = DEBUG_STEP_ALIASES[missionId];
+    if (mission.steps?.[stepRaw] || aliases?.has(stepRaw)) {
       debugStepId = stepRaw;
     } else {
       console.warn(
         `[DebugSpawner] Unknown ${P_STEP}="${stepRaw}" for mission "${missionId}". Steps:`,
         mission.steps ? Object.keys(mission.steps) : [],
+        aliases?.size ? `Aliases: ${[...aliases].join(", ")}` : "",
       );
     }
   }

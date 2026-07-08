@@ -15,6 +15,14 @@ import {
   applySplatShockwave,
   clearSplatShockwave,
 } from "./charonReactorCore.js";
+import {
+  hideMissionCompleteOverlay,
+  leaveMatch,
+} from "./gameInGameUI.js";
+import {
+  mountSaturnaliaOutroOverlayBlack,
+  runSaturnaliaOutroTypewriterAndFade,
+} from "./saturnaliaOutroSequence.js";
 
 export const SATURNALIA_DESTRUCTION_COUNTDOWN_SEC = 120;
 
@@ -420,11 +428,6 @@ export function updateSaturnaliaCollapseSequence(game, delta) {
   updateCollapseFlameGushers(game, d);
 }
 
-import {
-  mountSaturnaliaOutroOverlayBlack,
-  runSaturnaliaOutroTypewriterAndFade,
-} from "./saturnaliaOutroSequence.js";
-
 const ESCAPE_FADE_MS = 2000;
 const ESCAPE_OVERLAY_ID = "saturnalia-escape-overlay";
 
@@ -495,10 +498,34 @@ export async function completeSaturnaliaEscape(game, manager = null) {
     await fadeSaturnaliaEscapeToBlack();
     document.getElementById(ESCAPE_OVERLAY_ID)?.remove();
     mountSaturnaliaOutroOverlayBlack();
-    await runSaturnaliaOutroTypewriterAndFade();
+    await runSaturnaliaOutroTypewriterAndFade({ retainBlackScreen: true });
   } catch (e) {
     console.warn("[Saturnalia] Escape/outro sequence failed:", e);
   }
+  game.missionManager?.completeMission("Saturnalia escaped", {
+    stepTitle: "Saturnalia",
+    suppressCompleteMessage: true,
+  });
+  game.showMissionCompleteOverlay?.({
+    subtitle: "Saturnalia",
+    title: "Mission complete",
+    continueLabel: "Continue to Earth Defense",
+    solidBlackBackdrop: true,
+    zIndex: 3200,
+    outroOverlayId: "saturnalia-outro-overlay",
+    onContinue: async () => {
+      hideMissionCompleteOverlay(game);
+      document.getElementById("saturnalia-outro-overlay")?.remove();
+      // Don't await — handoff shows loading UI first; awaiting kept the click
+      // handler blocked while sync teardown froze on black.
+      void game.continueToEarthDefenseCampaign?.();
+    },
+    onMenu: async () => {
+      hideMissionCompleteOverlay(game);
+      document.getElementById("saturnalia-outro-overlay")?.remove();
+      leaveMatch(game);
+    },
+  });
 }
 
 export function stopSaturnaliaCollapseForLevelChange(game) {

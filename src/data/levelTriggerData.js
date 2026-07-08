@@ -270,8 +270,8 @@ export const earthDefenseLevelTriggerBindings = [
     },
   },
   {
-    objectName: "Trigger.003",
-    id: "earthdefense-trigger-003-blocked-off-core",
+    objectName: "Trigger.004",
+    id: "earthdefense-trigger-004-blocked-off-core",
     once: true,
     criteria: {
       currentMissionId: "capital-ship-earth-defense",

@@ -739,12 +739,11 @@ export async function spawnAuthoredEnemiesFast(game, positions, options = {}) {
     }
   }
 
+  // Sync compile only: compileAsync() polls material.currentProgram on a timer;
+  // concurrent scene/material changes (cockpit load, splat pages, level swap)
+  // can leave program undefined and crash checkMaterialsReady (isReady).
   if (compile && game.renderer && game.camera) {
-    if (game.renderer.compileAsync) {
-      await game.renderer.compileAsync(game.scene, game.camera);
-    } else {
-      game.renderer.compile(game.scene, game.camera);
-    }
+    game.renderer.compile(game.scene, game.camera);
   }
 
   game.gameManager.setState({ enemiesRemaining: game.enemies.length });
@@ -1159,13 +1158,9 @@ export async function prewarmEnemyMeshesInPlace(game, enemies, positions) {
       w.restart({ hold: true });
     }
     // Sync compile only: compileAsync() polls materials on a timer; mission teardown
-    // (flushRetainedEnemyMeshes / disposeMissionEnemyPool) can dispose those materials
-    // mid-flight and crash WebGLRenderer.checkMaterialsReady (program undefined).
-    if (game.renderer.compileAsync) {
-      await game.renderer.compileAsync(game.scene, game.camera);
-    } else {
-      game.renderer.compile(game.scene, game.camera);
-    }
+    // (flushRetainedEnemyMeshes / disposeMissionEnemyPool) or concurrent load work
+    // can dispose those materials mid-flight and crash checkMaterialsReady (isReady).
+    game.renderer.compile(game.scene, game.camera);
     renderPrewarmFrame(game);
   } finally {
     for (let i = 0; i < enemies.length; i++) {

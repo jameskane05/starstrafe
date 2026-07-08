@@ -297,6 +297,15 @@ export class Game {
     return handoffSoloCampaign(this, "saturnalia", "saturnalia");
   }
 
+  async continueToEarthDefenseCampaign() {
+    const { handoffSoloCampaign } = await import("./gameSolo.js");
+    return handoffSoloCampaign(
+      this,
+      "capital-ship-earth-defense",
+      "earthdefense",
+    );
+  }
+
   spawnNetworkProjectile(id, data) {
     gameNetworkProjectiles.spawnNetworkProjectile(this, id, data);
   }

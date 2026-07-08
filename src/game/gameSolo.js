@@ -67,8 +67,17 @@ import {
 import {
   showFirstViewLoading,
   hideFirstViewLoading,
+  fadeFirstViewLoadingToBlack,
   waitForFirstViewReady,
 } from "./gameFirstViewLoading.js";
+import {
+  mountCharonOpeningOverlayBlack,
+  runCharonIntroTypewriterAndFade,
+} from "./charonIntroSequence.js";
+import {
+  mountSaturnaliaOpeningOverlayBlack,
+  runSaturnaliaIntroTypewriterAndFade,
+} from "./saturnaliaIntroSequence.js";
 import { applyAuthoredPlayerSpawn } from "../utils/playerSpawnOrientation.js";
 import { createPathRailFromScene, closestDistanceOnPath, samplePath } from "../utils/pathRail.js";
 import { getPrimaryWeaponUnlocks } from "./weaponUnlocks.js";
@@ -101,6 +110,17 @@ function unloadCampaignLevelAssets(game, levelId) {
 }
 
 export async function handoffSoloCampaign(game, missionId, levelId) {
+  // Show pages-loading immediately so Continue isn't stuck on a black screen
+  // while sync teardown / scene unload runs.
+  document.getElementById("mission-complete-overlay")?.remove();
+  game._missionCompleteOverlayEl = null;
+  document.getElementById("charon-outro-overlay")?.remove();
+  document.getElementById("saturnalia-outro-overlay")?.remove();
+  MenuManager.showBackgroundLoading();
+  // Above mission-complete / outro overlays (3200 / 3100) until they fully clear.
+  showFirstViewLoading({ zIndex: 4000 });
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
   stopCharonEscapeSequenceForLevelChange(game);
   stopSaturnaliaCollapseForLevelChange(game);
   cleanupDestruction(game.scene);
@@ -392,32 +412,35 @@ export async function startSoloDebug(game) {
         ? prewarmCheckpointPoolDuringFirstView(game)
         : Promise.resolve();
     await Promise.all([waitForFirstViewReady(game), checkpointPoolPrewarm]);
-    MenuManager.enterPlayingMode();
     const debugSpawn = Boolean(
       game.gameManager?.getState?.()?.debugSpawnActive,
     );
-    let introMod = null;
-    if (!debugSpawn) {
+    const hasIntro =
+      !debugSpawn && (missionId === "charon" || missionId === "saturnalia");
+
+    if (hasIntro) {
+      await fadeFirstViewLoadingToBlack();
+    }
+    MenuManager.enterPlayingMode();
+    if (hasIntro) {
       if (missionId === "charon") {
-        introMod = await import("./charonIntroSequence.js");
-        introMod.mountCharonOpeningOverlayBlack();
-      } else if (missionId === "saturnalia") {
-        introMod = await import("./saturnaliaIntroSequence.js");
-        introMod.mountSaturnaliaOpeningOverlayBlack();
+        mountCharonOpeningOverlayBlack();
+      } else {
+        mountSaturnaliaOpeningOverlayBlack();
       }
     }
     hideFirstViewLoading();
     if (missionId === "charon") {
       if (debugSpawn) {
         game.gameManager.setState({ charonIntroTextDone: true });
-      } else if (introMod) {
-        await introMod.runCharonIntroTypewriterAndFade(game);
+      } else if (hasIntro) {
+        await runCharonIntroTypewriterAndFade(game);
       }
     } else if (missionId === "saturnalia") {
       if (debugSpawn) {
         game.gameManager.setState({ saturnaliaIntroTextDone: true });
-      } else if (introMod) {
-        await introMod.runSaturnaliaIntroTypewriterAndFade(game);
+      } else if (hasIntro) {
+        await runSaturnaliaIntroTypewriterAndFade(game);
       }
     }
   })();

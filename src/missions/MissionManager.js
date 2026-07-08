@@ -314,7 +314,9 @@ export class MissionManager {
     if (
       typeof requestedStep === "string" &&
       requestedStep.length > 0 &&
-      stepId !== requestedStep
+      stepId !== requestedStep &&
+      // Saturnalia `escape` is a start() alias, not a real step key.
+      !(missionId === "saturnalia" && requestedStep === "escape")
     ) {
       console.warn(
         `[Mission] Unknown debugStep "${requestedStep}" for mission "${missionId}". Valid steps:`,
